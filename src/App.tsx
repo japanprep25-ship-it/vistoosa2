@@ -60,6 +60,43 @@ export default function App() {
   const [isCashModalOpenFromDashboard, setIsCashModalOpenFromDashboard] = useState(false);
   const { isDarkMode, toggleDarkMode } = useSettings();
 
+  // Periodically poll for live inbound website orders received via WooCommerce / Shopify webhooks
+  React.useEffect(() => {
+    const fetchInboundOrders = async () => {
+      try {
+        const res = await fetch('/api/orders/inbound');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.success && Array.isArray(data.orders) && data.orders.length > 0) {
+          setOrders((prevOrders) => {
+            let updated = false;
+            const newOrdersList = [...prevOrders];
+
+            data.orders.forEach((inboundOrder: Order) => {
+              const existingIndex = newOrdersList.findIndex((o) => o.id === inboundOrder.id);
+              if (existingIndex < 0) {
+                // Prepend new website order directly into Pending section
+                newOrdersList.unshift({
+                  ...inboundOrder,
+                  status: 'Pending',
+                });
+                updated = true;
+              }
+            });
+
+            return updated ? newOrdersList : prevOrders;
+          });
+        }
+      } catch (err) {
+        // Ignore background polling errors
+      }
+    };
+
+    fetchInboundOrders();
+    const interval = setInterval(fetchInboundOrders, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Quick stats
   const pendingOrdersCount = orders.filter((o) => o.status === 'Pending').length;
   const approvedDispatchCount = orders.filter((o) => o.status === 'Approved').length;

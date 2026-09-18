@@ -11,6 +11,7 @@ const PORT = 3000;
 
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
+app.use(express.text({ limit: '15mb', type: ['text/plain', 'text/json', 'application/json-patch+json'] }));
 
 // WooCommerce & Generic Webhook Handshake Interceptor
 app.use((req, res, next) => {
@@ -413,50 +414,182 @@ const handlePathaoPickup = async (req: express.Request, res: express.Response) =
 app.post('/api/pathao/pickup', handlePathaoPickup);
 app.post('/api/pathao/create-pickup', handlePathaoPickup);
 
+// In-memory queue for inbound website orders from WooCommerce / Shopify webhooks
+const inboundWebsiteOrders: any[] = [];
+
+// Helper to convert WooCommerce / Website JSON payload into Vistoosa Order format
+function parseWooCommerceOrderToVistoosa(payload: any): any {
+  const rawId = payload.id || payload.number || payload.order_number || payload.orderId;
+  const orderId = rawId ? (String(rawId).startsWith('VIS') ? String(rawId) : `VIS-WEB-${rawId}`) : `VIS-WEB-${Math.floor(1000 + Math.random() * 9000)}`;
+
+  const billing = payload.billing || {};
+  const shipping = payload.shipping || {};
+
+  const customerName = (
+    `${billing.first_name || shipping.first_name || ''} ${billing.last_name || shipping.last_name || ''}`.trim() ||
+    payload.customerName ||
+    'Website Customer'
+  );
+
+  const phone = billing.phone || shipping.phone || payload.phone || '01700000000';
+
+  const addressLine1 = shipping.address_1 || billing.address_1 || payload.address || 'House 1, Road 1';
+  const addressLine2 = shipping.address_2 || billing.address_2 || '';
+  const cityName = shipping.city || billing.city || 'Dhaka';
+  const fullAddress = `${addressLine1}${addressLine2 ? ', ' + addressLine2 : ''}, ${cityName}`;
+
+  // Determine city zone
+  let cityZone: 'Inside Dhaka' | 'Sub-Dhaka' | 'Outside Dhaka' = 'Inside Dhaka';
+  const lowerCity = String(cityName).toLowerCase();
+  if (
+    lowerCity.includes('sub') ||
+    lowerCity.includes('savar') ||
+    lowerCity.includes('gazipur') ||
+    lowerCity.includes('keraniganj') ||
+    lowerCity.includes('narayanganj')
+  ) {
+    cityZone = 'Sub-Dhaka';
+  } else if (!lowerCity.includes('dhaka')) {
+    cityZone = 'Outside Dhaka';
+  }
+
+  // Delivery fee
+  const shippingTotal = Number(
+    payload.shipping_total || payload.deliveryFee || (cityZone === 'Inside Dhaka' ? 60 : cityZone === 'Sub-Dhaka' ? 100 : 120)
+  );
+  const totalAmount = Number(payload.total || payload.totalAmount || 0);
+
+  // Payment method
+  let paymentMethod: 'Cash on Delivery' | 'bKash' | 'Nagad' | 'Prepaid' = 'Cash on Delivery';
+  const methodTitle = String(payload.payment_method_title || payload.payment_method || '').toLowerCase();
+  if (methodTitle.includes('bkash')) paymentMethod = 'bKash';
+  else if (methodTitle.includes('nagad')) paymentMethod = 'Nagad';
+  else if (methodTitle.includes('card') || methodTitle.includes('prepaid') || methodTitle.includes('ssl')) paymentMethod = 'Prepaid';
+
+  // Line items
+  let items: any[] = [];
+  if (Array.isArray(payload.items) && payload.items.length > 0) {
+    items = payload.items;
+  } else if (Array.isArray(payload.line_items) && payload.line_items.length > 0) {
+    items = payload.line_items.map((item: any, idx: number) => {
+      let sizeVal: 'S' | 'M' | 'L' | 'XL' | 'XXL' = 'M';
+      if (Array.isArray(item.meta_data)) {
+        const sizeMeta = item.meta_data.find((m: any) => String(m.key || '').toLowerCase().includes('size'));
+        if (sizeMeta && sizeMeta.value) {
+          const s = String(sizeMeta.value).toUpperCase();
+          if (['S', 'M', 'L', 'XL', 'XXL'].includes(s)) sizeVal = s as any;
+        }
+      }
+
+      return {
+        id: `item-${orderId}-${idx + 1}`,
+        productName: item.name || 'Supima Cotton Polo',
+        sku: item.sku || `POLO-WEB-${idx + 1}`,
+        color: 'Midnight Navy',
+        size: sizeVal,
+        quantity: Number(item.quantity || 1),
+        unitPrice: Number(item.price || (item.total ? Number(item.total) / (item.quantity || 1) : 1650)),
+      };
+    });
+  } else {
+    items = [
+      {
+        id: `item-${orderId}-1`,
+        productName: 'Supima Cotton Pique Polo',
+        sku: 'POLO-NVY-M',
+        color: 'Midnight Navy',
+        size: 'M',
+        quantity: 1,
+        unitPrice: Math.max(0, totalAmount - shippingTotal) || 1650,
+      },
+    ];
+  }
+
+  return {
+    id: orderId,
+    customerName,
+    phone,
+    address: fullAddress,
+    city: cityZone,
+    channel: 'Website',
+    items,
+    totalAmount: totalAmount || (items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0) + shippingTotal),
+    deliveryFee: shippingTotal,
+    paymentMethod,
+    status: 'Pending', // ALWAYS Pending!
+    createdAt: payload.date_created || payload.createdAt || new Date().toISOString(),
+    notes: payload.notes || `Inbound website order from WooCommerce / Shopify (Order ID: #${payload.id || payload.number || 'web'})`,
+  };
+}
+
 // 5. Inbound Website Webhook Handler (WooCommerce, Shopify, Custom Store)
 const handleWebsiteWebhook = (req: express.Request, res: express.Response) => {
-  const payload = req.body || {};
-  const topic = req.headers['x-wc-webhook-topic'] as string;
+  let rawBody = req.body || {};
+  if (typeof rawBody === 'string') {
+    try {
+      rawBody = JSON.parse(rawBody);
+    } catch (e) {
+      // urlencoded string or fallback
+    }
+  }
 
-  // Handle WooCommerce Ping / Validation Handshake
+  // Unwrap nested payload if wrapped in order or data
+  const payload = rawBody.order || rawBody.data || rawBody;
+  const topic = (req.headers['x-wc-webhook-topic'] as string) || '';
+
+  // Check if this payload contains order information
+  const hasOrderFields =
+    payload.id ||
+    payload.order_id ||
+    payload.number ||
+    payload.order_number ||
+    payload.orderId ||
+    payload.billing ||
+    payload.shipping ||
+    payload.line_items ||
+    payload.total;
+
+  const isPingTopic = topic === 'action/ping' || topic === 'ping';
+
+  // Handle WooCommerce Ping / Validation Handshake ONLY if it has no order fields OR is explicitly a ping topic
   if (
     req.method === 'GET' ||
     req.method === 'HEAD' ||
     req.method === 'OPTIONS' ||
-    topic === 'action/ping' ||
-    (payload.webhook_id && !payload.id && !payload.orderId)
+    isPingTopic ||
+    (!hasOrderFields && (rawBody.webhook_id || req.query?.webhook_id))
   ) {
-    console.log('[WooCommerce Ping Accepted]: Webhook delivery URL validated successfully.');
+    console.log('[WooCommerce Ping Handshake Accepted]: Webhook delivery URL validated successfully.');
     return res.status(200).json({
       success: true,
       status: 'ok',
       message: 'WooCommerce Webhook Ping Accepted',
-      webhook_id: payload.webhook_id || req.query?.webhook_id || 1,
+      webhook_id: rawBody.webhook_id || req.query?.webhook_id || 1,
       topic: topic || 'action/ping',
       receivedAt: new Date().toISOString(),
     });
   }
 
-  // Parse WooCommerce Order or Custom Website Order
-  const orderId = payload.id || payload.number || payload.orderId || payload.order_number || `VIS-WEB-${Math.floor(1000 + Math.random() * 9000)}`;
-  const customerName = payload.billing
-    ? `${payload.billing.first_name || ''} ${payload.billing.last_name || ''}`.trim()
-    : payload.shipping
-    ? `${payload.shipping.first_name || ''} ${payload.shipping.last_name || ''}`.trim()
-    : payload.customerName || 'WooCommerce Customer';
-  const phone = payload.billing?.phone || payload.phone || '01700000000';
-  const totalAmount = Number(payload.total || payload.totalAmount || 0);
+  // Parse WooCommerce Order or Custom Website Order into Vistoosa Pending Order
+  const formattedOrder = parseWooCommerceOrderToVistoosa(payload);
 
-  console.log(`[WooCommerce Inbound Order]: #${orderId} from ${customerName} (${phone}) - Total: ৳${totalAmount}`);
+  // De-duplicate or prepend to inbound orders queue
+  const existingIndex = inboundWebsiteOrders.findIndex((o) => o.id === formattedOrder.id);
+  if (existingIndex >= 0) {
+    inboundWebsiteOrders[existingIndex] = formattedOrder;
+  } else {
+    inboundWebsiteOrders.unshift(formattedOrder);
+  }
+
+  console.log(
+    `[WooCommerce Inbound Order Placed in Pending]: Order #${formattedOrder.id} for ${formattedOrder.customerName} (${formattedOrder.phone}) - Total: ৳${formattedOrder.totalAmount}`
+  );
 
   return res.status(200).json({
     success: true,
-    message: 'Inbound website order received and queued for Vistoosa Order Engine.',
+    message: `Inbound website order #${formattedOrder.id} received and queued in Pending section of Vistoosa Order Engine.`,
     receivedAt: new Date().toISOString(),
-    orderId,
-    customerName,
-    phone,
-    totalAmount,
+    order: formattedOrder,
   });
 };
 
@@ -471,6 +604,14 @@ app.all(
   ],
   handleWebsiteWebhook
 );
+
+// Endpoint for Frontend PWA to poll inbound website orders
+app.get('/api/orders/inbound', (req, res) => {
+  res.json({
+    success: true,
+    orders: inboundWebsiteOrders,
+  });
+});
 
 // 6. Inbound Meta / Facebook Messenger & Lead Ads Webhook Handler
 app.post('/api/webhooks/meta/leads', (req, res) => {

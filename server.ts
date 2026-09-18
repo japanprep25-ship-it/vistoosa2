@@ -5,6 +5,7 @@ import { createServer as createViteServer } from 'vite';
 import { createPathaoOrder } from './pathaoOrderService';
 import { mountPathaoConfigRoutes } from './pathaoConfigStore';
 import { mountWhatsappRoutes, sendTrackingWhatsapp } from './whatsappService';
+import { mountIntegrationsConfigRoutes } from './integrationsConfigStore';
 
 const app = express();
 const PORT = 3000;
@@ -46,6 +47,7 @@ app.use((req, res, next) => {
 // Mount Settings Config Routes
 mountPathaoConfigRoutes(app);
 mountWhatsappRoutes(app);
+mountIntegrationsConfigRoutes(app);
 
 // Lazy initialize Gemini client
 function getGeminiClient(): GoogleGenAI | null {
@@ -381,6 +383,17 @@ const handlePathaoPickup = async (req: express.Request, res: express.Response) =
 
     const trackingId = result.consignment_id || result.merchant_order_id;
 
+    // Update status in inbound website orders array if this was a website order
+    if (orderId) {
+      const matchInbound = inboundWebsiteOrders.find((o) => o.id === orderId);
+      if (matchInbound) {
+        matchInbound.status = 'Approved';
+        matchInbound.pathaoTrackingId = trackingId;
+        matchInbound.pathaoConsignmentId = result.consignment_id;
+        matchInbound.pathaoStatus = 'Pickup Requested';
+      }
+    }
+
     // Trigger automated WhatsApp notification with Pathao tracking code
     let whatsappStatus: any = null;
     try {
@@ -576,18 +589,29 @@ const handleWebsiteWebhook = (req: express.Request, res: express.Response) => {
   // De-duplicate or prepend to inbound orders queue
   const existingIndex = inboundWebsiteOrders.findIndex((o) => o.id === formattedOrder.id);
   if (existingIndex >= 0) {
+    // Preserve current status if order was already approved/dispatched/delivered/cancelled in ERP
+    const currentStatus = inboundWebsiteOrders[existingIndex].status;
+    if (currentStatus && currentStatus !== 'Pending') {
+      formattedOrder.status = currentStatus;
+      if (inboundWebsiteOrders[existingIndex].pathaoTrackingId) {
+        formattedOrder.pathaoTrackingId = inboundWebsiteOrders[existingIndex].pathaoTrackingId;
+      }
+      if (inboundWebsiteOrders[existingIndex].pathaoConsignmentId) {
+        formattedOrder.pathaoConsignmentId = inboundWebsiteOrders[existingIndex].pathaoConsignmentId;
+      }
+    }
     inboundWebsiteOrders[existingIndex] = formattedOrder;
   } else {
     inboundWebsiteOrders.unshift(formattedOrder);
   }
 
   console.log(
-    `[WooCommerce Inbound Order Placed in Pending]: Order #${formattedOrder.id} for ${formattedOrder.customerName} (${formattedOrder.phone}) - Total: ৳${formattedOrder.totalAmount}`
+    `[WooCommerce Inbound Order Queued]: Order #${formattedOrder.id} (${formattedOrder.status}) for ${formattedOrder.customerName} (${formattedOrder.phone}) - Total: ৳${formattedOrder.totalAmount}`
   );
 
   return res.status(200).json({
     success: true,
-    message: `Inbound website order #${formattedOrder.id} received and queued in Pending section of Vistoosa Order Engine.`,
+    message: `Inbound website order #${formattedOrder.id} received and queued in Vistoosa Order Engine.`,
     receivedAt: new Date().toISOString(),
     order: formattedOrder,
   });
@@ -610,6 +634,28 @@ app.get('/api/orders/inbound', (req, res) => {
   res.json({
     success: true,
     orders: inboundWebsiteOrders,
+  });
+});
+
+// Endpoint to update order status (Approved, Dispatched, Delivered, Cancelled) on server
+app.post('/api/orders/status', (req, res) => {
+  const { orderId, status, trackingId, consignmentId } = req.body || {};
+  if (!orderId || !status) {
+    return res.status(400).json({ success: false, error: 'Missing orderId or status' });
+  }
+
+  const existingOrder = inboundWebsiteOrders.find((o) => o.id === orderId);
+  if (existingOrder) {
+    existingOrder.status = status;
+    if (trackingId) existingOrder.pathaoTrackingId = trackingId;
+    if (consignmentId) existingOrder.pathaoConsignmentId = consignmentId;
+    console.log(`[Order Status Updated on Server]: #${orderId} -> ${status}`);
+  }
+
+  return res.json({
+    success: true,
+    message: `Order #${orderId} status updated to ${status}`,
+    order: existingOrder,
   });
 });
 

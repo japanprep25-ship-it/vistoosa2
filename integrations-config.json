@@ -1,0 +1,9 @@
+{
+  "website": {
+    "platform": "WooCommerce",
+    "storeUrl": "https://vistoosa.com",
+    "apiKey": "ck_test_12345",
+    "apiSecret": "cs_test_67890",
+    "status": "connected"
+  }
+}

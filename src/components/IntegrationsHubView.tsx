@@ -62,8 +62,24 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
     setTimeout(() => setCopiedKey(null), 2500);
   };
 
-  // Prefill Pathao configuration from backend GET /api/settings/pathao
+  // Prefill configuration from backend endpoints on mount
   React.useEffect(() => {
+    // 1. Website & Meta settings
+    fetch('/api/settings/integrations')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.success && data.config) {
+          if (data.config.website) {
+            setWebsiteConfig((prev) => ({ ...prev, ...data.config.website, status: 'connected' }));
+          }
+          if (data.config.meta) {
+            setMetaConfig((prev) => ({ ...prev, ...data.config.meta, status: 'connected' }));
+          }
+        }
+      })
+      .catch((err) => console.error('Error loading integration settings:', err));
+
+    // 2. Pathao configuration
     fetch('/api/settings/pathao')
       .then((res) => res.json())
       .then((data) => {
@@ -82,6 +98,7 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
       })
       .catch((err) => console.error('Error loading Pathao settings:', err));
 
+    // 3. WhatsApp configuration
     fetch('/api/settings/whatsapp')
       .then((res) => res.json())
       .then((data) => {
@@ -98,17 +115,31 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
       .catch((err) => console.error('Error loading WhatsApp settings:', err));
   }, []);
 
-  const handleSaveWebsite = (e: React.FormEvent) => {
+  const handleSaveWebsite = async (e: React.FormEvent) => {
     e.preventDefault();
+    const updatedWeb = {
+      ...websiteConfig,
+      status: 'connected' as const,
+      lastSync: new Date().toISOString(),
+    };
+
+    setWebsiteConfig(updatedWeb);
     onUpdateConfig({
       ...config,
-      website: {
-        ...websiteConfig,
-        status: 'connected',
-        lastSync: new Date().toISOString(),
-      },
+      website: updatedWeb,
     });
-    setTestResult({ success: true, message: 'Website integration settings updated successfully!' });
+
+    try {
+      await fetch('/api/settings/integrations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ website: updatedWeb }),
+      });
+    } catch (err) {
+      console.warn('Could not save website config to server', err);
+    }
+
+    setTestResult({ success: true, message: 'Website integration settings saved permanently!' });
     setTimeout(() => setTestResult(null), 4000);
   };
 
@@ -165,17 +196,31 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
     }
   };
 
-  const handleSaveMeta = (e: React.FormEvent) => {
+  const handleSaveMeta = async (e: React.FormEvent) => {
     e.preventDefault();
+    const updatedMeta = {
+      ...metaConfig,
+      status: 'connected' as const,
+      lastSync: new Date().toISOString(),
+    };
+
+    setMetaConfig(updatedMeta);
     onUpdateConfig({
       ...config,
-      meta: {
-        ...metaConfig,
-        status: 'connected',
-        lastSync: new Date().toISOString(),
-      },
+      meta: updatedMeta,
     });
-    setTestResult({ success: true, message: 'Meta Business Suite & Ad Account tokens saved!' });
+
+    try {
+      await fetch('/api/settings/integrations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ meta: updatedMeta }),
+      });
+    } catch (err) {
+      console.warn('Could not save meta config to server', err);
+    }
+
+    setTestResult({ success: true, message: 'Meta Business Suite & Ad Account tokens saved permanently!' });
     setTimeout(() => setTestResult(null), 4000);
   };
 

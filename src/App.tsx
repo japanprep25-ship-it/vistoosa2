@@ -45,14 +45,48 @@ export default function App() {
   const [authorizedUsers, setAuthorizedUsers] = useState<AuthUser[]>(INITIAL_AUTHORIZED_USERS);
 
   // Application Data State
-  const [orders, setOrders] = useState<Order[]>(INITIAL_ORDERS);
+  const [orders, setOrders] = useState<Order[]>(() => {
+    try {
+      const saved = localStorage.getItem('vistoosa_orders');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      // fallback
+    }
+    return INITIAL_ORDERS;
+  });
+
+  // Save orders to localStorage on changes
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('vistoosa_orders', JSON.stringify(orders));
+    } catch (e) {
+      console.warn('Could not save orders to localStorage', e);
+    }
+  }, [orders]);
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
   const [knowledgeBase, setKnowledgeBase] = useState<KnowledgeItem[]>(INITIAL_KNOWLEDGE_BASE);
   const [payouts, setPayouts] = useState<PathaoPayoutRecord[]>(INITIAL_PATHAO_PAYOUTS);
   const [expenses, setExpenses] = useState<ExpenseRecord[]>(INITIAL_EXPENSES);
   const [shipments, setShipments] = useState<ShipmentCosting[]>(INITIAL_SHIPMENT_COSTINGS);
   const [cashEntries, setCashEntries] = useState<CashEntry[]>(INITIAL_CASH_ENTRIES);
-  const [integrationConfig, setIntegrationConfig] = useState<ChannelIntegrationConfig>(INITIAL_INTEGRATION_CONFIG);
+  const [integrationConfig, setIntegrationConfig] = useState<ChannelIntegrationConfig>(() => {
+    try {
+      const saved = localStorage.getItem('vistoosa_integration_config');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      // fallback
+    }
+    return INITIAL_INTEGRATION_CONFIG;
+  });
+
+  const handleUpdateIntegrationConfig = (newConfig: ChannelIntegrationConfig) => {
+    setIntegrationConfig(newConfig);
+    try {
+      localStorage.setItem('vistoosa_integration_config', JSON.stringify(newConfig));
+    } catch (e) {
+      console.warn('Could not save integration config to localStorage', e);
+    }
+  };
 
   // Navigation State
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
@@ -75,12 +109,24 @@ export default function App() {
             data.orders.forEach((inboundOrder: Order) => {
               const existingIndex = newOrdersList.findIndex((o) => o.id === inboundOrder.id);
               if (existingIndex < 0) {
-                // Prepend new website order directly into Pending section
+                // Prepend new website order directly into queue
                 newOrdersList.unshift({
                   ...inboundOrder,
-                  status: 'Pending',
+                  status: inboundOrder.status || 'Pending',
                 });
                 updated = true;
+              } else {
+                // If existing order status in frontend is Approved/Dispatched/etc., DO NOT overwrite back to Pending!
+                const currentStatus = newOrdersList[existingIndex].status;
+                if (inboundOrder.status !== 'Pending' && inboundOrder.status !== currentStatus) {
+                  newOrdersList[existingIndex] = {
+                    ...newOrdersList[existingIndex],
+                    status: inboundOrder.status,
+                    pathaoTrackingId: inboundOrder.pathaoTrackingId || newOrdersList[existingIndex].pathaoTrackingId,
+                    pathaoConsignmentId: inboundOrder.pathaoConsignmentId || newOrdersList[existingIndex].pathaoConsignmentId,
+                  };
+                  updated = true;
+                }
               }
             });
 
@@ -107,6 +153,9 @@ export default function App() {
     const targetOrder = orders.find((o) => o.id === orderId);
     if (!targetOrder) return;
 
+    let trackingId = `PTH-${Math.floor(7819300 + Math.random() * 500)}`;
+    let consignmentId = `CN-${Math.floor(492000 + Math.random() * 500)}`;
+
     try {
       // Trigger Pathao Pickup webhook
       const res = await fetch('/api/pathao/pickup', {
@@ -123,63 +172,63 @@ export default function App() {
       });
 
       const data = await res.json();
-      const trackingId = data.trackingId || `PTH-${Math.floor(7819300 + Math.random() * 500)}`;
-      const consignmentId = data.consignmentId || `CN-${Math.floor(492000 + Math.random() * 500)}`;
-
-      setOrders((prev) =>
-        prev.map((o) => {
-          if (o.id === orderId) {
-            return {
-              ...o,
-              status: 'Approved',
-              approvedAt: new Date().toISOString(),
-              pathaoTrackingId: trackingId,
-              pathaoConsignmentId: consignmentId,
-              pathaoStatus: 'Pickup Requested',
-            };
-          }
-          return o;
-        })
-      );
-
-      // Increase reserved stock for the item
-      setProducts((prev) =>
-        prev.map((prod) => {
-          const matchingItem = (targetOrder.items || []).find((item) =>
-            (prod.variants || []).some((v) => v.sku === item.sku)
-          );
-          if (!matchingItem) return prod;
-
-          return {
-            ...prod,
-            variants: (prod.variants || []).map((v) => {
-              if (v.sku === matchingItem.sku) {
-                return {
-                  ...v,
-                  reservedStock: v.reservedStock + matchingItem.quantity,
-                };
-              }
-              return v;
-            }),
-          };
-        })
-      );
+      if (data.trackingId) trackingId = data.trackingId;
+      if (data.consignmentId) consignmentId = data.consignmentId;
     } catch (e) {
-      // Fallback local update
-      setOrders((prev) =>
-        prev.map((o) =>
-          o.id === orderId
-            ? {
-                ...o,
-                status: 'Approved',
-                approvedAt: new Date().toISOString(),
-                pathaoTrackingId: `PTH-${Math.floor(7819300 + Math.random() * 500)}`,
-                pathaoStatus: 'Pickup Requested',
-              }
-            : o
-        )
-      );
+      console.warn('Pathao pickup API error fallback:', e);
     }
+
+    // Always update status to Approved locally
+    setOrders((prev) =>
+      prev.map((o) => {
+        if (o.id === orderId) {
+          return {
+            ...o,
+            status: 'Approved',
+            approvedAt: new Date().toISOString(),
+            pathaoTrackingId: trackingId,
+            pathaoConsignmentId: consignmentId,
+            pathaoStatus: 'Pickup Requested',
+          };
+        }
+        return o;
+      })
+    );
+
+    // Sync status update to backend server
+    fetch('/api/orders/status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        orderId: targetOrder.id,
+        status: 'Approved',
+        trackingId,
+        consignmentId,
+      }),
+    }).catch(() => {});
+
+    // Increase reserved stock for the item
+    setProducts((prev) =>
+      prev.map((prod) => {
+        const matchingItem = (targetOrder.items || []).find((item) =>
+          (prod.variants || []).some((v) => v.sku === item.sku)
+        );
+        if (!matchingItem) return prod;
+
+        return {
+          ...prod,
+          variants: (prod.variants || []).map((v) => {
+            if (v.sku === matchingItem.sku) {
+              return {
+                ...v,
+                reservedStock: v.reservedStock + matchingItem.quantity,
+              };
+            }
+            return v;
+          }),
+        };
+      })
+    );
   };
 
   const handleCancelOrder = (orderId: string) => {
@@ -189,6 +238,16 @@ export default function App() {
     setOrders((prev) =>
       prev.map((o) => (o.id === orderId ? { ...o, status: 'Cancelled' } : o))
     );
+
+    // Sync status update to backend server
+    fetch('/api/orders/status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        orderId,
+        status: 'Cancelled',
+      }),
+    }).catch(() => {});
 
     // If it was approved, release reserved stock
     if (targetOrder.status === 'Approved') {
@@ -357,10 +416,6 @@ export default function App() {
 
   const handleAddShipment = (shipment: ShipmentCosting) => {
     setShipments((prev) => [shipment, ...prev]);
-  };
-
-  const handleUpdateIntegrationConfig = (config: ChannelIntegrationConfig) => {
-    setIntegrationConfig(config);
   };
 
   // Knowledge Base handlers

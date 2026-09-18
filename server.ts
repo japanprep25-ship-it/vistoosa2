@@ -686,6 +686,36 @@ app.post('/api/orders/status', (req, res) => {
   });
 });
 
+// Endpoint to update full order details (Customer Name, Phone, Address, City, Items, Product, Size, Notes, etc.)
+app.post('/api/orders/update', (req, res) => {
+  const updatedOrder = req.body;
+  if (!updatedOrder || !updatedOrder.id) {
+    return res.status(400).json({ success: false, error: 'Missing updated order payload or order id' });
+  }
+
+  const existingIndex = inboundWebsiteOrders.findIndex((o) => o.id === updatedOrder.id);
+  if (existingIndex >= 0) {
+    inboundWebsiteOrders[existingIndex] = {
+      ...inboundWebsiteOrders[existingIndex],
+      ...updatedOrder,
+    };
+    console.log(`[Order Edited on Server]: #${updatedOrder.id} (${updatedOrder.customerName})`);
+    return res.json({
+      success: true,
+      message: `Order #${updatedOrder.id} updated successfully`,
+      order: inboundWebsiteOrders[existingIndex],
+    });
+  } else {
+    // If it's a mock or locally seeded order, insert or track it
+    inboundWebsiteOrders.unshift(updatedOrder);
+    return res.json({
+      success: true,
+      message: `Order #${updatedOrder.id} registered and updated successfully`,
+      order: updatedOrder,
+    });
+  }
+});
+
 // 6. Inbound Meta / Facebook Messenger & Lead Ads Webhook Handler
 app.post('/api/webhooks/meta/leads', (req, res) => {
   const payload = req.body || {};

@@ -17,6 +17,8 @@ import {
   Bot,
   X,
   Image as ImageIcon,
+  Edit2,
+  Package,
 } from 'lucide-react';
 import { Order, OrderStatus, OrderChannel, Product } from '../types';
 
@@ -27,6 +29,7 @@ interface OrderEngineViewProps {
   onCancelOrder: (orderId: string) => void;
   onGoToDispatch: (orderId: string) => void;
   onCreateOrder: (newOrder: Partial<Order>) => void;
+  onUpdateOrder?: (updatedOrder: Order) => void;
 }
 
 export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
@@ -36,12 +39,118 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
   onCancelOrder,
   onGoToDispatch,
   onCreateOrder,
+  onUpdateOrder,
 }) => {
   const [selectedStatus, setSelectedStatus] = useState<OrderStatus | 'All'>('All');
   const [selectedChannel, setSelectedChannel] = useState<OrderChannel | 'All'>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [selectedChatOrder, setSelectedChatOrder] = useState<Order | null>(null);
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
+
+  // Edit Order Form State
+  const [editFormData, setEditFormData] = useState({
+    customerName: '',
+    phone: '',
+    address: '',
+    city: 'Inside Dhaka' as 'Inside Dhaka' | 'Sub-Dhaka' | 'Outside Dhaka',
+    channel: 'WhatsApp' as OrderChannel,
+    productId: '',
+    customProductName: '',
+    size: 'M' as 'S' | 'M' | 'L' | 'XL' | 'XXL',
+    quantity: 1,
+    unitPrice: 1650,
+    paymentMethod: 'Cash on Delivery' as 'Cash on Delivery' | 'bKash' | 'Nagad' | 'Prepaid',
+    notes: '',
+  });
+
+  const handleOpenEditModal = (order: Order) => {
+    const firstItem = order.items && order.items[0];
+    const matchedProduct = products.find(
+      (p) =>
+        p.id === firstItem?.sku ||
+        p.name.toLowerCase() === (firstItem?.productName || '').toLowerCase()
+    );
+
+    setEditingOrder(order);
+    setEditFormData({
+      customerName: order.customerName || '',
+      phone: order.phone || '',
+      address: order.address || '',
+      city: order.city || 'Inside Dhaka',
+      channel: order.channel || 'WhatsApp',
+      productId: matchedProduct?.id || (products[0]?.id || ''),
+      customProductName: firstItem?.productName || '',
+      size: (firstItem?.size as any) || 'M',
+      quantity: firstItem?.quantity || 1,
+      unitPrice: firstItem?.unitPrice || 1650,
+      paymentMethod: order.paymentMethod || 'Cash on Delivery',
+      notes: order.notes || '',
+    });
+  };
+
+  const handleSaveEditSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingOrder) return;
+
+    const matchedProduct = products.find((p) => p.id === editFormData.productId);
+    const resolvedProductName =
+      editFormData.customProductName.trim() ||
+      (matchedProduct ? matchedProduct.name : 'Vistoosa Garment');
+
+    const matchedVariant = matchedProduct?.variants?.find((v) => v.size === editFormData.size);
+    const resolvedSku =
+      matchedVariant?.sku ||
+      (editingOrder.items[0]?.sku
+        ? `${editingOrder.items[0].sku.split('-')[0]}-${editFormData.size}`
+        : `VIS-${editFormData.size}`);
+
+    const unitPrice =
+      editFormData.unitPrice > 0
+        ? editFormData.unitPrice
+        : matchedProduct?.retailPrice || 1650;
+
+    const deliveryFee =
+      editFormData.city === 'Inside Dhaka'
+        ? 60
+        : editFormData.city === 'Sub-Dhaka'
+        ? 100
+        : 150;
+
+    const subtotal = unitPrice * editFormData.quantity;
+    const totalAmount = subtotal + deliveryFee;
+
+    const updatedOrder: Order = {
+      ...editingOrder,
+      customerName: editFormData.customerName.trim(),
+      phone: editFormData.phone.trim(),
+      address: editFormData.address.trim(),
+      city: editFormData.city,
+      channel: editFormData.channel,
+      items: [
+        {
+          id: editingOrder.items[0]?.id || `item-${editingOrder.id}-1`,
+          productName: resolvedProductName,
+          sku: resolvedSku,
+          color: matchedProduct?.color || editingOrder.items[0]?.color || 'Midnight Navy',
+          size: editFormData.size,
+          quantity: editFormData.quantity,
+          unitPrice,
+        },
+        // Preserve any secondary items if exist
+        ...((editingOrder.items || []).slice(1)),
+      ],
+      totalAmount,
+      deliveryFee,
+      paymentMethod: editFormData.paymentMethod,
+      notes: editFormData.notes.trim(),
+    };
+
+    if (onUpdateOrder) {
+      onUpdateOrder(updatedOrder);
+    }
+    setEditingOrder(null);
+  };
 
   // New Order Form state
   const [formData, setFormData] = useState({
@@ -384,6 +493,16 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                     {order.status === 'Pending' && (
                       <>
                         <button
+                          id={`btn-edit-order-${order.id}`}
+                          onClick={() => handleOpenEditModal(order)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-amber-500/20 text-amber-300 hover:text-amber-200 border border-zinc-700 hover:border-amber-500/40 text-xs font-semibold shadow-sm transition active:scale-95"
+                          title="Edit Customer Details, Phone, Address, Product, Size"
+                        >
+                          <Edit2 className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Edit</span>
+                        </button>
+
+                        <button
                           id={`btn-approve-order-${order.id}`}
                           onClick={() => onApproveOrder(order.id)}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-zinc-950 text-xs font-bold shadow-sm transition active:scale-95"
@@ -574,6 +693,257 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                   className="px-5 py-2 rounded-xl bg-amber-500 font-bold text-zinc-950 hover:bg-amber-400"
                 >
                   Create & Save Order
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Pending Order Modal */}
+      {editingOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-lg rounded-3xl bg-zinc-900 border border-zinc-700 p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-zinc-800">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  <Edit2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <span>Edit Pending Order</span>
+                    <span className="font-mono text-xs text-amber-400">#{editingOrder.id}</span>
+                  </h3>
+                  <p className="text-[11px] text-zinc-400">
+                    Modify customer details, delivery location, size, or product name
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingOrder(null)}
+                className="p-1.5 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditSubmit} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-medium">Customer Name (নাম)</label>
+                  <input
+                    type="text"
+                    required
+                    value={editFormData.customerName}
+                    onChange={(e) => setEditFormData({ ...editFormData, customerName: e.target.value })}
+                    placeholder="e.g. Asif Mahmud"
+                    className="w-full rounded-xl bg-zinc-950 border border-zinc-700 px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-medium">Phone Number (নাম্বার)</label>
+                  <input
+                    type="text"
+                    required
+                    value={editFormData.phone}
+                    onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
+                    placeholder="017xxxxxxxx"
+                    className="w-full rounded-xl bg-zinc-950 border border-zinc-700 px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-zinc-400 mb-1 font-medium">Delivery Address (অ্যাড্রেস)</label>
+                <textarea
+                  required
+                  rows={2}
+                  value={editFormData.address}
+                  onChange={(e) => setEditFormData({ ...editFormData, address: e.target.value })}
+                  placeholder="House, Road, Area / Thana, District"
+                  className="w-full rounded-xl bg-zinc-950 border border-zinc-700 px-3 py-2 text-white focus:outline-none focus:border-amber-500 resize-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-medium">City / Delivery Zone</label>
+                  <select
+                    value={editFormData.city}
+                    onChange={(e) => setEditFormData({ ...editFormData, city: e.target.value as any })}
+                    className="w-full rounded-xl bg-zinc-950 border border-zinc-700 px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="Inside Dhaka">Inside Dhaka (৳60)</option>
+                    <option value="Sub-Dhaka">Sub-Dhaka (৳100)</option>
+                    <option value="Outside Dhaka">Outside Dhaka (৳150)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-medium">Channel Origin</label>
+                  <select
+                    value={editFormData.channel}
+                    onChange={(e) => setEditFormData({ ...editFormData, channel: e.target.value as any })}
+                    className="w-full rounded-xl bg-zinc-950 border border-zinc-700 px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="WhatsApp">WhatsApp</option>
+                    <option value="Facebook">Facebook</option>
+                    <option value="Instagram">Instagram</option>
+                    <option value="Website">Website</option>
+                    <option value="Showroom">Showroom</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Product selection and Custom Product Name */}
+              <div className="p-3.5 rounded-2xl bg-zinc-950/70 border border-zinc-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Package className="w-3.5 h-3.5 text-amber-400" />
+                    Product & Size Details (প্রোডাক্ট ও সাইজ)
+                  </span>
+                  <span className="text-[10px] text-zinc-500">Edit item specifications</span>
+                </div>
+
+                <div>
+                  <label className="block text-zinc-400 mb-1">Catalog Product (প্রোডাক্ট নির্বাচন)</label>
+                  <select
+                    value={editFormData.productId}
+                    onChange={(e) => {
+                      const selProd = products.find((p) => p.id === e.target.value);
+                      setEditFormData({
+                        ...editFormData,
+                        productId: e.target.value,
+                        customProductName: selProd ? selProd.name : editFormData.customProductName,
+                        unitPrice: selProd ? selProd.retailPrice : editFormData.unitPrice,
+                      });
+                    }}
+                    className="w-full rounded-xl bg-zinc-900 border border-zinc-700 px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+                  >
+                    {products.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} — ৳{p.retailPrice}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-zinc-400 mb-1">
+                    Product Title (প্রোডাক্ট নেম) <span className="text-[10px] text-zinc-500">(editable)</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editFormData.customProductName}
+                    onChange={(e) => setEditFormData({ ...editFormData, customProductName: e.target.value })}
+                    placeholder="e.g. Supima Pique Polo or Custom Item"
+                    className="w-full rounded-xl bg-zinc-900 border border-zinc-700 px-3 py-2 text-white focus:outline-none focus:border-amber-500 font-medium"
+                  />
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-zinc-400 mb-1 font-medium">Size (সাইজ)</label>
+                    <select
+                      value={editFormData.size}
+                      onChange={(e) => setEditFormData({ ...editFormData, size: e.target.value as any })}
+                      className="w-full rounded-xl bg-zinc-900 border border-zinc-700 px-3 py-2 text-white font-bold text-amber-400 focus:outline-none focus:border-amber-500"
+                    >
+                      <option value="S">S (36-38")</option>
+                      <option value="M">M (38-40")</option>
+                      <option value="L">L (40-42")</option>
+                      <option value="XL">XL (42-44")</option>
+                      <option value="XXL">XXL (44-46")</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-zinc-400 mb-1 font-medium">Quantity (পরিমাণ)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={50}
+                      value={editFormData.quantity}
+                      onChange={(e) =>
+                        setEditFormData({
+                          ...editFormData,
+                          quantity: Math.max(1, parseInt(e.target.value, 10) || 1),
+                        })
+                      }
+                      className="w-full rounded-xl bg-zinc-900 border border-zinc-700 px-3 py-2 text-white font-bold focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-zinc-400 mb-1 font-medium">Unit Price (৳)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={editFormData.unitPrice}
+                      onChange={(e) =>
+                        setEditFormData({
+                          ...editFormData,
+                          unitPrice: Math.max(0, parseInt(e.target.value, 10) || 0),
+                        })
+                      }
+                      className="w-full rounded-xl bg-zinc-900 border border-zinc-700 px-3 py-2 text-white font-bold focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-medium">Payment Method</label>
+                  <select
+                    value={editFormData.paymentMethod}
+                    onChange={(e) => setEditFormData({ ...editFormData, paymentMethod: e.target.value as any })}
+                    className="w-full rounded-xl bg-zinc-950 border border-zinc-700 px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="Cash on Delivery">Cash on Delivery (COD)</option>
+                    <option value="bKash">bKash</option>
+                    <option value="Nagad">Nagad</option>
+                    <option value="Prepaid">Prepaid</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-medium">Total Preview</label>
+                  <div className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-3 py-2 text-amber-400 font-mono font-bold">
+                    ৳{((editFormData.unitPrice * editFormData.quantity) + (editFormData.city === 'Inside Dhaka' ? 60 : editFormData.city === 'Sub-Dhaka' ? 100 : 150)).toLocaleString()}{' '}
+                    <span className="text-[10px] text-zinc-500 font-normal">
+                      (৳{editFormData.city === 'Inside Dhaka' ? 60 : editFormData.city === 'Sub-Dhaka' ? 100 : 150} delivery)
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-zinc-400 mb-1 font-medium">Order Notes / Instructions</label>
+                <input
+                  type="text"
+                  value={editFormData.notes}
+                  onChange={(e) => setEditFormData({ ...editFormData, notes: e.target.value })}
+                  placeholder="Special courier delivery instruction, urgent tag, etc."
+                  className="w-full rounded-xl bg-zinc-950 border border-zinc-700 px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingOrder(null)}
+                  className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  id="btn-save-edit-order"
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 font-bold text-zinc-950 shadow-md shadow-amber-500/20 active:scale-95 transition"
+                >
+                  Save Changes
                 </button>
               </div>
             </form>

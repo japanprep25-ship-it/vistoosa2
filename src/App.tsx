@@ -293,6 +293,22 @@ export default function App() {
     }
   };
 
+  // Handler to Update Order details (Customer name, phone, address, city, product, size, qty, notes, etc.)
+  const handleUpdateOrder = (updatedOrder: Order) => {
+    setOrders((prev) =>
+      prev.map((order) => (order.id === updatedOrder.id ? updatedOrder : order))
+    );
+
+    // Persist full updated order to backend server
+    fetch('/api/orders/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedOrder),
+    }).catch((err) => {
+      console.warn('Failed to sync updated order to server:', err);
+    });
+  };
+
   // CRITICAL LOGIC: Barcode Dispatch & Real-Product Override Handler
   const handleDispatchSuccess = (
     orderId: string,
@@ -517,6 +533,7 @@ export default function App() {
                 setActiveTab('dispatch');
               }}
               onCreateOrder={handleCreateOrder}
+              onUpdateOrder={handleUpdateOrder}
             />
           )}
 

@@ -24,7 +24,6 @@ import {
 import { AuthScreen } from './components/AuthScreen';
 import { Navbar } from './components/Navbar';
 import { Sidebar, ActiveTab } from './components/Sidebar';
-import { MobileNav } from './components/MobileNav';
 import { BusinessDashboardView } from './components/BusinessDashboardView';
 import { IntegrationsHubView } from './components/IntegrationsHubView';
 import { OrderEngineView } from './components/OrderEngineView';
@@ -463,21 +462,30 @@ export default function App() {
         onOpenAiDrawer={() => setActiveTab('ai')}
         pendingOrdersCount={pendingOrdersCount}
         approvedDispatchCount={approvedDispatchCount}
+        isDarkMode={isDarkMode}
+        onToggleDarkMode={toggleDarkMode}
+        onToggleSidebar={() => setIsMobileSidebarOpen((prev) => !prev)}
+        isSidebarOpen={isMobileSidebarOpen}
       />
 
       {/* Main Workspace Layout */}
-      <div className="flex-1 flex max-w-7xl w-full mx-auto pb-16 md:pb-0">
-        {/* Left Desktop Sidebar */}
+      <div className="flex-1 flex max-w-7xl w-full mx-auto pb-8">
+        {/* Slide-in Navigation Drawer */}
         <Sidebar
           activeTab={activeTab}
-          onSelectTab={setActiveTab}
+          onSelectTab={(tab) => {
+            setActiveTab(tab);
+            setIsMobileSidebarOpen(false);
+          }}
           pendingOrdersCount={pendingOrdersCount}
           approvedDispatchCount={approvedDispatchCount}
           discrepancyCount={discrepancyCount}
+          isOpen={isMobileSidebarOpen}
+          onClose={() => setIsMobileSidebarOpen(false)}
         />
 
         {/* Center Dynamic Content Stage */}
-        <main className="flex-1 p-4 md:p-6 lg:p-8 max-w-full overflow-x-hidden">
+        <main className="flex-1 p-3 sm:p-4 md:p-6 lg:p-8 max-w-full overflow-x-hidden">
           {activeTab === 'dashboard' && (
             <BusinessDashboardView
               orders={orders}
@@ -614,14 +622,6 @@ export default function App() {
           {activeTab === 'settings' && <SettingsView />}
         </main>
       </div>
-
-      {/* Mobile Bottom Navigation */}
-      <MobileNav
-        activeTab={activeTab}
-        onSelectTab={setActiveTab}
-        pendingOrdersCount={pendingOrdersCount}
-        approvedDispatchCount={approvedDispatchCount}
-      />
 
       {/* Google Sheets GAS & Database Schema Modal */}
       <GoogleSheetsIntegrationModal

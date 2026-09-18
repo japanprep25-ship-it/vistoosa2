@@ -11,8 +11,8 @@ interface NavbarProps {
   onOpenAiDrawer: () => void;
   pendingOrdersCount: number;
   approvedDispatchCount: number;
-  isDarkMode: boolean;
-  onToggleDarkMode: () => void;
+  isDarkMode?: boolean;
+  onToggleDarkMode?: () => void;
   onToggleSidebar?: () => void;
   isSidebarOpen?: boolean;
 }
@@ -24,7 +24,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAiDrawer,
   pendingOrdersCount,
   approvedDispatchCount,
-  isDarkMode,
+  isDarkMode = true,
   onToggleDarkMode,
   onToggleSidebar,
   isSidebarOpen = false,
@@ -32,25 +32,24 @@ export const Navbar: React.FC<NavbarProps> = ({
   const { appName, appMonogram, appSubtitle, appTagline, logoImage } = useSettings();
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-zinc-800/80 bg-zinc-950/80 backdrop-blur-xl px-3 sm:px-4 py-2.5 transition-colors">
+    <header className="sticky top-0 z-40 w-full border-b border-zinc-800/80 bg-zinc-950/90 backdrop-blur-xl px-3 sm:px-4 py-2.5 transition-colors shadow-lg shadow-black/20">
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 sm:gap-3">
-        {/* Left: Hamburger Menu (Mobile/Drawer Toggle) & Brand Identity */}
+        {/* Left: Hamburger Menu (☰) & Brand Identity */}
         <div className="flex items-center gap-2 sm:gap-3">
-          {onToggleSidebar && (
-            <button
-              id="navbar-hamburger-btn"
-              onClick={onToggleSidebar}
-              className="p-2 -ml-1 rounded-xl text-zinc-300 hover:text-amber-400 hover:bg-zinc-900/90 border border-zinc-800/80 active:scale-95 transition-all flex items-center justify-center focus:outline-none focus:ring-1 focus:ring-amber-500/50"
-              aria-label={isSidebarOpen ? 'Close navigation drawer' : 'Open navigation drawer (☰)'}
-              title={isSidebarOpen ? 'Close navigation menu' : 'Open navigation menu (☰)'}
-            >
-              {isSidebarOpen ? (
-                <X className="w-5 h-5 text-amber-400 transition-transform duration-200 rotate-90" />
-              ) : (
-                <Menu className="w-5 h-5 text-zinc-200 hover:text-amber-400 transition-transform duration-200" />
-              )}
-            </button>
-          )}
+          {/* Clean Hamburger Icon Button (☰) */}
+          <button
+            id="navbar-hamburger-btn"
+            onClick={onToggleSidebar}
+            className="w-9 h-9 rounded-xl bg-gradient-to-b from-zinc-800 to-zinc-900 hover:from-zinc-750 hover:to-zinc-850 text-amber-400 hover:text-amber-300 border border-amber-500/40 hover:border-amber-400 shadow-md shadow-amber-500/10 active:scale-95 transition-all flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-amber-500/50 cursor-pointer shrink-0"
+            aria-label={isSidebarOpen ? 'Close navigation' : 'Open navigation (☰)'}
+            title={isSidebarOpen ? 'Close navigation' : 'Open navigation (☰)'}
+          >
+            {isSidebarOpen ? (
+              <X className="w-5 h-5 text-amber-400" />
+            ) : (
+              <Menu className="w-5 h-5 text-amber-400" />
+            )}
+          </button>
 
           <div className="shrink-0 w-9 h-9 rounded-xl bg-gradient-to-b from-zinc-800 to-zinc-900 border border-amber-500/30 flex items-center justify-center shadow-lg shadow-amber-500/5 overflow-hidden">
             {logoImage ? (

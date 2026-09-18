@@ -35,6 +35,8 @@ interface SidebarProps {
   pendingOrdersCount: number;
   approvedDispatchCount: number;
   discrepancyCount: number;
+  isOpen?: boolean;
+  onClose?: () => void;
   isOpenMobile?: boolean;
   onCloseMobile?: () => void;
 }
@@ -45,25 +47,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
   pendingOrdersCount,
   approvedDispatchCount,
   discrepancyCount,
-  isOpenMobile = false,
+  isOpen,
+  onClose,
+  isOpenMobile,
   onCloseMobile,
 }) => {
+  const isDrawerOpen = isOpen !== undefined ? isOpen : (isOpenMobile || false);
+  const handleClose = onClose || onCloseMobile;
   const { appName, appMonogram } = useSettings();
 
   // Close drawer on Escape key press
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpenMobile && onCloseMobile) {
-        onCloseMobile();
+      if (e.key === 'Escape' && isDrawerOpen && handleClose) {
+        handleClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpenMobile, onCloseMobile]);
+  }, [isDrawerOpen, handleClose]);
 
-  // Lock background body scroll when mobile drawer is open
+  // Lock background body scroll when drawer is open
   useEffect(() => {
-    if (isOpenMobile) {
+    if (isDrawerOpen) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
@@ -71,7 +77,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     return () => {
       document.body.style.overflow = '';
     };
-  }, [isOpenMobile]);
+  }, [isDrawerOpen]);
 
   const navItems = [
     {
@@ -156,21 +162,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <>
-      {/* 1. Mobile Backdrop Overlay (lg:hidden) */}
+      {/* 1. Backdrop Overlay (Universal) */}
       <div
-        className={`fixed inset-0 bg-black/75 backdrop-blur-sm z-50 transition-opacity duration-300 lg:hidden ${
-          isOpenMobile ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+        className={`fixed inset-0 bg-black/80 backdrop-blur-sm z-50 transition-opacity duration-300 ${
+          isDrawerOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         }`}
-        onClick={onCloseMobile}
+        onClick={handleClose}
         aria-hidden="true"
       />
 
-      {/* 2. Mobile Slide-in Drawer (lg:hidden) */}
+      {/* 2. Slide-in Navigation Drawer (Universal) */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] bg-zinc-950 border-r border-zinc-800/90 backdrop-blur-2xl flex flex-col p-4 shadow-2xl transition-transform duration-300 ease-in-out lg:hidden h-full overflow-hidden ${
-          isOpenMobile ? 'translate-x-0' : '-translate-x-full'
+        className={`fixed inset-y-0 left-0 z-50 w-72 sm:w-80 max-w-[85vw] bg-zinc-950 border-r border-zinc-800/90 backdrop-blur-2xl flex flex-col p-4 shadow-2xl transition-transform duration-300 ease-in-out h-full overflow-hidden ${
+          isDrawerOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
-        aria-label="Mobile navigation drawer"
+        aria-label="Navigation drawer"
       >
         {/* Drawer Header */}
         <div className="flex items-center justify-between pb-3 mb-2 border-b border-zinc-800/80 shrink-0">
@@ -185,11 +191,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <p className="text-[10px] text-amber-400/80 font-medium">Operations Menu</p>
             </div>
           </div>
-          {onCloseMobile && (
+          {handleClose && (
             <button
-              onClick={onCloseMobile}
-              className="p-1.5 rounded-xl text-zinc-400 hover:text-zinc-100 hover:bg-zinc-850 border border-zinc-800/80 active:scale-95 transition"
+              onClick={handleClose}
+              className="p-1.5 rounded-xl text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 border border-zinc-800 active:scale-95 transition cursor-pointer"
               aria-label="Close menu"
+              title="Close menu"
             >
               <X className="w-4 h-4" />
             </button>
@@ -203,16 +210,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
             const isActive = activeTab === item.id;
             return (
               <button
-                key={`mobile-${item.id}`}
+                key={`drawer-${item.id}`}
                 id={`drawer-nav-${item.id}`}
                 onClick={() => {
                   onSelectTab(item.id);
-                  if (onCloseMobile) onCloseMobile();
+                  if (handleClose) handleClose();
                 }}
-                className={`w-full flex items-center justify-between p-2.5 rounded-2xl text-left transition-all ${
+                className={`w-full flex items-center justify-between p-2.5 rounded-2xl text-left transition-all cursor-pointer ${
                   isActive
-                    ? 'bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-transparent text-amber-300 border border-amber-500/30 shadow-sm'
-                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60 border border-transparent'
+                    ? 'bg-gradient-to-r from-amber-500/20 via-amber-500/10 to-transparent text-amber-300 border border-amber-500/40 shadow-sm'
+                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/80 border border-transparent'
                 }`}
               >
                 <div className="flex items-center gap-3">
@@ -245,69 +252,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Drawer Footer Footnote */}
         <div className="p-3 mt-auto rounded-2xl bg-zinc-900/60 border border-zinc-800/80 text-[11px] shrink-0">
-          <div className="flex items-center gap-2 text-emerald-400 mb-1">
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span className="font-semibold">All Systems Operational</span>
-          </div>
-          <p className="text-[10px] text-zinc-400 leading-snug">
-            {appName} Systems Active
-          </p>
-        </div>
-      </aside>
-
-      {/* 3. Desktop Permanent Sidebar (hidden below 1024px / lg:flex) */}
-      <aside className="hidden lg:flex flex-col w-64 shrink-0 border-r border-zinc-800/80 bg-zinc-950/60 backdrop-blur-xl p-3 h-[calc(100vh-57px)] sticky top-[57px]">
-        <div className="px-3 py-2 mb-2">
-          <p className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">
-            {appName} Operations
-          </p>
-        </div>
-
-        <nav className="space-y-1.5 flex-1 overflow-y-auto pr-1">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeTab === item.id;
-            return (
-              <button
-                key={`desktop-${item.id}`}
-                id={`sidebar-nav-${item.id}`}
-                onClick={() => onSelectTab(item.id)}
-                className={`w-full flex items-center justify-between p-2.5 rounded-2xl text-left transition-all ${
-                  isActive
-                    ? 'bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-transparent text-amber-300 border border-amber-500/30 shadow-sm'
-                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60 border border-transparent'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${
-                      isActive
-                        ? 'bg-amber-500/20 text-amber-400'
-                        : 'bg-zinc-900 text-zinc-400 group-hover:text-zinc-300'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold leading-tight">{item.label}</p>
-                    <p className="text-[10px] text-zinc-500 leading-tight">{item.description}</p>
-                  </div>
-                </div>
-
-                {item.badge && (
-                  <span
-                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${item.badgeColor}`}
-                  >
-                    {item.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </nav>
-
-        {/* System Status Footnote */}
-        <div className="p-3 mt-auto rounded-2xl bg-zinc-900/40 border border-zinc-800/60 text-[11px]">
           <div className="flex items-center gap-2 text-emerald-400 mb-1">
             <ShieldCheck className="w-3.5 h-3.5" />
             <span className="font-semibold">All Systems Operational</span>

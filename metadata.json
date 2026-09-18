@@ -1,0 +1,6 @@
+{
+  "name": "Vistoosa Male Fashion PWA",
+  "description": "Production-ready PWA ERP, Smart Barcode Dispatch with Real-Product Override, Dual-State Inventory, Pathao Courier Reconciliation, and Gemini AI Assistant for Vistoosa.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

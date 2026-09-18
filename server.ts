@@ -6,6 +6,7 @@ import { createPathaoOrder } from './pathaoOrderService';
 import { mountPathaoConfigRoutes } from './pathaoConfigStore';
 import { mountWhatsappRoutes, sendTrackingWhatsapp } from './whatsappService';
 import { mountIntegrationsConfigRoutes } from './integrationsConfigStore';
+import { mountMetaIntegrationRoutes, registerOrderCreationHook } from './metaIntegrationService';
 
 const app = express();
 const PORT = 3000;
@@ -429,6 +430,32 @@ app.post('/api/pathao/create-pickup', handlePathaoPickup);
 
 // In-memory queue for inbound website orders from WooCommerce / Shopify webhooks
 const inboundWebsiteOrders: any[] = [];
+
+// Register hook so orders from Meta (Messenger, Instagram, WhatsApp) automatically enter Unified Pending Orders
+registerOrderCreationHook((order: any) => {
+  const existingIndex = inboundWebsiteOrders.findIndex((o) => o.id === order.id);
+  if (existingIndex >= 0) {
+    const currentStatus = inboundWebsiteOrders[existingIndex].status;
+    if (currentStatus && currentStatus !== 'Pending') {
+      order.status = currentStatus;
+      if (inboundWebsiteOrders[existingIndex].pathaoTrackingId) {
+        order.pathaoTrackingId = inboundWebsiteOrders[existingIndex].pathaoTrackingId;
+      }
+      if (inboundWebsiteOrders[existingIndex].pathaoConsignmentId) {
+        order.pathaoConsignmentId = inboundWebsiteOrders[existingIndex].pathaoConsignmentId;
+      }
+    }
+    inboundWebsiteOrders[existingIndex] = order;
+  } else {
+    inboundWebsiteOrders.unshift(order);
+  }
+  console.log(
+    `[Unified Engine]: Inbound Meta Order #${order.id} (${order.channel}) queued into Pending orders. Customer: ${order.customerName}`
+  );
+});
+
+// Mount Unified Meta Order Integration routes (Webhook verification, receiving, test-connection, simulator, settings)
+mountMetaIntegrationRoutes(app);
 
 // Helper to convert WooCommerce / Website JSON payload into Vistoosa Order format
 function parseWooCommerceOrderToVistoosa(payload: any): any {

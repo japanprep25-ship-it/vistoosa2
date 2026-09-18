@@ -18,8 +18,17 @@ export interface FullIntegrationsConfig {
     lastSync: string;
   };
   meta?: {
-    businessSuitePageId: string;
+    metaAppId?: string;
+    metaAppSecret?: string;
+    metaVerifyToken?: string;
     pageAccessToken: string;
+    pageId?: string;
+    instagramBusinessAccountId?: string;
+    whatsappPhoneNumberId?: string;
+    whatsappBusinessAccountId?: string;
+    whatsappAccessToken?: string;
+    webhookCallbackUrl?: string;
+    businessSuitePageId: string;
     adAccountId: string;
     conversionsApiPixelId: string;
     conversionsApiToken: string;

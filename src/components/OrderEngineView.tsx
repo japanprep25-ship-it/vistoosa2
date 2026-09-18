@@ -13,6 +13,10 @@ import {
   Layers,
   ChevronRight,
   Filter,
+  Sparkles,
+  Bot,
+  X,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { Order, OrderStatus, OrderChannel, Product } from '../types';
 
@@ -37,6 +41,7 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
   const [selectedChannel, setSelectedChannel] = useState<OrderChannel | 'All'>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [selectedChatOrder, setSelectedChatOrder] = useState<Order | null>(null);
 
   // New Order Form state
   const [formData, setFormData] = useState({
@@ -266,6 +271,40 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                     >
                       {order.channel}
                     </span>
+
+                    {/* Meta / Inbound Source Tag */}
+                    {order.source && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-800/80 border border-zinc-700 text-zinc-300 font-medium">
+                        {order.source === 'messenger'
+                          ? 'Messenger DM'
+                          : order.source === 'instagram'
+                          ? 'Instagram DM'
+                          : order.source === 'whatsapp'
+                          ? 'WhatsApp Chat'
+                          : order.source}
+                      </span>
+                    )}
+
+                    {/* AI Verified Badge */}
+                    {order.confidence === 'complete' && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 font-medium flex items-center gap-1">
+                        <Sparkles className="w-2.5 h-2.5 text-emerald-400" />
+                        AI Verified
+                      </span>
+                    )}
+
+                    {/* View Chat Transcript Button */}
+                    {order.rawConversation && order.rawConversation.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedChatOrder(order)}
+                        className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-300 font-semibold flex items-center gap-1 transition"
+                      >
+                        <MessageSquare className="w-2.5 h-2.5" />
+                        <span>Chat Transcript ({order.rawConversation.length})</span>
+                      </button>
+                    )}
+
                     <span className="text-[10px] text-zinc-500">
                       {new Date(order.createdAt).toLocaleDateString('en-GB', {
                         day: 'numeric',
@@ -283,7 +322,22 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                   </div>
 
                   {/* Order Items */}
-                  <div className="flex flex-wrap gap-2 pt-1">
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    {order.productImageUrl && (
+                      <a
+                        href={order.productImageUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="w-7 h-7 rounded-lg overflow-hidden border border-zinc-700 hover:border-amber-500 transition shrink-0"
+                        title="View image sent by customer"
+                      >
+                        <img
+                          src={order.productImageUrl}
+                          alt="Customer product photo"
+                          className="w-full h-full object-cover"
+                        />
+                      </a>
+                    )}
                     {order.items.map((item) => (
                       <div
                         key={item.id}
@@ -523,6 +577,130 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Chat Transcript Modal for Meta / Social Orders */}
+      {selectedChatOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="glass-card w-full max-w-xl rounded-3xl border border-zinc-800 bg-zinc-950 p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                  <Bot className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <span>Chat Transcript & AI Parsing</span>
+                    <span className="font-mono text-xs text-amber-400">#{selectedChatOrder.id}</span>
+                  </h3>
+                  <p className="text-xs text-zinc-400">
+                    {selectedChatOrder.customerName} • {selectedChatOrder.channel} ({selectedChatOrder.source || 'chat'})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedChatOrder(null)}
+                className="p-1.5 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* AI Extraction Summary Banner */}
+            <div className="p-3 rounded-2xl bg-zinc-900/80 border border-zinc-800 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-emerald-400" />
+                <span className="text-zinc-300">
+                  AI Confidence:{' '}
+                  <strong className="text-emerald-400 uppercase font-mono">
+                    {selectedChatOrder.confidence || 'complete'}
+                  </strong>
+                </span>
+              </div>
+              {selectedChatOrder.missingFields && selectedChatOrder.missingFields.length > 0 ? (
+                <span className="text-amber-400 text-[11px]">
+                  Missing: {selectedChatOrder.missingFields.join(', ')}
+                </span>
+              ) : (
+                <span className="text-emerald-400 text-[11px] font-medium">All details captured</span>
+              )}
+            </div>
+
+            {/* Photo attachment if available */}
+            {selectedChatOrder.productImageUrl && (
+              <div className="p-3 rounded-2xl bg-zinc-900/50 border border-zinc-800 flex items-center gap-3">
+                <img
+                  src={selectedChatOrder.productImageUrl}
+                  alt="Customer attachment"
+                  className="w-12 h-12 rounded-xl object-cover border border-zinc-700"
+                />
+                <div className="text-xs">
+                  <p className="font-semibold text-zinc-200">Customer Sent Product Image</p>
+                  <a
+                    href={selectedChatOrder.productImageUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-amber-400 hover:underline text-[11px] inline-flex items-center gap-1 mt-0.5"
+                  >
+                    <span>Open full photo</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              </div>
+            )}
+
+            {/* Conversation Messages */}
+            <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+              {selectedChatOrder.rawConversation && selectedChatOrder.rawConversation.length > 0 ? (
+                selectedChatOrder.rawConversation.map((msg, index) => (
+                  <div
+                    key={index}
+                    className={`flex flex-col ${
+                      msg.sender === 'customer' || msg.sender === 'user' ? 'items-start' : 'items-end'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 mb-1 px-1">
+                      <span className="text-[10px] font-bold text-zinc-400 uppercase">
+                        {msg.sender === 'customer' || msg.sender === 'user'
+                          ? selectedChatOrder.customerName || 'Customer'
+                          : 'Vistoosa Fashion AI'}
+                      </span>
+                      {msg.timestamp && (
+                        <span className="text-[9px] text-zinc-500 font-mono">
+                          {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      )}
+                    </div>
+                    <div
+                      className={`p-3 rounded-2xl text-xs max-w-[85%] leading-relaxed whitespace-pre-line ${
+                        msg.sender === 'customer' || msg.sender === 'user'
+                          ? 'bg-zinc-900 text-zinc-200 border border-zinc-800'
+                          : 'bg-purple-950/50 text-purple-200 border border-purple-800/40'
+                      }`}
+                    >
+                      {msg.text}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="py-8 text-center text-zinc-500 text-xs">
+                  No transcript recorded for this order.
+                </div>
+              )}
+            </div>
+
+            <div className="pt-3 border-t border-zinc-800 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setSelectedChatOrder(null)}
+                className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold transition"
+              >
+                Close Transcript
+              </button>
+            </div>
           </div>
         </div>
       )}

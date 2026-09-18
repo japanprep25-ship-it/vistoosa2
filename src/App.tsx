@@ -92,6 +92,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [isGasModalOpen, setIsGasModalOpen] = useState(false);
   const [isCashModalOpenFromDashboard, setIsCashModalOpenFromDashboard] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const { isDarkMode, toggleDarkMode } = useSettings();
 
   // Periodically poll for live inbound website orders received via WooCommerce / Shopify webhooks

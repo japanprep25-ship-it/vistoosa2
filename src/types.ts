@@ -32,6 +32,8 @@ export interface Order {
   address: string;
   city: 'Inside Dhaka' | 'Sub-Dhaka' | 'Outside Dhaka';
   channel: OrderChannel;
+  source?: 'website' | 'messenger' | 'instagram' | 'whatsapp' | 'manual';
+  senderId?: string;
   items: OrderItem[];
   totalAmount: number;
   deliveryFee: number;
@@ -44,6 +46,10 @@ export interface Order {
   pathaoConsignmentId?: string;
   pathaoStatus?: 'Pickup Requested' | 'In Transit' | 'Delivered' | 'Exchange' | 'Partial Delivery' | 'Return' | 'Paid Return';
   notes?: string;
+  productImageUrl?: string;
+  rawConversation?: { sender: string; text: string; timestamp?: string; attachmentUrl?: string }[];
+  confidence?: 'complete' | 'incomplete';
+  missingFields?: string[];
   overrideHistory?: {
     timestamp: string;
     originalSku: string;
@@ -208,8 +214,17 @@ export interface ChannelIntegrationConfig {
     lastSync?: string;
   };
   meta: {
-    businessSuitePageId: string;
+    metaAppId?: string;
+    metaAppSecret?: string;
+    metaVerifyToken?: string;
     pageAccessToken: string;
+    pageId?: string;
+    instagramBusinessAccountId?: string;
+    whatsappPhoneNumberId?: string;
+    whatsappBusinessAccountId?: string;
+    whatsappAccessToken?: string;
+    webhookCallbackUrl?: string;
+    businessSuitePageId: string;
     adAccountId: string;
     conversionsApiPixelId: string;
     conversionsApiToken: string;

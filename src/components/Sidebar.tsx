@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
+import { useLanguage } from '../contexts/LanguageContext';
 
 export type ActiveTab =
   | 'dashboard'
@@ -55,6 +56,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const isDrawerOpen = isOpen !== undefined ? isOpen : (isOpenMobile || false);
   const handleClose = onClose || onCloseMobile;
   const { appName, appMonogram } = useSettings();
+  const { t } = useLanguage();
 
   // Close drawer on Escape key press
   useEffect(() => {
@@ -82,7 +84,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const navItems = [
     {
       id: 'dashboard' as ActiveTab,
-      label: 'Business Dashboard',
+      label: t('nav.dashboard'),
       description: 'Revenue, Profit & Cash',
       icon: LayoutDashboard,
       badge: 'Live',
@@ -90,7 +92,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'orders' as ActiveTab,
-      label: 'Order Engine',
+      label: t('nav.orders'),
       description: 'Multi-Channel Queues',
       icon: ShoppingBag,
       badge: pendingOrdersCount > 0 ? `${pendingOrdersCount}` : undefined,
@@ -98,7 +100,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'cogs' as ActiveTab,
-      label: 'Cash & Balance',
+      label: t('nav.cash'),
       description: 'Vault & COGS Engine',
       icon: Wallet,
       badge: '৳ Live',
@@ -106,7 +108,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'integrations' as ActiveTab,
-      label: 'Connect Channels',
+      label: t('nav.integrations'),
       description: 'Website, Pathao & FB Ads',
       icon: Share2,
       badge: 'API Hub',
@@ -114,48 +116,48 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'dispatch' as ActiveTab,
-      label: 'Barcode Dispatch',
+      label: t('nav.dispatch'),
       description: 'Live Queue & Override',
       icon: ScanBarcode,
-      badge: approvedDispatchCount > 0 ? `${approvedDispatchCount} ready` : undefined,
+      badge: approvedDispatchCount > 0 ? `${approvedDispatchCount}` : undefined,
       badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
     },
     {
       id: 'inventory' as ActiveTab,
-      label: 'Dual Inventory',
+      label: t('nav.inventory'),
       description: 'Reserved vs Warehouse',
       icon: Layers,
     },
     {
       id: 'reconciliation' as ActiveTab,
-      label: 'Pathao Courier',
+      label: t('nav.reconciliation'),
       description: '1-Tk Discrepancy Matcher',
       icon: Truck,
-      badge: discrepancyCount > 0 ? `${discrepancyCount} alert` : undefined,
+      badge: discrepancyCount > 0 ? `${discrepancyCount}` : undefined,
       badgeColor: 'bg-red-500/20 text-red-300 border-red-500/30',
     },
     {
       id: 'crm' as ActiveTab,
-      label: 'CRM & WhatsApp',
+      label: t('nav.crm'),
       description: 'VIP vs Inactive Churn',
       icon: Users,
     },
     {
       id: 'ai' as ActiveTab,
-      label: 'Veer (AI Fashion Agent)',
+      label: t('nav.ai'),
       description: 'Bengali Typo & Parser',
       icon: Bot,
     },
     {
       id: 'gas' as ActiveTab,
-      label: 'GAS & DB Schema',
+      label: t('nav.gas'),
       description: 'Google Sheets Backend',
       icon: Database,
     },
     {
       id: 'settings' as ActiveTab,
-      label: 'Settings',
-      description: 'Theme & Customization',
+      label: t('nav.settings'),
+      description: 'Language & Theme',
       icon: Settings,
     },
   ];

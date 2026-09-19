@@ -1,13 +1,14 @@
 // whatsappService.ts
 // -----------------------------------------------------------------------
-// WhatsApp Cloud API Integration & Notification Service
+// WhatsApp Cloud API Integration & Notification Service (Per-User Storage)
 //
-// Saves & loads config from `whatsapp-config.json` (or environment variables)
+// Saves & loads config per user ID from `whatsapp-config.json`
 // and handles sending automated order tracking notifications via Meta WhatsApp API.
 
 import fs from 'fs';
 import path from 'path';
-import type { Express, Request, Response } from 'express';
+import type { Express, Response } from 'express';
+import { requireAuth, AuthenticatedRequest } from './authMiddleware';
 
 const CONFIG_PATH = path.join(process.cwd(), 'whatsapp-config.json');
 
@@ -18,22 +19,41 @@ export interface WhatsappConfig {
   languageCode: string;
 }
 
-export function loadWhatsappConfig(): WhatsappConfig | null {
+type PerUserWhatsappConfigs = Record<string, WhatsappConfig>;
+
+function loadAllWhatsappConfigs(): PerUserWhatsappConfigs {
   try {
-    if (!fs.existsSync(CONFIG_PATH)) return null;
-    return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
+    if (!fs.existsSync(CONFIG_PATH)) return {};
+    const data = fs.readFileSync(CONFIG_PATH, 'utf-8');
+    const parsed = JSON.parse(data);
+
+    // Legacy migration check: if file is single WhatsappConfig object
+    if (parsed && typeof parsed === 'object' && 'phoneNumberId' in parsed && !('usr_' in parsed)) {
+      return { usr_admin_default: parsed as WhatsappConfig };
+    }
+    return (parsed as PerUserWhatsappConfigs) || {};
   } catch {
-    return null;
+    return {};
   }
 }
 
-function saveWhatsappConfig(config: WhatsappConfig) {
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
+export function loadWhatsappConfig(userId: string): WhatsappConfig | null {
+  if (!userId) return null;
+  const all = loadAllWhatsappConfigs();
+  return all[userId] || null;
+}
+
+export function saveWhatsappConfig(userId: string, config: WhatsappConfig) {
+  if (!userId) return;
+  const all = loadAllWhatsappConfigs();
+  all[userId] = config;
+  fs.writeFileSync(CONFIG_PATH, JSON.stringify(all, null, 2), 'utf-8');
 }
 
 export function mountWhatsappRoutes(app: Express) {
-  // POST /api/settings/whatsapp -> Save WhatsApp credentials
-  app.post('/api/settings/whatsapp', (req: Request, res: Response) => {
+  // POST /api/settings/whatsapp -> Save WhatsApp credentials for logged in user
+  app.post('/api/settings/whatsapp', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.userId!;
     const { phoneNumberId, accessToken, templateName, languageCode } = req.body || {};
 
     if (!phoneNumberId || !accessToken || !templateName) {
@@ -46,11 +66,11 @@ export function mountWhatsappRoutes(app: Express) {
     // Preserve existing access token if user didn't modify masked value '••••••••'
     let tokenToSave = accessToken;
     if (accessToken === '••••••••') {
-      const existing = loadWhatsappConfig();
+      const existing = loadWhatsappConfig(userId);
       if (existing) tokenToSave = existing.accessToken;
     }
 
-    saveWhatsappConfig({
+    saveWhatsappConfig(userId, {
       phoneNumberId: String(phoneNumberId).trim(),
       accessToken: String(tokenToSave).trim(),
       templateName: String(templateName).trim(),
@@ -59,38 +79,35 @@ export function mountWhatsappRoutes(app: Express) {
 
     return res.json({
       success: true,
-      message: 'WhatsApp Cloud API settings saved successfully.',
+      message: 'Your WhatsApp Cloud API settings saved successfully.',
     });
   });
 
-  // GET /api/settings/whatsapp -> Prefill settings form
-  app.get('/api/settings/whatsapp', (_req: Request, res: Response) => {
-    const config = loadWhatsappConfig();
+  // GET /api/settings/whatsapp -> Prefill settings form for logged in user
+  app.get('/api/settings/whatsapp', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.userId!;
+    const config = loadWhatsappConfig(userId);
 
-    // Fallback to env variables if available
-    const phoneNumberId = config?.phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID || '';
-    const templateName = config?.templateName || process.env.WHATSAPP_TEMPLATE_NAME || 'vistoosa_order_tracking';
-    const languageCode = config?.languageCode || process.env.WHATSAPP_LANGUAGE_CODE || 'en_US';
-    const hasToken = !!(config?.accessToken || process.env.WHATSAPP_ACCESS_TOKEN);
-
-    if (!config && !hasToken && !phoneNumberId) {
+    if (!config) {
       return res.json({ configured: false });
     }
 
     return res.json({
       configured: true,
-      phoneNumberId,
-      templateName,
-      languageCode,
-      accessToken: hasToken ? '••••••••' : '',
+      phoneNumberId: config.phoneNumberId,
+      templateName: config.templateName,
+      languageCode: config.languageCode,
+      accessToken: config.accessToken ? '••••••••' : '',
     });
   });
 
   // POST /api/settings/whatsapp/test -> Send test WhatsApp message
-  app.post('/api/settings/whatsapp/test', async (req: Request, res: Response) => {
+  app.post('/api/settings/whatsapp/test', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.userId!;
     const { testPhone, customerName, trackingId } = req.body || {};
     try {
       const result = await sendTrackingWhatsapp(
+        userId,
         testPhone || '01700000000',
         customerName || 'Valued Customer',
         trackingId || 'PTH-TEST-123456'
@@ -106,7 +123,7 @@ export function mountWhatsappRoutes(app: Express) {
 }
 
 /**
- * Clean & format phone number to international format (e.g., 8801700000000 for Bangladesh)
+ * Clean & format phone number to international format
  */
 function formatPhoneNumber(phone: string): string {
   let cleaned = String(phone || '').replace(/\D/g, '');
@@ -117,24 +134,25 @@ function formatPhoneNumber(phone: string): string {
 }
 
 /**
- * Sends automated Pathao tracking ID to customer via Meta WhatsApp Cloud API
+ * Sends automated Pathao tracking ID to customer via Meta WhatsApp Cloud API using the specific user's config
  */
 export async function sendTrackingWhatsapp(
+  userId: string,
   recipientPhone: string,
   customerName: string,
   trackingId: string
 ) {
-  const config = loadWhatsappConfig();
+  const config = loadWhatsappConfig(userId);
   const phoneNumberId = config?.phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID;
   const accessToken = config?.accessToken || process.env.WHATSAPP_ACCESS_TOKEN;
   const templateName = config?.templateName || process.env.WHATSAPP_TEMPLATE_NAME || 'vistoosa_order_tracking';
   const languageCode = config?.languageCode || process.env.WHATSAPP_LANGUAGE_CODE || 'en_US';
 
   if (!phoneNumberId || !accessToken) {
-    console.warn('[WhatsApp Service]: Phone Number ID or Access Token is missing in configuration.');
+    console.warn(`[WhatsApp Service]: Phone Number ID or Access Token missing for user ${userId}.`);
     return {
       success: false,
-      message: 'WhatsApp API credentials not configured in Settings.',
+      message: 'WhatsApp API credentials not configured in your Settings > Connect Channels.',
     };
   }
 
@@ -169,7 +187,7 @@ export async function sendTrackingWhatsapp(
   };
 
   try {
-    console.log(`[WhatsApp API]: Sending tracking code ${trackingId} to ${formattedPhone}...`);
+    console.log(`[WhatsApp API]: Sending tracking code ${trackingId} for user ${userId} to ${formattedPhone}...`);
     const res = await fetch(url, {
       method: 'POST',
       headers: {

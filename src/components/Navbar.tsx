@@ -3,6 +3,7 @@ import { LogOut, Database, Sparkles, Moon, Sun, Menu, X } from 'lucide-react';
 import { AuthUser } from '../types';
 import { PWAInstallButton } from './PWAInstallButton';
 import { useSettings } from '../contexts/SettingsContext';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface NavbarProps {
   user: AuthUser;
@@ -30,6 +31,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   isSidebarOpen = false,
 }) => {
   const { appName, appMonogram, appSubtitle, appTagline, logoImage } = useSettings();
+  const { t } = useLanguage();
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-zinc-800/80 bg-zinc-950/90 backdrop-blur-xl px-3 sm:px-4 py-2.5 transition-colors shadow-lg shadow-black/20">
@@ -41,8 +43,8 @@ export const Navbar: React.FC<NavbarProps> = ({
             id="navbar-hamburger-btn"
             onClick={onToggleSidebar}
             className="w-9 h-9 rounded-xl bg-gradient-to-b from-zinc-800 to-zinc-900 hover:from-zinc-750 hover:to-zinc-850 text-amber-400 hover:text-amber-300 border border-amber-500/40 hover:border-amber-400 shadow-md shadow-amber-500/10 active:scale-95 transition-all flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-amber-500/50 cursor-pointer shrink-0"
-            aria-label={isSidebarOpen ? 'Close navigation' : 'Open navigation (☰)'}
-            title={isSidebarOpen ? 'Close navigation' : 'Open navigation (☰)'}
+            aria-label={isSidebarOpen ? 'Close navigation' : t('header.openNav')}
+            title={isSidebarOpen ? 'Close navigation' : t('header.openNav')}
           >
             {isSidebarOpen ? (
               <X className="w-5 h-5 text-amber-400" />
@@ -83,13 +85,13 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="hidden lg:flex items-center gap-2 text-xs">
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-900/80 border border-zinc-800">
             <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-            <span className="text-zinc-400">Pending Orders:</span>
+            <span className="text-zinc-400">{t('header.pendingOrders')}:</span>
             <span className="font-semibold text-amber-300">{pendingOrdersCount}</span>
           </div>
 
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-900/80 border border-zinc-800">
             <span className="w-2 h-2 rounded-full bg-emerald-400" />
-            <span className="text-zinc-400">Ready to Pack:</span>
+            <span className="text-zinc-400">{t('header.readyToPack')}:</span>
             <span className="font-semibold text-emerald-300">{approvedDispatchCount}</span>
           </div>
         </div>
@@ -107,7 +109,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             title="Open Veer (Vistoosa AI Fashion Agent)"
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-spin" style={{ animationDuration: '6s' }} />
-            <span className="hidden sm:inline">Veer (AI)</span>
+            <span className="hidden sm:inline">{t('header.aiAssistant')}</span>
           </button>
 
           {/* Google Sheets GAS Code & Webhook Connection */}
@@ -118,7 +120,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             title="Google Apps Script & Database Schema"
           >
             <Database className="w-3.5 h-3.5 text-emerald-400" />
-            <span>GAS API & Schema</span>
+            <span>{t('header.gasApi')}</span>
           </button>
 
           {/* Dark / Light Mode Toggle */}
@@ -141,8 +143,8 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
             <button
               onClick={onLogout}
-              className="p-1.5 rounded-xl text-zinc-400 hover:text-red-400 hover:bg-red-500/10 transition"
-              title="Sign Out"
+              className="p-1.5 rounded-xl text-zinc-400 hover:text-red-400 hover:bg-red-500/10 transition flex items-center gap-1"
+              title={t('header.signOut')}
             >
               <LogOut className="w-4 h-4" />
             </button>

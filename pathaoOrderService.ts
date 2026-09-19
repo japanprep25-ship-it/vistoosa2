@@ -1,14 +1,13 @@
 // pathaoOrderService.ts
 // -----------------------------------------------------------------------
-// REAL Pathao Courier API integration.
+// REAL Pathao Courier API integration (Per-User Configuration).
 //
-// Reads credentials from `loadPathaoConfig()` (saved via Settings UI in pathao-config.json),
-// and falls back to environment variables (`process.env.PATHAO_*`) if file config is missing.
+// Reads credentials from `loadPathaoConfig(userId)` saved via Settings UI in pathao-config.json.
 
 import { loadPathaoConfig } from './pathaoConfigStore';
 
-function getCredentials() {
-  const fileConfig = loadPathaoConfig();
+function getCredentials(userId: string) {
+  const fileConfig = loadPathaoConfig(userId);
   const baseUrl = fileConfig?.baseUrl || process.env.PATHAO_BASE_URL || 'https://api-hermes.pathao.com';
   const clientId = fileConfig?.clientId || process.env.PATHAO_CLIENT_ID;
   const clientSecret = fileConfig?.clientSecret || process.env.PATHAO_CLIENT_SECRET;
@@ -19,12 +18,13 @@ function getCredentials() {
   return { baseUrl, clientId, clientSecret, username, password, storeId };
 }
 
-let cachedToken: { accessToken: string; refreshToken: string; expiresAt: number } | null = null;
+// Cached token per user ID
+const tokenCacheMap = new Map<string, { accessToken: string; refreshToken: string; expiresAt: number }>();
 
-async function fetchNewToken() {
-  const creds = getCredentials();
+async function fetchNewToken(userId: string) {
+  const creds = getCredentials(userId);
   if (!creds.clientId || !creds.clientSecret || !creds.username || !creds.password) {
-    throw new Error('Pathao credentials missing. Please set them in Settings > Connect Channels > Pathao or via environment variables.');
+    throw new Error('Pathao credentials missing for your account. Please set them in Settings > Connect Channels > Pathao Courier.');
   }
 
   const res = await fetch(`${creds.baseUrl}/aladdin/api/v1/issue-token`, {
@@ -40,17 +40,19 @@ async function fetchNewToken() {
   });
   if (!res.ok) throw new Error(`Pathao token request failed: ${res.status} ${await res.text()}`);
   const data = await res.json();
-  cachedToken = {
+  const tokenObj = {
     accessToken: data.access_token,
     refreshToken: data.refresh_token,
     expiresAt: Date.now() + (data.expires_in - 60) * 1000, // refresh 60s early
   };
-  return cachedToken.accessToken;
+  tokenCacheMap.set(userId, tokenObj);
+  return tokenObj.accessToken;
 }
 
-async function getAccessToken(): Promise<string> {
+async function getAccessToken(userId: string): Promise<string> {
+  const cachedToken = tokenCacheMap.get(userId);
   if (cachedToken && Date.now() < cachedToken.expiresAt) return cachedToken.accessToken;
-  return fetchNewToken();
+  return fetchNewToken(userId);
 }
 
 export interface PathaoOrderInput {
@@ -67,12 +69,12 @@ export interface PathaoOrderInput {
   specialInstruction?: string;
 }
 
-export async function createPathaoOrder(order: PathaoOrderInput) {
-  const token = await getAccessToken();
-  const creds = getCredentials();
+export async function createPathaoOrder(userId: string, order: PathaoOrderInput) {
+  const token = await getAccessToken(userId);
+  const creds = getCredentials(userId);
 
   if (!creds.storeId) {
-    throw new Error('Pathao Store ID is required. Please set it in Settings > Connect Channels > Pathao.');
+    throw new Error('Pathao Store ID is required for your account. Please set it in Settings > Connect Channels > Pathao Courier.');
   }
 
   const res = await fetch(`${creds.baseUrl}/aladdin/api/v1/orders`, {
@@ -102,6 +104,5 @@ export async function createPathaoOrder(order: PathaoOrderInput) {
   const data = await res.json();
   if (!res.ok) throw new Error(`Pathao order creation failed: ${res.status} ${JSON.stringify(data)}`);
 
-  // data.data contains: consignment_id, merchant_order_id, order_status, delivery_fee
   return data.data;
 }

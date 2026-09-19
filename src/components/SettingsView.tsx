@@ -1,10 +1,14 @@
 import React, { useRef } from 'react';
 import { useSettings, ThemePreset, FontPreset } from '../contexts/SettingsContext';
-import { Save, Sparkles, Moon, Sun, Type, Palette, Image as ImageIcon, Upload, X } from 'lucide-react';
+import { useLanguage } from '../contexts/LanguageContext';
+import { Save, Sparkles, Moon, Sun, Type, Palette, Image as ImageIcon, Upload, X, Globe, CheckCircle2 } from 'lucide-react';
 
 export const SettingsView: React.FC = () => {
   const settings = useSettings();
+  const { language, setLanguage, t } = useLanguage();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [saveToast, setSaveToast] = React.useState<string | null>(null);
+
   const [formData, setFormData] = React.useState({
     appName: settings.appName,
     appMonogram: settings.appMonogram,
@@ -17,7 +21,14 @@ export const SettingsView: React.FC = () => {
 
   const handleSave = () => {
     settings.updateSettings(formData);
-    // Optional: show a toast notification here
+    setSaveToast(t('settings.languageSaved'));
+    setTimeout(() => setSaveToast(null), 3000);
+  };
+
+  const handleLanguageChange = (lang: 'en' | 'bn') => {
+    setLanguage(lang);
+    setSaveToast(lang === 'bn' ? 'ভাষা পরিবর্তন সফল হয়েছে (Bangla Selected)' : 'Language updated to English');
+    setTimeout(() => setSaveToast(null), 3000);
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -51,10 +62,10 @@ export const SettingsView: React.FC = () => {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-zinc-100 flex items-center gap-2">
-            <SettingsIcon className="text-amber-500" /> System Configurations
+            <SettingsIcon className="text-amber-500" /> {t('settings.title')}
           </h2>
           <p className="text-sm text-zinc-400 mt-1">
-            Customize application branding, themes, and display settings.
+            {t('settings.subtitle')}
           </p>
         </div>
         <button
@@ -62,8 +73,88 @@ export const SettingsView: React.FC = () => {
           className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-zinc-950 font-semibold rounded-xl transition-colors shadow-lg shadow-amber-500/20"
         >
           <Save className="w-4 h-4" />
-          Save Changes
+          {t('settings.saveSettings')}
         </button>
+      </div>
+
+      {/* Success Toast / Notification */}
+      {saveToast && (
+        <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm font-medium flex items-center gap-3 animate-fade-in shadow-lg">
+          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+          <span>{saveToast}</span>
+        </div>
+      )}
+
+      {/* 1. Language Preference Section (User-Specific & Persisted) */}
+      <div className="p-6 rounded-2xl glass-panel border border-amber-500/30 bg-gradient-to-r from-amber-500/5 via-zinc-900/90 to-zinc-900/90 space-y-4">
+        <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
+              <Globe className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-zinc-100">
+                {t('settings.languageSection')}
+              </h3>
+              <p className="text-xs text-zinc-400">
+                {t('settings.languageDescription')}
+              </p>
+            </div>
+          </div>
+          <span className="text-xs px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 font-mono font-semibold">
+            {language === 'en' ? 'English (EN)' : 'বাংলা (BN)'}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+          {/* Option A: English */}
+          <button
+            type="button"
+            onClick={() => handleLanguageChange('en')}
+            className={`p-4 rounded-xl border text-left transition-all flex items-center justify-between cursor-pointer ${
+              language === 'en'
+                ? 'bg-amber-500/15 border-amber-500 shadow-md shadow-amber-500/10 text-amber-300 ring-2 ring-amber-500/30'
+                : 'bg-zinc-900/60 border-zinc-800 hover:bg-zinc-800/80 text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${
+                language === 'en' ? 'bg-amber-500 text-zinc-950' : 'bg-zinc-800 text-zinc-400'
+              }`}>
+                EN
+              </div>
+              <div>
+                <p className="text-sm font-bold text-zinc-100">English</p>
+                <p className="text-xs text-zinc-400">Default interface language</p>
+              </div>
+            </div>
+            {language === 'en' && <CheckCircle2 className="w-5 h-5 text-amber-400" />}
+          </button>
+
+          {/* Option B: বাংলা (Bangla) */}
+          <button
+            type="button"
+            onClick={() => handleLanguageChange('bn')}
+            className={`p-4 rounded-xl border text-left transition-all flex items-center justify-between cursor-pointer ${
+              language === 'bn'
+                ? 'bg-amber-500/15 border-amber-500 shadow-md shadow-amber-500/10 text-amber-300 ring-2 ring-amber-500/30'
+                : 'bg-zinc-900/60 border-zinc-800 hover:bg-zinc-800/80 text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${
+                language === 'bn' ? 'bg-amber-500 text-zinc-950' : 'bg-zinc-800 text-zinc-400'
+              }`}>
+                বাংলা
+              </div>
+              <div>
+                <p className="text-sm font-bold text-zinc-100">বাংলা (Bangla)</p>
+                <p className="text-xs text-zinc-400">বাংলা ইন্টারফেস ও মেনু</p>
+              </div>
+            </div>
+            {language === 'bn' && <CheckCircle2 className="w-5 h-5 text-amber-400" />}
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

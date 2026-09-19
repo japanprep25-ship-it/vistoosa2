@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import type { Express, Request, Response } from 'express';
+import type { Express, Response } from 'express';
+import { requireAuth, AuthenticatedRequest } from './authMiddleware';
 
 const CONFIG_PATH = path.join(process.cwd(), 'integrations-config.json');
 
@@ -46,17 +47,33 @@ export interface FullIntegrationsConfig {
   };
 }
 
-export function loadIntegrationsConfig(): FullIntegrationsConfig {
+type PerUserIntegrationsConfigs = Record<string, FullIntegrationsConfig>;
+
+function loadAllIntegrationsConfigs(): PerUserIntegrationsConfigs {
   try {
     if (!fs.existsSync(CONFIG_PATH)) return {};
-    return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
+    const data = fs.readFileSync(CONFIG_PATH, 'utf-8');
+    const parsed = JSON.parse(data);
+
+    if (parsed && typeof parsed === 'object' && ('website' in parsed || 'meta' in parsed || 'gas' in parsed) && !('usr_' in parsed)) {
+      return { usr_admin_default: parsed as FullIntegrationsConfig };
+    }
+    return (parsed as PerUserIntegrationsConfigs) || {};
   } catch {
     return {};
   }
 }
 
-export function saveIntegrationsConfig(newConfig: Partial<FullIntegrationsConfig>) {
-  const current = loadIntegrationsConfig();
+export function loadIntegrationsConfig(userId: string): FullIntegrationsConfig {
+  if (!userId) return {};
+  const all = loadAllIntegrationsConfigs();
+  return all[userId] || {};
+}
+
+export function saveIntegrationsConfig(userId: string, newConfig: Partial<FullIntegrationsConfig>) {
+  if (!userId) return {};
+  const all = loadAllIntegrationsConfigs();
+  const current = all[userId] || {};
   const merged = {
     ...current,
     ...newConfig,
@@ -64,27 +81,30 @@ export function saveIntegrationsConfig(newConfig: Partial<FullIntegrationsConfig
     meta: newConfig.meta ? { ...current.meta, ...newConfig.meta } : current.meta,
     gas: newConfig.gas ? { ...current.gas, ...newConfig.gas } : current.gas,
   };
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(merged, null, 2), 'utf-8');
+  all[userId] = merged;
+  fs.writeFileSync(CONFIG_PATH, JSON.stringify(all, null, 2), 'utf-8');
   return merged;
 }
 
 export function mountIntegrationsConfigRoutes(app: Express) {
-  // GET /api/settings/integrations - Load all persistent integration settings
-  app.get('/api/settings/integrations', (_req: Request, res: Response) => {
-    const config = loadIntegrationsConfig();
+  // GET /api/settings/integrations - Load all persistent integration settings for user
+  app.get('/api/settings/integrations', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.userId!;
+    const config = loadIntegrationsConfig(userId);
     return res.json({
       success: true,
       config,
     });
   });
 
-  // POST /api/settings/integrations - Save persistent integration settings
-  app.post('/api/settings/integrations', (req: Request, res: Response) => {
+  // POST /api/settings/integrations - Save persistent integration settings for user
+  app.post('/api/settings/integrations', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.userId!;
     const payload = req.body || {};
-    const updated = saveIntegrationsConfig(payload);
+    const updated = saveIntegrationsConfig(userId, payload);
     return res.json({
       success: true,
-      message: 'Integration settings saved permanently.',
+      message: 'Integration settings saved permanently for your account.',
       config: updated,
     });
   });

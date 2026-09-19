@@ -7,6 +7,25 @@ import { mountPathaoConfigRoutes } from './pathaoConfigStore';
 import { mountWhatsappRoutes, sendTrackingWhatsapp } from './whatsappService';
 import { mountIntegrationsConfigRoutes } from './integrationsConfigStore';
 import { mountMetaIntegrationRoutes, registerOrderCreationHook } from './metaIntegrationService';
+import {
+  createUser,
+  authenticateUserCredentials,
+  findUserByEmail,
+  updateUserPassword,
+  sanitizeUser,
+  generateJwtToken,
+} from './userStore';
+import { createAndSendOtp, verifyOtpCode } from './otpService';
+import { requireAuth, extractOptionalAuth, AuthenticatedRequest } from './authMiddleware';
+import {
+  getUserOrders,
+  saveUserOrders,
+  addOrUpdateUserOrder,
+  getUserWorkspaceData,
+  saveUserWorkspaceData,
+  getUserLanguage,
+  setUserLanguage,
+} from './userWorkspaceStore';
 
 const app = express();
 const PORT = 3000;
@@ -49,6 +68,252 @@ app.use((req, res, next) => {
 mountPathaoConfigRoutes(app);
 mountWhatsappRoutes(app);
 mountIntegrationsConfigRoutes(app);
+
+// 2FA OTP & Real Email Authentication Endpoints
+// Step 1 of Signup: Create Account & Dispatch OTP
+app.post('/api/auth/signup', async (req, res) => {
+  try {
+    const { email, password, name } = req.body || {};
+    const cleanEmail = String(email || '').trim().toLowerCase();
+
+    // Create user record in userStore (throws if invalid or duplicate email)
+    const result = createUser(cleanEmail, password, name);
+
+    // Send 6-digit OTP verification code via Nodemailer SMTP or preview fallback
+    const otpRes = await createAndSendOtp(cleanEmail, 'signup');
+
+    return res.json({
+      success: true,
+      requiresOtp: true,
+      email: cleanEmail,
+      message: `Account created! Verification code sent to ${cleanEmail}.`,
+      expiresAt: otpRes.expiresAt,
+      debugOtp: otpRes.debugOtp,
+    });
+  } catch (err: any) {
+    return res.status(400).json({
+      success: false,
+      message: err?.message || 'Failed to create account.',
+    });
+  }
+});
+
+// Step 2 of Signup: Verify Signup OTP & Issue Token
+app.post('/api/auth/verify-signup-otp', (req, res) => {
+  try {
+    const { email, otpCode } = req.body || {};
+    const cleanEmail = String(email || '').trim().toLowerCase();
+
+    const otpResult = verifyOtpCode(cleanEmail, otpCode);
+    if (!otpResult.success) {
+      return res.status(400).json({
+        success: false,
+        message: otpResult.message || 'Invalid or expired OTP',
+      });
+    }
+
+    const user = findUserByEmail(cleanEmail);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User account not found.' });
+    }
+
+    const profile = sanitizeUser(user);
+    const token = generateJwtToken(profile);
+
+    return res.json({
+      success: true,
+      message: 'Account verified successfully!',
+      token,
+      user: profile,
+    });
+  } catch (err: any) {
+    return res.status(400).json({
+      success: false,
+      message: err?.message || 'Verification failed.',
+    });
+  }
+});
+
+// Step 1 of Login: Check Password & Dispatch 6-Digit OTP
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body || {};
+    const cleanEmail = String(email || '').trim().toLowerCase();
+
+    // Validate email + password match stored hash
+    const authResult = authenticateUserCredentials(cleanEmail, password);
+
+    // If valid, dispatch OTP (Do NOT issue token yet)
+    const otpRes = await createAndSendOtp(cleanEmail, 'login');
+
+    return res.json({
+      success: true,
+      requiresOtp: true,
+      email: cleanEmail,
+      message: `Password correct. Verification code sent to ${cleanEmail}.`,
+      expiresAt: otpRes.expiresAt,
+      debugOtp: otpRes.debugOtp,
+    });
+  } catch (err: any) {
+    return res.status(401).json({
+      success: false,
+      message: err?.message || 'Invalid email or password',
+    });
+  }
+});
+
+// Step 2 of Login: Verify OTP & Issue Token
+app.post('/api/auth/verify-login-otp', (req, res) => {
+  try {
+    const { email, otpCode } = req.body || {};
+    const cleanEmail = String(email || '').trim().toLowerCase();
+
+    const otpResult = verifyOtpCode(cleanEmail, otpCode);
+    if (!otpResult.success) {
+      return res.status(400).json({
+        success: false,
+        message: otpResult.message || 'Invalid or expired OTP',
+      });
+    }
+
+    const user = findUserByEmail(cleanEmail);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User account not found.' });
+    }
+
+    const profile = sanitizeUser(user);
+    const token = generateJwtToken(profile);
+
+    return res.json({
+      success: true,
+      message: 'Login successful!',
+      token,
+      user: profile,
+    });
+  } catch (err: any) {
+    return res.status(400).json({
+      success: false,
+      message: err?.message || 'Verification failed.',
+    });
+  }
+});
+
+// Forgot Password Step 1: Request OTP
+app.post('/api/auth/request-reset-otp', async (req, res) => {
+  try {
+    const { email } = req.body || {};
+    const cleanEmail = String(email || '').trim().toLowerCase();
+
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      return res.status(400).json({ success: false, message: 'Please enter a valid registered email address.' });
+    }
+
+    const user = findUserByEmail(cleanEmail);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'No account registered with this email address.',
+      });
+    }
+
+    const otpRes = await createAndSendOtp(cleanEmail, 'forgot_password');
+
+    return res.json({
+      success: true,
+      email: cleanEmail,
+      message: `Password reset verification code sent to ${cleanEmail}.`,
+      expiresAt: otpRes.expiresAt,
+      debugOtp: otpRes.debugOtp,
+    });
+  } catch (err: any) {
+    return res.status(400).json({
+      success: false,
+      message: err?.message || 'Failed to send password reset code.',
+    });
+  }
+});
+
+// Forgot Password Step 2: Verify Reset OTP
+app.post('/api/auth/verify-reset-otp', (req, res) => {
+  try {
+    const { email, otpCode } = req.body || {};
+    const cleanEmail = String(email || '').trim().toLowerCase();
+
+    const otpResult = verifyOtpCode(cleanEmail, otpCode);
+    if (!otpResult.success) {
+      return res.status(400).json({
+        success: false,
+        message: otpResult.message || 'Invalid or expired OTP',
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: 'OTP verified successfully. You may now set a new password.',
+    });
+  } catch (err: any) {
+    return res.status(400).json({
+      success: false,
+      message: err?.message || 'Verification failed.',
+    });
+  }
+});
+
+// Forgot Password Step 3: Set New Password & Update Hash
+app.post('/api/auth/reset-password', (req, res) => {
+  try {
+    const { email, newPassword } = req.body || {};
+    const cleanEmail = String(email || '').trim().toLowerCase();
+
+    const result = updateUserPassword(cleanEmail, newPassword);
+
+    return res.json({
+      success: true,
+      message: 'Password reset successfully! You can now log in with your new password.',
+      user: result.user,
+      token: result.token,
+    });
+  } catch (err: any) {
+    return res.status(400).json({
+      success: false,
+      message: err?.message || 'Failed to reset password.',
+    });
+  }
+});
+
+// Resend OTP Endpoint
+app.post('/api/auth/resend-otp', async (req, res) => {
+  try {
+    const { email, type } = req.body || {};
+    const cleanEmail = String(email || '').trim().toLowerCase();
+    const otpType = (type || 'login') as 'login' | 'signup' | 'forgot_password';
+
+    if (!cleanEmail) {
+      return res.status(400).json({ success: false, message: 'Email address is required.' });
+    }
+
+    const otpRes = await createAndSendOtp(cleanEmail, otpType);
+
+    return res.json({
+      success: true,
+      message: `A new OTP code has been sent to ${cleanEmail}.`,
+      expiresAt: otpRes.expiresAt,
+      debugOtp: otpRes.debugOtp,
+    });
+  } catch (err: any) {
+    return res.status(400).json({
+      success: false,
+      message: err?.message || 'Failed to resend OTP.',
+    });
+  }
+});
+
+app.get('/api/auth/me', requireAuth, (req: AuthenticatedRequest, res) => {
+  return res.json({
+    success: true,
+    user: req.user,
+  });
+});
 
 // Lazy initialize Gemini client
 function getGeminiClient(): GoogleGenAI | null {
@@ -340,6 +605,7 @@ app.post('/api/gemini/parse-order', handleParseOrder);
 
 // 4. Pathao Courier Real Order Creation & Dispatch Relay
 const handlePathaoPickup = async (req: express.Request, res: express.Response) => {
+  const userId = (req as AuthenticatedRequest).userId || 'usr_admin_default';
   const {
     orderId,
     customerName,
@@ -368,7 +634,7 @@ const handlePathaoPickup = async (req: express.Request, res: express.Response) =
   const parsedZoneId = Number(recipientZoneId || zoneId || 1);
 
   try {
-    const result = await createPathaoOrder({
+    const result = await createPathaoOrder(userId, {
       merchantOrderId: String(orderId || `VIS-${Math.floor(100000 + Math.random() * 900000)}`),
       recipientName: clientName,
       recipientPhone: clientPhone,
@@ -384,22 +650,24 @@ const handlePathaoPickup = async (req: express.Request, res: express.Response) =
 
     const trackingId = result.consignment_id || result.merchant_order_id;
 
-    // Update status in inbound website orders array if this was a website order
+    // Update status in user's order array
     if (orderId) {
-      const matchInbound = inboundWebsiteOrders.find((o) => o.id === orderId);
+      const userOrders = getUserOrders(userId);
+      const matchInbound = userOrders.find((o: any) => o.id === orderId);
       if (matchInbound) {
         matchInbound.status = 'Approved';
         matchInbound.pathaoTrackingId = trackingId;
         matchInbound.pathaoConsignmentId = result.consignment_id;
         matchInbound.pathaoStatus = 'Pickup Requested';
+        addOrUpdateUserOrder(userId, matchInbound);
       }
     }
 
-    // Trigger automated WhatsApp notification with Pathao tracking code
+    // Trigger automated WhatsApp notification with user's WhatsApp API credentials
     let whatsappStatus: any = null;
     try {
-      whatsappStatus = await sendTrackingWhatsapp(clientPhone, clientName, trackingId);
-      console.log(`[WhatsApp Tracking Notification]: Result for ${clientPhone}:`, whatsappStatus?.message || whatsappStatus);
+      whatsappStatus = await sendTrackingWhatsapp(userId, clientPhone, clientName, trackingId);
+      console.log(`[WhatsApp Tracking Notification]: Result for user ${userId} / ${clientPhone}:`, whatsappStatus?.message || whatsappStatus);
     } catch (waErr: any) {
       console.warn('[WhatsApp Tracking Notification Error]:', waErr?.message || waErr);
     }
@@ -421,12 +689,12 @@ const handlePathaoPickup = async (req: express.Request, res: express.Response) =
     return res.status(500).json({
       success: false,
       error: err?.message || 'Failed to create real Pathao order',
-      message: `Pathao Order Creation Error: ${err?.message || 'Please check PATHAO_* credentials in environment variables.'}`,
+      message: `Pathao Order Creation Error: ${err?.message || 'Please check Pathao credentials in Connect Channels.'}`,
     });
   }
 };
-app.post('/api/pathao/pickup', handlePathaoPickup);
-app.post('/api/pathao/create-pickup', handlePathaoPickup);
+app.post('/api/pathao/pickup', extractOptionalAuth, handlePathaoPickup);
+app.post('/api/pathao/create-pickup', extractOptionalAuth, handlePathaoPickup);
 
 // In-memory queue for inbound website orders from WooCommerce / Shopify webhooks
 const inboundWebsiteOrders: any[] = [];
@@ -656,27 +924,42 @@ app.all(
   handleWebsiteWebhook
 );
 
-// Endpoint for Frontend PWA to poll inbound website orders
-app.get('/api/orders/inbound', (req, res) => {
+// Endpoint for Frontend PWA to poll inbound website orders for logged-in user
+app.get('/api/orders/inbound', extractOptionalAuth, (req: AuthenticatedRequest, res) => {
+  const userId = req.userId || 'usr_admin_default';
+  const orders = getUserOrders(userId);
   res.json({
     success: true,
-    orders: inboundWebsiteOrders,
+    orders,
+    inboundOrders: orders,
+  });
+});
+
+app.get('/api/orders', extractOptionalAuth, (req: AuthenticatedRequest, res) => {
+  const userId = req.userId || 'usr_admin_default';
+  const orders = getUserOrders(userId);
+  res.json({
+    success: true,
+    orders,
   });
 });
 
 // Endpoint to update order status (Approved, Dispatched, Delivered, Cancelled) on server
-app.post('/api/orders/status', (req, res) => {
+app.post('/api/orders/status', extractOptionalAuth, (req: AuthenticatedRequest, res) => {
+  const userId = req.userId || 'usr_admin_default';
   const { orderId, status, trackingId, consignmentId } = req.body || {};
   if (!orderId || !status) {
     return res.status(400).json({ success: false, error: 'Missing orderId or status' });
   }
 
-  const existingOrder = inboundWebsiteOrders.find((o) => o.id === orderId);
+  const userOrders = getUserOrders(userId);
+  const existingOrder = userOrders.find((o: any) => o.id === orderId);
   if (existingOrder) {
     existingOrder.status = status;
     if (trackingId) existingOrder.pathaoTrackingId = trackingId;
     if (consignmentId) existingOrder.pathaoConsignmentId = consignmentId;
-    console.log(`[Order Status Updated on Server]: #${orderId} -> ${status}`);
+    addOrUpdateUserOrder(userId, existingOrder);
+    console.log(`[Order Status Updated on Server for user ${userId}]: #${orderId} -> ${status}`);
   }
 
   return res.json({
@@ -687,33 +970,61 @@ app.post('/api/orders/status', (req, res) => {
 });
 
 // Endpoint to update full order details (Customer Name, Phone, Address, City, Items, Product, Size, Notes, etc.)
-app.post('/api/orders/update', (req, res) => {
+app.post('/api/orders/update', extractOptionalAuth, (req: AuthenticatedRequest, res) => {
+  const userId = req.userId || 'usr_admin_default';
   const updatedOrder = req.body;
   if (!updatedOrder || !updatedOrder.id) {
     return res.status(400).json({ success: false, error: 'Missing updated order payload or order id' });
   }
 
-  const existingIndex = inboundWebsiteOrders.findIndex((o) => o.id === updatedOrder.id);
-  if (existingIndex >= 0) {
-    inboundWebsiteOrders[existingIndex] = {
-      ...inboundWebsiteOrders[existingIndex],
-      ...updatedOrder,
-    };
-    console.log(`[Order Edited on Server]: #${updatedOrder.id} (${updatedOrder.customerName})`);
-    return res.json({
-      success: true,
-      message: `Order #${updatedOrder.id} updated successfully`,
-      order: inboundWebsiteOrders[existingIndex],
-    });
-  } else {
-    // If it's a mock or locally seeded order, insert or track it
-    inboundWebsiteOrders.unshift(updatedOrder);
-    return res.json({
-      success: true,
-      message: `Order #${updatedOrder.id} registered and updated successfully`,
-      order: updatedOrder,
-    });
+  addOrUpdateUserOrder(userId, updatedOrder);
+  console.log(`[Order Edited on Server for user ${userId}]: #${updatedOrder.id} (${updatedOrder.customerName})`);
+  return res.json({
+    success: true,
+    message: `Order #${updatedOrder.id} updated successfully`,
+    order: updatedOrder,
+  });
+});
+
+// Save all orders for user
+app.post('/api/orders/save-all', requireAuth, (req: AuthenticatedRequest, res) => {
+  const userId = req.userId!;
+  const { orders } = req.body || {};
+  if (Array.isArray(orders)) {
+    saveUserOrders(userId, orders);
   }
+  return res.json({ success: true, message: 'Orders saved successfully' });
+});
+
+// Workspace preferences & state
+app.get('/api/user/workspace', requireAuth, (req: AuthenticatedRequest, res) => {
+  const userId = req.userId!;
+  const workspace = getUserWorkspaceData(userId);
+  return res.json({ success: true, workspace });
+});
+
+app.post('/api/user/workspace', requireAuth, (req: AuthenticatedRequest, res) => {
+  const userId = req.userId!;
+  const payload = req.body || {};
+  saveUserWorkspaceData(userId, payload);
+  return res.json({ success: true, message: 'Workspace data saved successfully' });
+});
+
+// Per-User Language Preference Endpoints
+app.get('/api/settings/language', extractOptionalAuth, (req: AuthenticatedRequest, res) => {
+  const userId = req.userId || 'usr_admin_default';
+  const language = getUserLanguage(userId);
+  return res.json({ success: true, language });
+});
+
+app.post('/api/settings/language', extractOptionalAuth, (req: AuthenticatedRequest, res) => {
+  const userId = req.userId || 'usr_admin_default';
+  const { language } = req.body || {};
+  if (language === 'en' || language === 'bn') {
+    setUserLanguage(userId, language);
+    return res.json({ success: true, message: 'Language preference saved for account', language });
+  }
+  return res.status(400).json({ success: false, message: 'Invalid language code. Must be "en" or "bn".' });
 });
 
 // 6. Inbound Meta / Facebook Messenger & Lead Ads Webhook Handler

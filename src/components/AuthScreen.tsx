@@ -1,63 +1,341 @@
-import React, { useState } from 'react';
-import { ShieldCheck, ShieldAlert, CheckCircle2, UserCheck, Sparkles, ArrowRight, RefreshCw, KeyRound } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import {
+  Lock,
+  Mail,
+  User,
+  ArrowRight,
+  Sparkles,
+  ShieldCheck,
+  AlertCircle,
+  Loader2,
+  CheckCircle2,
+  KeyRound,
+  RotateCcw,
+  ArrowLeft,
+  Key,
+} from 'lucide-react';
 import { AuthUser } from '../types';
 import { useSettings } from '../contexts/SettingsContext';
 
 interface AuthScreenProps {
-  onLoginSuccess: (user: AuthUser) => void;
-  authorizedUsers: AuthUser[];
-  onAddAuthorizedUser?: (email: string, name: string) => void;
+  onLoginSuccess: (user: AuthUser, token: string) => void;
 }
 
-export const AuthScreen: React.FC<AuthScreenProps> = ({
-  onLoginSuccess,
-  authorizedUsers,
-  onAddAuthorizedUser,
-}) => {
+type AuthMode = 'login' | 'signup' | 'forgot_password';
+type AuthStep = 'credentials' | 'otp_verify' | 'request_reset' | 'verify_reset_otp' | 'new_password';
+
+export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
   const { appName, appMonogram, appSubtitle, appTagline, logoImage } = useSettings();
-  const [emailInput, setEmailInput] = useState('japanprep25@gmail.com');
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [deniedAttempt, setDeniedAttempt] = useState<string | null>(null);
-  const [requestedSuccess, setRequestedSuccess] = useState(false);
 
-  const handleGoogleSignIn = (emailToTest: string) => {
-    setIsVerifying(true);
-    setDeniedAttempt(null);
+  const [mode, setMode] = useState<AuthMode>('login');
+  const [step, setStep] = useState<AuthStep>('credentials');
 
-    setTimeout(() => {
-      const clean = emailToTest.trim().toLowerCase();
-      const matched = (authorizedUsers || []).find(
-        (u) => u.email.toLowerCase() === clean && u.status === 'Active'
-      );
+  // Input states
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
 
-      setIsVerifying(false);
+  // OTP metadata
+  const [debugOtp, setDebugOtp] = useState<string | null>(null);
+  const [resendCooldown, setResendCooldown] = useState<number>(0);
 
-      if (matched) {
-        onLoginSuccess(matched);
-      } else {
-        setDeniedAttempt(emailToTest);
+  // Status states
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Cooldown countdown timer for Resend OTP
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => prev - 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
+
+  // Handle Step 1: Login or Signup Password Submission
+  const handleCredentialsSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      setErrorMessage('অনুগ্রহ করে একটি সঠিক ইমেইল অ্যাড্রেস দিন (Valid email required).');
+      return;
+    }
+
+    if (!password || password.length < 4) {
+      setErrorMessage('পাসওয়ার্ড কমপক্ষে ৪ অক্ষরের হতে হবে (Password must be at least 4 chars).');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const endpoint = mode === 'signup' ? '/api/auth/signup' : '/api/auth/login';
+      const payload =
+        mode === 'signup'
+          ? { email: cleanEmail, password, name: name.trim() || undefined }
+          : { email: cleanEmail, password };
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Invalid email or password');
       }
-    }, 450);
+
+      if (data.requiresOtp) {
+        setStep('otp_verify');
+        setOtpCode('');
+        setDebugOtp(data.debugOtp || null);
+        setResendCooldown(60);
+        setSuccessMessage(`আপনার ইমেইলে (${cleanEmail}) ৬-সংখ্যার OTP ভেরিফিকেশন কোড পাঠানো হয়েছে।`);
+      }
+    } catch (err: any) {
+      console.error('Auth Credentials Error:', err);
+      setErrorMessage(err?.message || 'Invalid email or password');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleRequestWhitelist = (e: React.FormEvent) => {
+  // Handle Step 2: Verify Login / Signup OTP
+  const handleOtpVerifySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!deniedAttempt) return;
-    if (onAddAuthorizedUser) {
-      onAddAuthorizedUser(deniedAttempt, deniedAttempt.split('@')[0]);
-      setRequestedSuccess(true);
-      setTimeout(() => {
-        handleGoogleSignIn(deniedAttempt);
-      }, 1000);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    const cleanOtp = otpCode.trim();
+    if (cleanOtp.length !== 6) {
+      setErrorMessage('৬-সংখ্যার OTP কোড সঠিকভাবে বসান (Please enter 6-digit OTP).');
+      return;
     }
+
+    setIsLoading(true);
+
+    try {
+      const endpoint = mode === 'signup' ? '/api/auth/verify-signup-otp' : '/api/auth/verify-login-otp';
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), otpCode: cleanOtp }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Invalid or expired OTP');
+      }
+
+      setSuccessMessage('OTP ভেরিফিকেশন সফল হয়েছে! অ্যাপে প্রবেশ করা হচ্ছে...');
+
+      setTimeout(() => {
+        onLoginSuccess(
+          {
+            email: data.user.email,
+            name: data.user.name,
+            role: data.user.role || 'Admin',
+            status: 'Active',
+          },
+          data.token
+        );
+      }, 500);
+    } catch (err: any) {
+      console.error('OTP Verification Error:', err);
+      setErrorMessage(err?.message || 'Invalid or expired OTP');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle Forgot Password Step 1: Request Reset OTP
+  const handleRequestResetSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      setErrorMessage('সঠিক রেজিস্টারকৃত ইমেইল এড্রেস দিন (Valid email required).');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const res = await fetch('/api/auth/request-reset-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'No account found with this email address');
+      }
+
+      setStep('verify_reset_otp');
+      setOtpCode('');
+      setDebugOtp(data.debugOtp || null);
+      setResendCooldown(60);
+      setSuccessMessage(`পাসওয়ার্ড রিসেট OTP আপনার ইমেইলে (${cleanEmail}) পাঠানো হয়েছে।`);
+    } catch (err: any) {
+      console.error('Request Reset Error:', err);
+      setErrorMessage(err?.message || 'Failed to send password reset code.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle Forgot Password Step 2: Verify Reset OTP
+  const handleVerifyResetOtpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    const cleanOtp = otpCode.trim();
+    if (cleanOtp.length !== 6) {
+      setErrorMessage('৬-সংখ্যার OTP কোড সঠিকভাবে বসান (Please enter 6-digit OTP).');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const res = await fetch('/api/auth/verify-reset-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), otpCode: cleanOtp }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Invalid or expired OTP');
+      }
+
+      setStep('new_password');
+      setNewPassword('');
+      setConfirmPassword('');
+      setSuccessMessage('OTP ভেরিফাইড! এবার আপনার নতুন পাসওয়ার্ড সেট করুন।');
+    } catch (err: any) {
+      console.error('Verify Reset OTP Error:', err);
+      setErrorMessage(err?.message || 'Invalid or expired OTP');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle Forgot Password Step 3: Set New Password
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    if (!newPassword || newPassword.length < 4) {
+      setErrorMessage('পাসওয়ার্ড কমপক্ষে ৪ অক্ষরের হতে হবে (Password must be at least 4 chars).');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setErrorMessage('দুটো পাসওয়ার্ড মিলছে না! (Passwords do not match).');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), newPassword }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Failed to reset password');
+      }
+
+      setSuccessMessage('পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে! নতুন পাসওয়ার্ড দিয়ে লগইন হচ্ছে...');
+
+      setTimeout(() => {
+        onLoginSuccess(
+          {
+            email: data.user.email,
+            name: data.user.name,
+            role: data.user.role || 'Admin',
+            status: 'Active',
+          },
+          data.token
+        );
+      }, 800);
+    } catch (err: any) {
+      console.error('Reset Password Error:', err);
+      setErrorMessage(err?.message || 'Failed to reset password');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle Resend OTP Code
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0) return;
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setIsLoading(true);
+
+    try {
+      const otpType = mode === 'forgot_password' ? 'forgot_password' : mode;
+      const res = await fetch('/api/auth/resend-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), type: otpType }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Failed to resend OTP');
+      }
+
+      setDebugOtp(data.debugOtp || null);
+      setResendCooldown(60);
+      setSuccessMessage('একটি নতুন ৬-সংখ্যার OTP আপনার ইমেইলে পুনরায় পাঠানো হয়েছে।');
+    } catch (err: any) {
+      console.error('Resend OTP Error:', err);
+      setErrorMessage(err?.message || 'Failed to resend OTP');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const resetToMode = (newMode: AuthMode) => {
+    setMode(newMode);
+    setStep(newMode === 'forgot_password' ? 'request_reset' : 'credentials');
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setOtpCode('');
+    setDebugOtp(null);
   };
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center p-4 bg-zinc-950 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(217,119,6,0.15),rgba(255,255,255,0))] text-zinc-100">
       <div className="w-full max-w-md">
         {/* Brand Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-3xl bg-gradient-to-b from-zinc-800 to-zinc-900 border border-amber-500/30 shadow-xl shadow-amber-500/10 mb-4 overflow-hidden">
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-3xl bg-gradient-to-b from-zinc-800 to-zinc-900 border border-amber-500/30 shadow-xl shadow-amber-500/10 mb-3 overflow-hidden">
             {logoImage ? (
               <img src={logoImage} alt="Logo" className="w-full h-full object-cover" />
             ) : (
@@ -66,7 +344,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               </span>
             )}
           </div>
-          <h1 className="font-brand text-2xl tracking-[0.25em] font-bold text-zinc-100 uppercase">
+          <h1 className="font-brand text-2xl tracking-[0.2em] font-bold text-zinc-100 uppercase">
             {appName}
           </h1>
           {appSubtitle && (
@@ -74,201 +352,456 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               {appSubtitle}
             </p>
           )}
-          {appTagline && (
-            <p className="text-xs text-zinc-400 mt-2">
-              {appTagline}
-            </p>
-          )}
+          {appTagline && <p className="text-xs text-zinc-400 mt-1.5">{appTagline}</p>}
         </div>
 
-        {/* Access Rejected View */}
-        {deniedAttempt ? (
-          <div className="glass-panel rounded-3xl p-6 md:p-8 shadow-2xl border border-red-500/30 text-center animate-in fade-in zoom-in-95 duration-200">
-            <div className="w-14 h-14 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 flex items-center justify-center mx-auto mb-4">
-              <ShieldAlert className="w-7 h-7" />
+        {/* Main Auth Box */}
+        <div className="glass-panel rounded-3xl p-6 md:p-8 shadow-2xl border border-zinc-800/80 bg-zinc-900/90 backdrop-blur-xl relative overflow-hidden">
+          {/* Header Bar */}
+          <div className="flex items-center justify-between pb-4 mb-5 border-b border-zinc-800/80">
+            <div>
+              <h2 className="text-base font-bold text-white flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-amber-400" />
+                <span>
+                  {mode === 'forgot_password'
+                    ? 'পাসওয়ার্ড রিসেট (Forgot Password)'
+                    : mode === 'login'
+                    ? step === 'otp_verify'
+                      ? '২-স্টেপ OTP ভেরিফিকেশন (2FA Login)'
+                      : 'সাইন ইন করুন (Log In)'
+                    : step === 'otp_verify'
+                    ? 'ইমেইল OTP ভেরিফিকেশন'
+                    : 'নতুন সাইন আপ (Sign Up)'}
+                </span>
+              </h2>
+              <p className="text-[11px] text-zinc-400 mt-0.5">
+                {step === 'otp_verify' || step === 'verify_reset_otp'
+                  ? `আপনার ইমেইল ${email} এ পাঠানো ৬-সংখ্যার কোডটি লিখুন`
+                  : step === 'new_password'
+                  ? 'আপনার অ্যাকাউন্টের জন্য নতুন নিরাপদ পাসওয়ার্ড দিন'
+                  : mode === 'forgot_password'
+                  ? 'আপনার রেজিস্টারকৃত ইমেইল এড্রেস প্রদান করুন'
+                  : mode === 'login'
+                  ? 'ইমেইল ও পাসওয়ার্ড দিয়ে প্রবেশের প্রথম ধাপ সম্পন্ন করুন'
+                  : 'নতুন একাউন্ট খুলতে তথ্য প্রদান করুন'}
+              </p>
             </div>
 
-            <h2 className="text-lg font-bold text-white mb-2">
-              Gmail Not Whitelisted
-            </h2>
-            <p className="text-xs text-zinc-400 mb-4 leading-relaxed">
-              Google Account <strong className="text-red-300 font-mono">{deniedAttempt}</strong> is not present in {appName}'s <span className="text-zinc-200 underline decoration-amber-500/50">Authorized_Users</span> Google Sheets table.
-            </p>
-
-            {requestedSuccess ? (
-              <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs flex items-center justify-center gap-2 mb-4">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                <span>Whitelisted! Redirecting to dashboard...</span>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <p className="text-[11px] text-zinc-500">
-                  Only authorized {appName} team members, showroom staff, and fulfillment officers can access warehouse operations.
-                </p>
-
-                <button
-                  id="request-access-button"
-                  onClick={handleRequestWhitelist}
-                  className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-semibold text-xs shadow-md transition-all flex items-center justify-center gap-2"
-                >
-                  <Sparkles className="w-4 h-4" />
-                  <span>One-Click Whitelist & Grant Access</span>
-                </button>
-
-                <button
-                  onClick={() => setDeniedAttempt(null)}
-                  className="w-full py-2 text-xs text-zinc-400 hover:text-zinc-200 transition"
-                >
-                  Try a different Gmail
-                </button>
-              </div>
+            {/* Back Button if in OTP or Reset Mode */}
+            {(step !== 'credentials' || mode === 'forgot_password') && (
+              <button
+                type="button"
+                onClick={() => resetToMode('login')}
+                className="p-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition text-xs flex items-center gap-1 cursor-pointer shrink-0"
+                title="Back to Login"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Back</span>
+              </button>
             )}
           </div>
-        ) : (
-          /* Sign-In Card */
-          <div className="glass-panel rounded-3xl p-6 md:p-8 shadow-2xl border border-white/10">
-            <div className="flex items-center justify-between mb-6 pb-4 border-b border-zinc-800/80">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-amber-400" />
-                <span className="text-xs font-semibold tracking-wide text-zinc-300 uppercase">
-                  Staff Authentication
-                </span>
-              </div>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Live Whitelist Guard
-              </span>
+
+          {/* Error Banner */}
+          {errorMessage && (
+            <div className="p-3.5 mb-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-center gap-2.5 animate-in fade-in duration-150">
+              <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+              <span className="font-medium">{errorMessage}</span>
             </div>
+          )}
 
-            <div className="space-y-4">
-              {/* Primary Google Sign In Button */}
-              <button
-                id="sign-in-with-google"
-                onClick={() => handleGoogleSignIn(emailInput)}
-                disabled={isVerifying}
-                className="w-full relative flex items-center justify-center gap-3 py-3 px-4 rounded-2xl bg-white text-zinc-900 font-semibold text-sm hover:bg-zinc-100 active:scale-[0.98] transition-all shadow-md group disabled:opacity-60"
-              >
-                {isVerifying ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin text-zinc-900" />
-                    <span>Verifying with Authorized_Users sheet...</span>
-                  </>
-                ) : (
-                  <>
-                    {/* Google SVG */}
-                    <svg className="w-4 h-4" viewBox="0 0 24 24">
-                      <path
-                        fill="#4285F4"
-                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                      />
-                      <path
-                        fill="#34A853"
-                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                      />
-                      <path
-                        fill="#FBBC05"
-                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                      />
-                      <path
-                        fill="#EA4335"
-                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                      />
-                    </svg>
-                    <span>Sign in with Google</span>
-                    <ArrowRight className="w-4 h-4 ml-auto text-zinc-400 group-hover:translate-x-0.5 transition-transform" />
-                  </>
-                )}
-              </button>
+          {/* Success Banner */}
+          {successMessage && (
+            <div className="p-3.5 mb-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2.5 animate-in fade-in duration-150">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span className="font-medium">{successMessage}</span>
+            </div>
+          )}
 
-              {/* Email Input for custom email testing */}
-              <div className="pt-2">
-                <label className="block text-[11px] font-medium text-zinc-400 mb-1.5 flex items-center justify-between">
-                  <span>Google Account / Gmail</span>
-                  <span className="text-[10px] text-amber-400">Sheet Whitelist Protected</span>
+          {/* Fallback OTP Banner for Instant Testing in Preview Mode */}
+          {debugOtp && (step === 'otp_verify' || step === 'verify_reset_otp') && (
+            <div className="p-3 mb-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs space-y-1">
+              <div className="flex items-center gap-2 font-bold">
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <span>AI Studio Preview Demo Code:</span>
+              </div>
+              <p className="text-[11px] text-zinc-300">
+                GMAIL credentials not detected in .env. Your OTP verification code is:{' '}
+                <strong className="font-mono text-amber-400 bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/40 text-sm">
+                  {debugOtp}
+                </strong>
+              </p>
+            </div>
+          )}
+
+          {/* FORM TYPE 1: EMAIL + PASSWORD (STEP 1 LOGIN & SIGNUP) */}
+          {step === 'credentials' && (
+            <form onSubmit={handleCredentialsSubmit} className="space-y-4">
+              {/* Full Name field (Only on Sign Up) */}
+              {mode === 'signup' && (
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                    আপনার নাম (Full Name)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      required
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="e.g. Asif Mahmud"
+                      className="w-full rounded-2xl bg-zinc-950/80 border border-zinc-700/80 pl-10 pr-4 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500/80 transition"
+                    />
+                    <User className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3" />
+                  </div>
+                </div>
+              )}
+
+              {/* Email Field */}
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                  ইমেইল অ্যাড্রেস (Email Address)
                 </label>
                 <div className="relative">
                   <input
                     type="email"
-                    value={emailInput}
-                    onChange={(e) => setEmailInput(e.target.value)}
-                    placeholder="name@gmail.com"
-                    className="w-full rounded-xl bg-zinc-900/90 border border-zinc-700/70 px-3.5 py-2.5 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-500/80 transition"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="name@company.com"
+                    className="w-full rounded-2xl bg-zinc-950/80 border border-zinc-700/80 pl-10 pr-4 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500/80 transition font-mono"
                   />
-                  <KeyRound className="w-3.5 h-3.5 text-zinc-500 absolute right-3.5 top-3" />
+                  <Mail className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3" />
                 </div>
               </div>
 
-              {/* Fast Demo Accounts */}
-              <div className="pt-3 border-t border-zinc-800/80">
-                <p className="text-[11px] font-medium text-zinc-400 mb-2">
-                  One-Click Whitelisted Demo Personas:
-                </p>
-                <div className="grid grid-cols-1 gap-2">
-                  {authorizedUsers.map((user) => (
+              {/* Password Field */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-zinc-300">
+                    পাসওয়ার্ড (Password)
+                  </label>
+                  {mode === 'login' && (
                     <button
-                      key={user.email}
                       type="button"
-                      onClick={() => {
-                        setEmailInput(user.email);
-                        handleGoogleSignIn(user.email);
-                      }}
-                      className="flex items-center justify-between p-2 rounded-xl bg-zinc-900/60 hover:bg-zinc-800/80 border border-zinc-800 hover:border-amber-500/30 text-left transition group"
+                      onClick={() => resetToMode('forgot_password')}
+                      className="text-[11px] text-amber-400 hover:underline font-medium cursor-pointer"
                     >
-                      <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-lg bg-zinc-800 flex items-center justify-center text-xs font-semibold text-amber-400">
-                          {user.name.charAt(0)}
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium text-zinc-200 group-hover:text-amber-300 transition">
-                            {user.name}
-                          </p>
-                          <p className="text-[10px] font-mono text-zinc-400">{user.email}</p>
-                        </div>
-                      </div>
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700">
-                        {user.role}
-                      </span>
+                      Forgot password? (পাসওয়ার্ড ভুলে গেছেন?)
                     </button>
-                  ))}
+                  )}
+                </div>
+                <div className="relative">
+                  <input
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full rounded-2xl bg-zinc-950/80 border border-zinc-700/80 pl-10 pr-4 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500/80 transition font-mono"
+                  />
+                  <Lock className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3" />
+                </div>
+              </div>
 
-                  {/* Test Unauthorized Button */}
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 active:scale-[0.98] text-zinc-950 font-bold text-xs tracking-wide shadow-lg shadow-amber-500/15 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-zinc-950" />
+                    <span>যাচাই করা হচ্ছে...</span>
+                  </>
+                ) : (
+                  <>
+                    <KeyRound className="w-4 h-4" />
+                    <span>
+                      {mode === 'signup'
+                        ? 'Continue to Email Verification'
+                        : 'Verify Password & Send OTP'}
+                    </span>
+                    <ArrowRight className="w-4 h-4 ml-auto" />
+                  </>
+                )}
+              </button>
+            </form>
+          )}
+
+          {/* FORM TYPE 2: 2FA OTP CODE ENTRY (STEP 2 LOGIN & SIGNUP) */}
+          {step === 'otp_verify' && (
+            <form onSubmit={handleOtpVerifySubmit} className="space-y-5">
+              <div className="text-center p-3 rounded-2xl bg-zinc-950/70 border border-zinc-800">
+                <p className="text-xs text-zinc-300">
+                  ইমেইল: <strong className="text-amber-300 font-mono">{email}</strong>
+                </p>
+                <p className="text-[11px] text-zinc-400 mt-0.5">
+                  ইমেইলটি চেক করে ৬-সংখ্যার OTP কোডটি নিচে টাইপ করুন।
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-2 text-center">
+                  ৬-সংখ্যার OTP কোড (Enter 6-Digit OTP)
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    maxLength={6}
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                    placeholder="123456"
+                    className="w-full rounded-2xl bg-zinc-950 border border-amber-500/50 py-3 text-center text-2xl font-bold tracking-[0.4em] font-mono text-amber-400 placeholder-zinc-700 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading || otpCode.length !== 6}
+                className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 active:scale-[0.98] text-zinc-950 font-bold text-xs tracking-wide shadow-lg shadow-amber-500/15 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-zinc-950" />
+                    <span>OTP ভেরিফাই হচ্ছে...</span>
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>Verify OTP & Access App</span>
+                    <ArrowRight className="w-4 h-4 ml-auto" />
+                  </>
+                )}
+              </button>
+
+              {/* Resend OTP Action */}
+              <div className="text-center pt-2">
+                <button
+                  type="button"
+                  onClick={handleResendOtp}
+                  disabled={resendCooldown > 0 || isLoading}
+                  className="text-xs text-amber-400 hover:underline font-semibold disabled:text-zinc-600 flex items-center justify-center gap-1.5 mx-auto cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  {resendCooldown > 0
+                    ? `Resend OTP in ${resendCooldown}s`
+                    : 'Resend OTP (পুনরায় কোড পাঠান)'}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* FORM TYPE 3: FORGOT PASSWORD STEP 1 (REQUEST RESET OTP) */}
+          {mode === 'forgot_password' && step === 'request_reset' && (
+            <form onSubmit={handleRequestResetSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                  রেজিস্টারকৃত ইমেইল এড্রেস (Registered Email Address)
+                </label>
+                <div className="relative">
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="name@company.com"
+                    className="w-full rounded-2xl bg-zinc-950/80 border border-zinc-700/80 pl-10 pr-4 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500/80 transition font-mono"
+                  />
+                  <Mail className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3" />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 active:scale-[0.98] text-zinc-950 font-bold text-xs tracking-wide shadow-lg shadow-amber-500/15 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-zinc-950" />
+                    <span>OTP পাঠানো হচ্ছে...</span>
+                  </>
+                ) : (
+                  <>
+                    <Key className="w-4 h-4" />
+                    <span>Send Reset OTP Code</span>
+                    <ArrowRight className="w-4 h-4 ml-auto" />
+                  </>
+                )}
+              </button>
+            </form>
+          )}
+
+          {/* FORM TYPE 4: FORGOT PASSWORD STEP 2 (VERIFY RESET OTP) */}
+          {mode === 'forgot_password' && step === 'verify_reset_otp' && (
+            <form onSubmit={handleVerifyResetOtpSubmit} className="space-y-5">
+              <div className="text-center p-3 rounded-2xl bg-zinc-950/70 border border-zinc-800">
+                <p className="text-xs text-zinc-300">
+                  ইমেইল: <strong className="text-amber-300 font-mono">{email}</strong>
+                </p>
+                <p className="text-[11px] text-zinc-400 mt-0.5">
+                  পাসওয়ার্ড রিসেট করতে ইমেইলে পাঠানো ৬-সংখ্যার OTP কোডটি লিখুন।
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-2 text-center">
+                  ৬-সংখ্যার Reset OTP (Enter 6-Digit OTP)
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    maxLength={6}
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                    placeholder="123456"
+                    className="w-full rounded-2xl bg-zinc-950 border border-amber-500/50 py-3 text-center text-2xl font-bold tracking-[0.4em] font-mono text-amber-400 placeholder-zinc-700 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading || otpCode.length !== 6}
+                className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 active:scale-[0.98] text-zinc-950 font-bold text-xs tracking-wide shadow-lg shadow-amber-500/15 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-zinc-950" />
+                    <span>যাচাই করা হচ্ছে...</span>
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>Verify Code & Proceed</span>
+                    <ArrowRight className="w-4 h-4 ml-auto" />
+                  </>
+                )}
+              </button>
+
+              <div className="text-center pt-2">
+                <button
+                  type="button"
+                  onClick={handleResendOtp}
+                  disabled={resendCooldown > 0 || isLoading}
+                  className="text-xs text-amber-400 hover:underline font-semibold disabled:text-zinc-600 flex items-center justify-center gap-1.5 mx-auto cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  {resendCooldown > 0
+                    ? `Resend OTP in ${resendCooldown}s`
+                    : 'Resend Reset OTP'}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* FORM TYPE 5: FORGOT PASSWORD STEP 3 (NEW PASSWORD FORM) */}
+          {mode === 'forgot_password' && step === 'new_password' && (
+            <form onSubmit={handleResetPasswordSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                  নতুন পাসওয়ার্ড (New Password)
+                </label>
+                <div className="relative">
+                  <input
+                    type="password"
+                    required
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full rounded-2xl bg-zinc-950/80 border border-zinc-700/80 pl-10 pr-4 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500/80 transition font-mono"
+                  />
+                  <Lock className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                  পাসওয়ার্ড নিশ্চিত করুন (Confirm New Password)
+                </label>
+                <div className="relative">
+                  <input
+                    type="password"
+                    required
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full rounded-2xl bg-zinc-950/80 border border-zinc-700/80 pl-10 pr-4 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500/80 transition font-mono"
+                  />
+                  <Lock className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3" />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 active:scale-[0.98] text-zinc-950 font-bold text-xs tracking-wide shadow-lg shadow-amber-500/15 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-zinc-950" />
+                    <span>পাসওয়ার্ড সেভ হচ্ছে...</span>
+                  </>
+                ) : (
+                  <>
+                    <KeyRound className="w-4 h-4" />
+                    <span>Save New Password & Log In</span>
+                    <ArrowRight className="w-4 h-4 ml-auto" />
+                  </>
+                )}
+              </button>
+            </form>
+          )}
+
+          {/* Footer Navigation Link */}
+          {step === 'credentials' && mode !== 'forgot_password' && (
+            <div className="mt-6 pt-4 border-t border-zinc-800/80 text-center">
+              {mode === 'login' ? (
+                <p className="text-xs text-zinc-400">
+                  New here? (নতুন ইউজার?){' '}
                   <button
                     type="button"
-                    onClick={() => {
-                      const unauthorized = 'unauthorized_guest@gmail.com';
-                      setEmailInput(unauthorized);
-                      handleGoogleSignIn(unauthorized);
-                    }}
-                    className="flex items-center justify-between p-2 rounded-xl bg-red-950/20 hover:bg-red-950/40 border border-red-900/30 text-left transition group"
+                    onClick={() => resetToMode('signup')}
+                    className="text-amber-400 font-semibold hover:underline cursor-pointer ml-1"
                   >
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-lg bg-red-900/30 flex items-center justify-center text-xs font-semibold text-red-400">
-                        ?
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium text-red-300">
-                          Test Unauthorized User
-                        </p>
-                        <p className="text-[10px] font-mono text-zinc-500">
-                          unauthorized_guest@gmail.com
-                        </p>
-                      </div>
-                    </div>
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-red-900/30 text-red-300 border border-red-800/40">
-                      Test Reject
-                    </span>
+                    Sign up for a new account
                   </button>
-                </div>
-              </div>
+                </p>
+              ) : (
+                <p className="text-xs text-zinc-400">
+                  Already have an account? (আগে থেকেই অ্যাকাউন্ট আছে?){' '}
+                  <button
+                    type="button"
+                    onClick={() => resetToMode('login')}
+                    className="text-amber-400 font-semibold hover:underline cursor-pointer ml-1"
+                  >
+                    Log in
+                  </button>
+                </p>
+              )}
             </div>
+          )}
+        </div>
+
+        {/* Demo Admin Card Footer */}
+        <div className="mt-5 p-3.5 rounded-2xl bg-zinc-900/60 border border-zinc-800 text-center space-y-1.5">
+          <p className="text-[11px] text-zinc-400 font-medium">
+            💡 Demo Admin Account (2FA Enabled):
+          </p>
+          <div className="flex items-center justify-center gap-2 text-[10px] font-mono text-amber-300 bg-zinc-950/80 py-1.5 px-3 rounded-xl border border-zinc-800 inline-flex">
+            <span>japanprep25@gmail.com</span>
+            <span className="text-zinc-600">|</span>
+            <span>Password: password123</span>
           </div>
-        )}
+        </div>
 
         {/* Footer info */}
-        <div className="mt-6 text-center text-[11px] text-zinc-500 flex items-center justify-center gap-2">
-          <span>Protected by Google Apps Script & Firebase Identity</span>
-          <span>•</span>
-          <span>{appName} v2.4</span>
+        <div className="mt-4 text-center text-[11px] text-zinc-500">
+          Secured with Bcrypt, Nodemailer 2FA OTP & JWT Auth Token • {appName} ERP v2.5
         </div>
       </div>
     </div>

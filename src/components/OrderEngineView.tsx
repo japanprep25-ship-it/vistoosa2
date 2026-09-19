@@ -21,6 +21,7 @@ import {
   Package,
 } from 'lucide-react';
 import { Order, OrderStatus, OrderChannel, Product } from '../types';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface OrderEngineViewProps {
   orders: Order[];
@@ -41,6 +42,7 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
   onCreateOrder,
   onUpdateOrder,
 }) => {
+  const { t } = useLanguage();
   const [selectedStatus, setSelectedStatus] = useState<OrderStatus | 'All'>('All');
   const [selectedChannel, setSelectedChannel] = useState<OrderChannel | 'All'>('All');
   const [searchQuery, setSearchQuery] = useState('');
@@ -279,14 +281,14 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-xl font-bold text-white tracking-tight">
-              Multi-Channel Order Engine
+              {t('orders.title')}
             </h2>
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 font-mono">
               Auto Pathao Webhook
             </span>
           </div>
           <p className="text-xs text-zinc-400 mt-0.5">
-            Website, Social & Showroom Orders stream here into centralized queue
+            {t('orders.subtitle')}
           </p>
         </div>
 
@@ -309,7 +311,7 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search customer, phone, order #, PTH tracking..."
+            placeholder={t('orders.searchPlaceholder')}
             className="w-full pl-9 pr-4 py-2 rounded-xl bg-zinc-900/90 border border-zinc-800 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-500/80"
           />
         </div>
@@ -317,19 +319,28 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
         {/* Status Pills */}
         <div className="flex items-center gap-1 overflow-x-auto w-full pb-1 md:pb-0 scrollbar-none">
           {(['All', 'Pending', 'Approved', 'Dispatched', 'Delivered', 'Cancelled'] as const).map(
-            (st) => (
-              <button
-                key={st}
-                onClick={() => setSelectedStatus(st)}
-                className={`text-xs px-3 py-1.5 rounded-xl font-medium whitespace-nowrap transition ${
-                  selectedStatus === st
-                    ? 'bg-amber-500 text-zinc-950 font-bold shadow-sm shadow-amber-500/20'
-                    : 'bg-zinc-900/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
-                }`}
-              >
-                {st}
-              </button>
-            )
+            (st) => {
+              let label = st;
+              if (st === 'Pending') label = t('orders.pendingTab') as any;
+              else if (st === 'Approved') label = t('orders.approvedTab') as any;
+              else if (st === 'Dispatched') label = t('orders.dispatchedTab') as any;
+              else if (st === 'Delivered') label = t('orders.deliveredTab') as any;
+              else if (st === 'Cancelled') label = t('orders.cancelledTab') as any;
+
+              return (
+                <button
+                  key={st}
+                  onClick={() => setSelectedStatus(st)}
+                  className={`text-xs px-3 py-1.5 rounded-xl font-medium whitespace-nowrap transition ${
+                    selectedStatus === st
+                      ? 'bg-amber-500 text-zinc-950 font-bold shadow-sm shadow-amber-500/20'
+                      : 'bg-zinc-900/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            }
           )}
         </div>
 

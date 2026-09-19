@@ -40,7 +40,11 @@ import { useSettings } from './contexts/SettingsContext';
 
 export default function App() {
   // Authentication state
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(INITIAL_AUTHORIZED_USERS[0]);
+  const [authToken, setAuthToken] = useState<string | null>(() => {
+    return localStorage.getItem('vistoosa_auth_token') || null;
+  });
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [isVerifyingAuth, setIsVerifyingAuth] = useState<boolean>(true);
   const [authorizedUsers, setAuthorizedUsers] = useState<AuthUser[]>(INITIAL_AUTHORIZED_USERS);
 
   // Application Data State
@@ -54,6 +58,51 @@ export default function App() {
     return INITIAL_ORDERS;
   });
 
+  // Check stored auth token on mount
+  React.useEffect(() => {
+    const verifySession = async () => {
+      const token = localStorage.getItem('vistoosa_auth_token');
+      if (!token) {
+        setCurrentUser(null);
+        setIsVerifyingAuth(false);
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/auth/me', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (res.ok && data.success && data.user) {
+          setCurrentUser(data.user);
+          setAuthToken(token);
+        } else {
+          localStorage.removeItem('vistoosa_auth_token');
+          setAuthToken(null);
+          setCurrentUser(null);
+        }
+      } catch (err) {
+        console.warn('Auth verification fallback:', err);
+      } finally {
+        setIsVerifyingAuth(false);
+      }
+    };
+
+    verifySession();
+  }, []);
+
+  const handleLoginSuccess = (user: AuthUser, token: string) => {
+    localStorage.setItem('vistoosa_auth_token', token);
+    setAuthToken(token);
+    setCurrentUser(user);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('vistoosa_auth_token');
+    setAuthToken(null);
+    setCurrentUser(null);
+  };
+
   // Save orders to localStorage on changes
   React.useEffect(() => {
     try {
@@ -62,6 +111,7 @@ export default function App() {
       console.warn('Could not save orders to localStorage', e);
     }
   }, [orders]);
+
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
   const [knowledgeBase, setKnowledgeBase] = useState<KnowledgeItem[]>(INITIAL_KNOWLEDGE_BASE);
   const [payouts, setPayouts] = useState<PathaoPayoutRecord[]>(INITIAL_PATHAO_PAYOUTS);
@@ -96,9 +146,14 @@ export default function App() {
 
   // Periodically poll for live inbound website orders received via WooCommerce / Shopify webhooks
   React.useEffect(() => {
+    if (!currentUser) return;
+
     const fetchInboundOrders = async () => {
       try {
-        const res = await fetch('/api/orders/inbound');
+        const headers: Record<string, string> = {};
+        if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+        const res = await fetch('/api/orders/inbound', { headers });
         if (!res.ok) return;
         const data = await res.json();
         if (data.success && Array.isArray(data.orders) && data.orders.length > 0) {
@@ -141,7 +196,7 @@ export default function App() {
     fetchInboundOrders();
     const interval = setInterval(fetchInboundOrders, 3000);
     return () => clearInterval(interval);
-  }, []);
+  }, [currentUser, authToken]);
 
   // Quick stats
   const pendingOrdersCount = orders.filter((o) => o.status === 'Pending').length;
@@ -453,15 +508,23 @@ export default function App() {
     setAuthorizedUsers((prev) => [...prev, newUser]);
   };
 
-  // If not logged in, render Google Sign-In & Whitelist screen
-  if (!currentUser) {
+  // Loading splash while checking JWT session
+  if (isVerifyingAuth) {
     return (
-      <AuthScreen
-        onLoginSuccess={(user) => setCurrentUser(user)}
-        authorizedUsers={authorizedUsers}
-        onAddAuthorizedUser={handleAddAuthorizedUser}
-      />
+      <div className="min-h-screen w-full flex items-center justify-center bg-zinc-950 text-amber-400">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+          <span className="text-xs font-mono tracking-widest text-zinc-400 uppercase">
+            Verifying Workspace Credentials...
+          </span>
+        </div>
+      </div>
     );
+  }
+
+  // If not logged in, render Email/Password Sign-In & Sign-Up screen
+  if (!currentUser) {
+    return <AuthScreen onLoginSuccess={handleLoginSuccess} />;
   }
 
   return (
@@ -473,7 +536,7 @@ export default function App() {
       {/* Top App Bar */}
       <Navbar
         user={currentUser}
-        onLogout={() => setCurrentUser(null)}
+        onLogout={handleLogout}
         onOpenGasModal={() => setIsGasModalOpen(true)}
         onOpenAiDrawer={() => setActiveTab('ai')}
         pendingOrdersCount={pendingOrdersCount}

@@ -11,7 +11,10 @@ interface LanguageContextType {
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
 export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [language, setLanguageState] = useState<LanguageCode>('en');
+  const [language, setLanguageState] = useState<LanguageCode>(() => {
+    const saved = localStorage.getItem('vistoosa_language');
+    return saved === 'bn' || saved === 'en' ? saved : 'en';
+  });
 
   // Load language preference from backend on initial mount or session restore
   useEffect(() => {
@@ -27,6 +30,7 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
         const data = await res.json();
         if (data.success && (data.language === 'en' || data.language === 'bn')) {
           setLanguageState(data.language);
+          localStorage.setItem('vistoosa_language', data.language);
         }
       } catch (err) {
         console.warn('Could not fetch user language preference:', err);
@@ -38,6 +42,7 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
 
   const setLanguage = async (newLang: LanguageCode) => {
     setLanguageState(newLang);
+    localStorage.setItem('vistoosa_language', newLang);
 
     // Save per-user preference on server
     const token = localStorage.getItem('vistoosa_auth_token');

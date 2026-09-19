@@ -2,7 +2,8 @@ import express from 'express';
 import path from 'path';
 import { GoogleGenAI } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
-import { createPathaoOrder } from './pathaoOrderService';
+import { createPathaoOrder, getPathaoCities, getPathaoZones } from './pathaoOrderService';
+import { detectDistrict } from './src/utils/districtDetector';
 import { mountPathaoConfigRoutes } from './pathaoConfigStore';
 import { mountWhatsappRoutes, sendTrackingWhatsapp } from './whatsappService';
 import { mountIntegrationsConfigRoutes } from './integrationsConfigStore';
@@ -614,6 +615,28 @@ const handlePathaoPickup = async (req: express.Request, res: express.Response) =
 app.post('/api/pathao/pickup', extractOptionalAuth, handlePathaoPickup);
 app.post('/api/pathao/create-pickup', extractOptionalAuth, handlePathaoPickup);
 
+// Pathao Cities & Zones endpoints for auto-mapping
+app.get('/api/pathao/cities', extractOptionalAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const userId = req.userId || 'usr_admin_default';
+    const cities = await getPathaoCities(userId);
+    return res.json({ success: true, cities });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err?.message || 'Failed to fetch Pathao cities' });
+  }
+});
+
+app.get('/api/pathao/zones', extractOptionalAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const userId = req.userId || 'usr_admin_default';
+    const cityId = Number(req.query.cityId || 0);
+    const zones = await getPathaoZones(userId, cityId);
+    return res.json({ success: true, zones });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err?.message || 'Failed to fetch Pathao zones' });
+  }
+});
+
 // In-memory queue for inbound website orders from WooCommerce / Shopify webhooks
 const inboundWebsiteOrders: any[] = [];
 
@@ -731,12 +754,19 @@ function parseWooCommerceOrderToVistoosa(payload: any): any {
     ];
   }
 
+  // Auto-detect District and Pathao City ID
+  const districtDetection = detectDistrict(fullAddress, cityName);
+  const detectedDistrict = districtDetection.district || undefined;
+  const detectedPathaoCityId = districtDetection.pathaoCityId || undefined;
+
   return {
     id: orderId,
     customerName,
     phone,
     address: fullAddress,
     city: cityZone,
+    district: detectedDistrict,
+    pathaoCityId: detectedPathaoCityId,
     channel: 'Website',
     items,
     totalAmount: totalAmount || (items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0) + shippingTotal),

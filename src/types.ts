@@ -31,6 +31,8 @@ export interface Order {
   phone: string;
   address: string;
   city: 'Inside Dhaka' | 'Sub-Dhaka' | 'Outside Dhaka';
+  district?: string; // 64 Bangladesh Districts (e.g., 'Dhaka', 'Chattogram', 'Cumilla')
+  pathaoCityId?: number; // Pre-mapped Pathao City ID
   channel: OrderChannel;
   source?: 'website' | 'messenger' | 'instagram' | 'whatsapp' | 'manual';
   senderId?: string;

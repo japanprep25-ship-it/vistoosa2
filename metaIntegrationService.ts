@@ -11,6 +11,7 @@ import path from 'path';
 import crypto from 'crypto';
 import type { Express, Request, Response } from 'express';
 import { GoogleGenAI } from '@google/genai';
+import { detectDistrict } from './src/utils/districtDetector';
 
 const CONFIG_PATH = path.join(process.cwd(), 'meta-config.json');
 
@@ -612,12 +613,16 @@ export function mountMetaIntegrationRoutes(app: Express) {
       const unitPrice = parsed.product_name?.includes('Panjabi') ? 2850 : parsed.product_name?.includes('Blazer') ? 6500 : 1650;
       const totalAmount = unitPrice * (parsed.quantity || 1) + deliveryFee;
 
+      const distInfo = detectDistrict(parsed.address, parsed.city);
+
       createdOrder = {
         id: `VIS-META-${Math.floor(1000 + Math.random() * 9000)}`,
         customerName: parsed.customer_name || buffer.senderName || 'Valued Customer',
         phone: parsed.phone_number,
         address: parsed.address,
         city: parsed.city,
+        district: distInfo.district || undefined,
+        pathaoCityId: distInfo.pathaoCityId || undefined,
         channel: cleanChannel === 'whatsapp' ? 'WhatsApp' : cleanChannel === 'instagram' ? 'Instagram' : 'Facebook',
         source: cleanChannel,
         senderId: cleanSenderId,
@@ -800,12 +805,16 @@ async function processIncomingMetaPayload(payload: any) {
           const unitPrice = parsed.product_name?.includes('Panjabi') ? 2850 : parsed.product_name?.includes('Blazer') ? 6500 : 1650;
           const totalAmount = unitPrice * (parsed.quantity || 1) + deliveryFee;
 
+          const distInfo = detectDistrict(parsed.address, parsed.city);
+
           const newOrder = {
             id: `VIS-META-${Math.floor(1000 + Math.random() * 9000)}`,
             customerName: parsed.customer_name || 'Valued Customer',
             phone: parsed.phone_number,
             address: parsed.address,
             city: parsed.city,
+            district: distInfo.district || undefined,
+            pathaoCityId: distInfo.pathaoCityId || undefined,
             channel: channel === 'instagram' ? 'Instagram' : 'Facebook',
             source: channel,
             senderId,
@@ -898,12 +907,16 @@ async function processIncomingMetaPayload(payload: any) {
             const unitPrice = parsed.product_name?.includes('Panjabi') ? 2850 : parsed.product_name?.includes('Blazer') ? 6500 : 1650;
             const totalAmount = unitPrice * (parsed.quantity || 1) + deliveryFee;
 
+            const distInfo = detectDistrict(parsed.address, parsed.city);
+
             const newOrder = {
               id: `VIS-WA-${Math.floor(1000 + Math.random() * 9000)}`,
               customerName: parsed.customer_name || senderName || 'Valued Customer',
               phone: parsed.phone_number || senderId,
               address: parsed.address,
               city: parsed.city,
+              district: distInfo.district || undefined,
+              pathaoCityId: distInfo.pathaoCityId || undefined,
               channel: 'WhatsApp',
               source: 'whatsapp',
               senderId,

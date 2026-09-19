@@ -19,9 +19,11 @@ import {
   Image as ImageIcon,
   Edit2,
   Package,
+  MapPin,
 } from 'lucide-react';
 import { Order, OrderStatus, OrderChannel, Product } from '../types';
 import { useLanguage } from '../contexts/LanguageContext';
+import { ALL_DISTRICT_NAMES, detectDistrict } from '../utils/districtDetector';
 
 interface OrderEngineViewProps {
   orders: Order[];
@@ -56,6 +58,8 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
     phone: '',
     address: '',
     city: 'Inside Dhaka' as 'Inside Dhaka' | 'Sub-Dhaka' | 'Outside Dhaka',
+    district: '',
+    pathaoCityId: undefined as number | undefined,
     channel: 'WhatsApp' as OrderChannel,
     productId: '',
     customProductName: '',
@@ -74,12 +78,16 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
         p.name.toLowerCase() === (firstItem?.productName || '').toLowerCase()
     );
 
+    const autoDist = order.district || detectDistrict(order.address || '', order.city || '').district || '';
+
     setEditingOrder(order);
     setEditFormData({
       customerName: order.customerName || '',
       phone: order.phone || '',
       address: order.address || '',
       city: order.city || 'Inside Dhaka',
+      district: autoDist,
+      pathaoCityId: order.pathaoCityId,
       channel: order.channel || 'WhatsApp',
       productId: matchedProduct?.id || (products[0]?.id || ''),
       customProductName: firstItem?.productName || '',
@@ -122,12 +130,15 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
     const subtotal = unitPrice * editFormData.quantity;
     const totalAmount = subtotal + deliveryFee;
 
+    const resolvedDistrict = editFormData.district || detectDistrict(editFormData.address, editFormData.city).district || undefined;
+
     const updatedOrder: Order = {
       ...editingOrder,
       customerName: editFormData.customerName.trim(),
       phone: editFormData.phone.trim(),
       address: editFormData.address.trim(),
       city: editFormData.city,
+      district: resolvedDistrict,
       channel: editFormData.channel,
       items: [
         {
@@ -160,6 +171,7 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
     phone: '',
     address: '',
     city: 'Inside Dhaka' as 'Inside Dhaka' | 'Sub-Dhaka' | 'Outside Dhaka',
+    district: '',
     channel: 'WhatsApp' as OrderChannel,
     productId: products[0]?.id || '',
     size: 'L' as 'S' | 'M' | 'L' | 'XL' | 'XXL',
@@ -244,12 +256,16 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
     const deliveryFee = formData.city === 'Inside Dhaka' ? 60 : formData.city === 'Sub-Dhaka' ? 100 : 150;
     const subtotal = product.retailPrice * formData.quantity;
 
+    const distInfo = detectDistrict(formData.address, formData.city);
+    const resolvedDistrict = formData.district || distInfo.district || undefined;
+
     const newOrder: Order = {
       id: `VIS-${Math.floor(2050 + Math.random() * 900)}`,
       customerName: formData.customerName,
       phone: formData.phone,
       address: formData.address,
       city: formData.city,
+      district: resolvedDistrict,
       channel: formData.channel,
       items: [
         {
@@ -439,6 +455,15 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                     <h4 className="text-sm font-bold text-zinc-100">{order.customerName}</h4>
                     <span className="text-xs font-mono text-zinc-400">{order.phone}</span>
                     <span className="text-xs text-zinc-400">• {order.address}</span>
+                    {(() => {
+                      const distName = order.district || detectDistrict(order.address || '', order.city || '').district;
+                      return distName ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-300 font-semibold">
+                          <MapPin className="w-2.5 h-2.5 text-amber-400" />
+                          <span>District: {distName}</span>
+                        </span>
+                      ) : null;
+                    })()}
                   </div>
 
                   {/* Order Items */}
@@ -631,9 +656,24 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-zinc-400 mb-1">City / Region</label>
+                  <label className="block text-zinc-400 mb-1">District (জেলা - 64 Districts)</label>
+                  <select
+                    value={formData.district || detectDistrict(formData.address, formData.city).district || ''}
+                    onChange={(e) => setFormData({ ...formData, district: e.target.value })}
+                    className="w-full rounded-xl bg-zinc-950 border border-zinc-700 px-3 py-2 text-white font-medium focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="">-- Auto Detect District --</option>
+                    {ALL_DISTRICT_NAMES.map((dName) => (
+                      <option key={dName} value={dName}>
+                        {dName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-zinc-400 mb-1">City / Region Zone</label>
                   <select
                     value={formData.city}
                     onChange={(e) => setFormData({ ...formData, city: e.target.value as any })}
@@ -777,7 +817,22 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-medium">District (জেলা - 64 Districts)</label>
+                  <select
+                    value={editFormData.district || detectDistrict(editFormData.address, editFormData.city).district || ''}
+                    onChange={(e) => setEditFormData({ ...editFormData, district: e.target.value })}
+                    className="w-full rounded-xl bg-zinc-950 border border-zinc-700 px-3 py-2 text-white font-medium focus:outline-none focus:border-amber-500 text-xs"
+                  >
+                    <option value="">-- Auto Detect District --</option>
+                    {ALL_DISTRICT_NAMES.map((dName) => (
+                      <option key={dName} value={dName}>
+                        {dName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <div>
                   <label className="block text-zinc-400 mb-1 font-medium">City / Delivery Zone</label>
                   <select

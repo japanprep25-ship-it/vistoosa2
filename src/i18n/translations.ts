@@ -143,6 +143,50 @@ export interface Translations {
   'common.dispatched': string;
   'common.delivered': string;
   'common.cancelled': string;
+
+  // Auth Screen
+  'auth.loginTitle': string;
+  'auth.signupTitle': string;
+  'auth.forgotPasswordTitle': string;
+  'auth.otpLoginTitle': string;
+  'auth.otpVerifyTitle': string;
+  'auth.loginSubtitle': string;
+  'auth.signupSubtitle': string;
+  'auth.forgotPasswordSubtitle': string;
+  'auth.otpVerifySubtitle': string;
+  'auth.newPasswordSubtitle': string;
+  'auth.fullName': string;
+  'auth.emailAddress': string;
+  'auth.password': string;
+  'auth.forgotPassword': string;
+  'auth.newPassword': string;
+  'auth.confirmPassword': string;
+  'auth.signInBtn': string;
+  'auth.signUpBtn': string;
+  'auth.sendResetOtpBtn': string;
+  'auth.verifyAndLoginBtn': string;
+  'auth.saveNewPasswordBtn': string;
+  'auth.verifying': string;
+  'auth.sending': string;
+  'auth.saving': string;
+  'auth.newHere': string;
+  'auth.signUpLink': string;
+  'auth.alreadyHaveAccount': string;
+  'auth.logInLink': string;
+  'auth.back': string;
+  'auth.otpCodeLabel': string;
+  'auth.resendOtp': string;
+  'auth.resendOtpIn': string;
+  'auth.validEmailReq': string;
+  'auth.passwordMinLength': string;
+  'auth.passwordsDoNotMatch': string;
+  'auth.enter6DigitOtpErr': string;
+  'auth.loginSuccessMsg': string;
+  'auth.signupSuccessMsg': string;
+  'auth.passwordResetSuccessMsg': string;
+  'auth.otpSentMsg': string;
+  'auth.otpVerifiedMsg': string;
+  'auth.demoAccount': string;
 }
 
 export const translations: Record<LanguageCode, Translations> = {
@@ -289,6 +333,50 @@ export const translations: Record<LanguageCode, Translations> = {
     'common.dispatched': 'Dispatched',
     'common.delivered': 'Delivered',
     'common.cancelled': 'Cancelled',
+
+    // Auth Screen
+    'auth.loginTitle': 'Sign In',
+    'auth.signupTitle': 'Sign Up',
+    'auth.forgotPasswordTitle': 'Forgot Password',
+    'auth.otpLoginTitle': '2-Step OTP Verification',
+    'auth.otpVerifyTitle': 'Email OTP Verification',
+    'auth.loginSubtitle': 'Enter your email and password to access your workspace',
+    'auth.signupSubtitle': 'Provide your details to create a new workspace account',
+    'auth.forgotPasswordSubtitle': 'Enter your registered email address to reset your password',
+    'auth.otpVerifySubtitle': 'Enter the 6-digit verification code sent to your email',
+    'auth.newPasswordSubtitle': 'Set a new secure password for your account',
+    'auth.fullName': 'Full Name',
+    'auth.emailAddress': 'Email Address',
+    'auth.password': 'Password',
+    'auth.forgotPassword': 'Forgot password?',
+    'auth.newPassword': 'New Password',
+    'auth.confirmPassword': 'Confirm New Password',
+    'auth.signInBtn': 'Sign In',
+    'auth.signUpBtn': 'Create Account',
+    'auth.sendResetOtpBtn': 'Send Reset Code',
+    'auth.verifyAndLoginBtn': 'Verify Code & Access App',
+    'auth.saveNewPasswordBtn': 'Save New Password & Log In',
+    'auth.verifying': 'Verifying...',
+    'auth.sending': 'Sending...',
+    'auth.saving': 'Saving...',
+    'auth.newHere': 'New here?',
+    'auth.signUpLink': 'Sign up for a new account',
+    'auth.alreadyHaveAccount': 'Already have an account?',
+    'auth.logInLink': 'Log in',
+    'auth.back': 'Back',
+    'auth.otpCodeLabel': '6-Digit Verification Code',
+    'auth.resendOtp': 'Resend Code',
+    'auth.resendOtpIn': 'Resend code in',
+    'auth.validEmailReq': 'Valid email address required.',
+    'auth.passwordMinLength': 'Password must be at least 4 characters.',
+    'auth.passwordsDoNotMatch': 'Passwords do not match.',
+    'auth.enter6DigitOtpErr': 'Please enter a valid 6-digit code.',
+    'auth.loginSuccessMsg': 'Login successful! Redirecting to workspace...',
+    'auth.signupSuccessMsg': 'Account created successfully! Redirecting...',
+    'auth.passwordResetSuccessMsg': 'Password reset successful! Logging in...',
+    'auth.otpSentMsg': 'A 6-digit verification code has been sent to your email',
+    'auth.otpVerifiedMsg': 'Verification successful! Accessing app...',
+    'auth.demoAccount': 'Demo Admin Account:',
   },
 
   bn: {
@@ -434,5 +522,49 @@ export const translations: Record<LanguageCode, Translations> = {
     'common.dispatched': 'ডিসপ্যাচড',
     'common.delivered': 'ডেলিভার্ড',
     'common.cancelled': 'বাতিলকৃত',
+
+    // Auth Screen
+    'auth.loginTitle': 'লগ ইন করুন',
+    'auth.signupTitle': 'সাইন আপ করুন',
+    'auth.forgotPasswordTitle': 'পাসওয়ার্ড রিসেট',
+    'auth.otpLoginTitle': '২-স্টেপ ভেরিফিকেশন',
+    'auth.otpVerifyTitle': 'ইমেইল ওটিপি ভেরিফিকেশন',
+    'auth.loginSubtitle': 'অ্যাপে প্রবেশ করতে ইমেইল ও পাসওয়ার্ড দিন',
+    'auth.signupSubtitle': 'নতুন অ্যাকাউন্ট তৈরি করতে সঠিক তথ্য প্রদান করুন',
+    'auth.forgotPasswordSubtitle': 'পাসওয়ার্ড রিসেট করতে আপনার রেজিস্টারকৃত ইমেইল দিন',
+    'auth.otpVerifySubtitle': 'আপনার ইমেইলে পাঠানো ৬-সংখ্যার কোডটি লিখুন',
+    'auth.newPasswordSubtitle': 'আপনার অ্যাকাউন্টের জন্য নতুন পাসওয়ার্ড দিন',
+    'auth.fullName': 'আপনার নাম',
+    'auth.emailAddress': 'ইমেইল ঠিকানা',
+    'auth.password': 'পাসওয়ার্ড',
+    'auth.forgotPassword': 'পাসওয়ার্ড ভুলে গেছেন?',
+    'auth.newPassword': 'নতুন পাসওয়ার্ড',
+    'auth.confirmPassword': 'নতুন পাসওয়ার্ড নিশ্চিত করুন',
+    'auth.signInBtn': 'লগ ইন করুন',
+    'auth.signUpBtn': 'অ্যাকাউন্ট তৈরি করুন',
+    'auth.sendResetOtpBtn': 'রিসেট কোড পাঠান',
+    'auth.verifyAndLoginBtn': 'কোড ভেরিফাই ও প্রবেশ করুন',
+    'auth.saveNewPasswordBtn': 'নতুন পাসওয়ার্ড সেভ ও লগ ইন করুন',
+    'auth.verifying': 'যাচাই করা হচ্ছে...',
+    'auth.sending': 'পাঠানো হচ্ছে...',
+    'auth.saving': 'সেভ করা হচ্ছে...',
+    'auth.newHere': 'নতুন ইউজার?',
+    'auth.signUpLink': 'সাইন আপ করুন',
+    'auth.alreadyHaveAccount': 'আগে থেকেই অ্যাকাউন্ট আছে?',
+    'auth.logInLink': 'লগ ইন করুন',
+    'auth.back': 'ফিরে যান',
+    'auth.otpCodeLabel': '৬-সংখ্যার ওটিপি কোড',
+    'auth.resendOtp': 'পুনরায় কোড পাঠান',
+    'auth.resendOtpIn': 'পুনরায় কোড পাঠান',
+    'auth.validEmailReq': 'একটি সঠিক ইমেইল ঠিকানা দিন।',
+    'auth.passwordMinLength': 'পাসওয়ার্ড কমপক্ষে ৪ অক্ষরের হতে হবে।',
+    'auth.passwordsDoNotMatch': 'দুটো পাসওয়ার্ড মিলছে না!',
+    'auth.enter6DigitOtpErr': '৬-সংখ্যার কোডটি সঠিকভাবে বসান।',
+    'auth.loginSuccessMsg': 'লগ ইন সফল হয়েছে! প্রবেশ করা হচ্ছে...',
+    'auth.signupSuccessMsg': 'অ্যাকাউন্ট সফলভাবে তৈরি হয়েছে! প্রবেশ করা হচ্ছে...',
+    'auth.passwordResetSuccessMsg': 'পাসওয়ার্ড সফলভাবে পরিবর্তিত হয়েছে! লগ ইন হচ্ছে...',
+    'auth.otpSentMsg': 'আপনার ইমেইলে ৬-সংখ্যার ভেরিফিকেশন কোড পাঠানো হয়েছে',
+    'auth.otpVerifiedMsg': 'ভেরিফিকেশন সফল হয়েছে! অ্যাপে প্রবেশ করা হচ্ছে...',
+    'auth.demoAccount': 'ডেমো এডমিন অ্যাকাউন্ট:',
   },
 };

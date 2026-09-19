@@ -13,9 +13,11 @@ import {
   RotateCcw,
   ArrowLeft,
   Key,
+  Globe,
 } from 'lucide-react';
 import { AuthUser } from '../types';
 import { useSettings } from '../contexts/SettingsContext';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface AuthScreenProps {
   onLoginSuccess: (user: AuthUser, token: string) => void;
@@ -26,6 +28,7 @@ type AuthStep = 'credentials' | 'otp_verify' | 'request_reset' | 'verify_reset_o
 
 export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
   const { appName, appMonogram, appSubtitle, appTagline, logoImage } = useSettings();
+  const { setLanguage, t, isBangla } = useLanguage();
 
   const [mode, setMode] = useState<AuthMode>('login');
   const [step, setStep] = useState<AuthStep>('credentials');
@@ -64,12 +67,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
 
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail || !cleanEmail.includes('@')) {
-      setErrorMessage('অনুগ্রহ করে একটি সঠিক ইমেইল অ্যাড্রেস দিন (Valid email required).');
+      setErrorMessage(t('auth.validEmailReq'));
       return;
     }
 
     if (!password || password.length < 4) {
-      setErrorMessage('পাসওয়ার্ড কমপক্ষে ৪ অক্ষরের হতে হবে (Password must be at least 4 chars).');
+      setErrorMessage(t('auth.passwordMinLength'));
       return;
     }
 
@@ -97,8 +100,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
       if (data.token && data.user) {
         setSuccessMessage(
           mode === 'signup'
-            ? 'অ্যাকাউন্ট সফলভাবে তৈরি হয়েছে! অ্যাপে প্রবেশ করা হচ্ছে...'
-            : 'লগইন সফল হয়েছে! অ্যাপে প্রবেশ করা হচ্ছে...'
+            ? t('auth.signupSuccessMsg')
+            : t('auth.loginSuccessMsg')
         );
         setTimeout(() => {
           onLoginSuccess(
@@ -116,7 +119,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
         setOtpCode('');
         setDebugOtp(data.debugOtp || null);
         setResendCooldown(60);
-        setSuccessMessage(`আপনার ইমেইলে (${cleanEmail}) ৬-সংখ্যার OTP ভেরিফিকেশন কোড পাঠানো হয়েছে।`);
+        setSuccessMessage(`${t('auth.otpSentMsg')} (${cleanEmail}).`);
       }
     } catch (err: any) {
       console.error('Auth Credentials Error:', err);
@@ -134,7 +137,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
 
     const cleanOtp = otpCode.trim();
     if (cleanOtp.length !== 6) {
-      setErrorMessage('৬-সংখ্যার OTP কোড সঠিকভাবে বসান (Please enter 6-digit OTP).');
+      setErrorMessage(t('auth.enter6DigitOtpErr'));
       return;
     }
 
@@ -154,7 +157,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
         throw new Error(data.message || 'Invalid or expired OTP');
       }
 
-      setSuccessMessage('OTP ভেরিফিকেশন সফল হয়েছে! অ্যাপে প্রবেশ করা হচ্ছে...');
+      setSuccessMessage(t('auth.otpVerifiedMsg'));
 
       setTimeout(() => {
         onLoginSuccess(
@@ -183,7 +186,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
 
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail || !cleanEmail.includes('@')) {
-      setErrorMessage('সঠিক রেজিস্টারকৃত ইমেইল এড্রেস দিন (Valid email required).');
+      setErrorMessage(t('auth.validEmailReq'));
       return;
     }
 
@@ -206,7 +209,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
       setOtpCode('');
       setDebugOtp(data.debugOtp || null);
       setResendCooldown(60);
-      setSuccessMessage(`পাসওয়ার্ড রিসেট OTP আপনার ইমেইলে (${cleanEmail}) পাঠানো হয়েছে।`);
+      setSuccessMessage(`${t('auth.otpSentMsg')} (${cleanEmail}).`);
     } catch (err: any) {
       console.error('Request Reset Error:', err);
       setErrorMessage(err?.message || 'Failed to send password reset code.');
@@ -223,7 +226,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
 
     const cleanOtp = otpCode.trim();
     if (cleanOtp.length !== 6) {
-      setErrorMessage('৬-সংখ্যার OTP কোড সঠিকভাবে বসান (Please enter 6-digit OTP).');
+      setErrorMessage(t('auth.enter6DigitOtpErr'));
       return;
     }
 
@@ -245,7 +248,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
       setStep('new_password');
       setNewPassword('');
       setConfirmPassword('');
-      setSuccessMessage('OTP ভেরিফাইড! এবার আপনার নতুন পাসওয়ার্ড সেট করুন।');
+      setSuccessMessage(t('auth.otpVerifiedMsg'));
     } catch (err: any) {
       console.error('Verify Reset OTP Error:', err);
       setErrorMessage(err?.message || 'Invalid or expired OTP');
@@ -261,12 +264,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
     setSuccessMessage(null);
 
     if (!newPassword || newPassword.length < 4) {
-      setErrorMessage('পাসওয়ার্ড কমপক্ষে ৪ অক্ষরের হতে হবে (Password must be at least 4 chars).');
+      setErrorMessage(t('auth.passwordMinLength'));
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      setErrorMessage('দুটো পাসওয়ার্ড মিলছে না! (Passwords do not match).');
+      setErrorMessage(t('auth.passwordsDoNotMatch'));
       return;
     }
 
@@ -285,7 +288,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
         throw new Error(data.message || 'Failed to reset password');
       }
 
-      setSuccessMessage('পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে! নতুন পাসওয়ার্ড দিয়ে লগইন হচ্ছে...');
+      setSuccessMessage(t('auth.passwordResetSuccessMsg'));
 
       setTimeout(() => {
         onLoginSuccess(
@@ -329,7 +332,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
 
       setDebugOtp(data.debugOtp || null);
       setResendCooldown(60);
-      setSuccessMessage('একটি নতুন ৬-সংখ্যার OTP আপনার ইমেইলে পুনরায় পাঠানো হয়েছে।');
+      setSuccessMessage(t('auth.otpSentMsg'));
     } catch (err: any) {
       console.error('Resend OTP Error:', err);
       setErrorMessage(err?.message || 'Failed to resend OTP');
@@ -376,46 +379,59 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
         <div className="glass-panel rounded-3xl p-6 md:p-8 shadow-2xl border border-zinc-800/80 bg-zinc-900/90 backdrop-blur-xl relative overflow-hidden">
           {/* Header Bar */}
           <div className="flex items-center justify-between pb-4 mb-5 border-b border-zinc-800/80">
-            <div>
+            <div className="pr-2">
               <h2 className="text-base font-bold text-white flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-amber-400" />
                 <span>
                   {mode === 'forgot_password'
-                    ? 'পাসওয়ার্ড রিসেট (Forgot Password)'
+                    ? t('auth.forgotPasswordTitle')
                     : mode === 'login'
                     ? step === 'otp_verify'
-                      ? '২-স্টেপ OTP ভেরিফিকেশন (2FA Login)'
-                      : 'সাইন ইন করুন (Log In)'
+                      ? t('auth.otpLoginTitle')
+                      : t('auth.loginTitle')
                     : step === 'otp_verify'
-                    ? 'ইমেইল OTP ভেরিফিকেশন'
-                    : 'নতুন সাইন আপ (Sign Up)'}
+                    ? t('auth.otpVerifyTitle')
+                    : t('auth.signupTitle')}
                 </span>
               </h2>
               <p className="text-[11px] text-zinc-400 mt-0.5">
                 {step === 'otp_verify' || step === 'verify_reset_otp'
-                  ? `আপনার ইমেইল ${email} এ পাঠানো ৬-সংখ্যার কোডটি লিখুন`
+                  ? `${t('auth.otpVerifySubtitle')} (${email})`
                   : step === 'new_password'
-                  ? 'আপনার অ্যাকাউন্টের জন্য নতুন নিরাপদ পাসওয়ার্ড দিন'
+                  ? t('auth.newPasswordSubtitle')
                   : mode === 'forgot_password'
-                  ? 'আপনার রেজিস্টারকৃত ইমেইল এড্রেস প্রদান করুন'
+                  ? t('auth.forgotPasswordSubtitle')
                   : mode === 'login'
-                  ? 'ইমেইল ও পাসওয়ার্ড দিয়ে প্রবেশের প্রথম ধাপ সম্পন্ন করুন'
-                  : 'নতুন একাউন্ট খুলতে তথ্য প্রদান করুন'}
+                  ? t('auth.loginSubtitle')
+                  : t('auth.signupSubtitle')}
               </p>
             </div>
 
-            {/* Back Button if in OTP or Reset Mode */}
-            {(step !== 'credentials' || mode === 'forgot_password') && (
+            <div className="flex items-center gap-2 shrink-0">
+              {/* Language Toggle Button */}
               <button
                 type="button"
-                onClick={() => resetToMode('login')}
-                className="p-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition text-xs flex items-center gap-1 cursor-pointer shrink-0"
-                title="Back to Login"
+                onClick={() => setLanguage(isBangla ? 'en' : 'bn')}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-800/90 hover:bg-zinc-700/90 border border-amber-500/40 text-amber-300 font-semibold text-xs transition cursor-pointer shadow-sm hover:border-amber-400"
+                title={isBangla ? 'Switch to English' : 'বাংলা ভাষায় পরিবর্তন করুন'}
               >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Back</span>
+                <Globe className="w-3.5 h-3.5 text-amber-400" />
+                <span>{isBangla ? 'English' : 'বাংলা'}</span>
               </button>
-            )}
+
+              {/* Back Button if in OTP or Reset Mode */}
+              {(step !== 'credentials' || mode === 'forgot_password') && (
+                <button
+                  type="button"
+                  onClick={() => resetToMode('login')}
+                  className="p-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition text-xs flex items-center gap-1 cursor-pointer shrink-0"
+                  title="Back to Login"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">{t('auth.back')}</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Error Banner */}
@@ -457,7 +473,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
               {mode === 'signup' && (
                 <div>
                   <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
-                    আপনার নাম (Full Name)
+                    {t('auth.fullName')}
                   </label>
                   <div className="relative">
                     <input
@@ -476,7 +492,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
               {/* Email Field */}
               <div>
                 <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
-                  ইমেইল অ্যাড্রেস (Email Address)
+                  {t('auth.emailAddress')}
                 </label>
                 <div className="relative">
                   <input
@@ -495,7 +511,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-xs font-semibold text-zinc-300">
-                    পাসওয়ার্ড (Password)
+                    {t('auth.password')}
                   </label>
                   {mode === 'login' && (
                     <button
@@ -503,7 +519,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
                       onClick={() => resetToMode('forgot_password')}
                       className="text-[11px] text-amber-400 hover:underline font-medium cursor-pointer"
                     >
-                      Forgot password? (পাসওয়ার্ড ভুলে গেছেন?)
+                      {t('auth.forgotPassword')}
                     </button>
                   )}
                 </div>
@@ -529,15 +545,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
                 {isLoading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin text-zinc-950" />
-                    <span>যাচাই করা হচ্ছে...</span>
+                    <span>{t('auth.verifying')}</span>
                   </>
                 ) : (
                   <>
                     <KeyRound className="w-4 h-4" />
                     <span>
                       {mode === 'signup'
-                        ? 'Create Account (সাইন আপ করুন)'
-                        : 'Sign In (লগইন করুন)'}
+                        ? t('auth.signUpBtn')
+                        : t('auth.signInBtn')}
                     </span>
                     <ArrowRight className="w-4 h-4 ml-auto" />
                   </>
@@ -551,16 +567,16 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
             <form onSubmit={handleOtpVerifySubmit} className="space-y-5">
               <div className="text-center p-3 rounded-2xl bg-zinc-950/70 border border-zinc-800">
                 <p className="text-xs text-zinc-300">
-                  ইমেইল: <strong className="text-amber-300 font-mono">{email}</strong>
+                  {t('auth.emailAddress')}: <strong className="text-amber-300 font-mono">{email}</strong>
                 </p>
                 <p className="text-[11px] text-zinc-400 mt-0.5">
-                  ইমেইলটি চেক করে ৬-সংখ্যার OTP কোডটি নিচে টাইপ করুন।
+                  {t('auth.otpVerifySubtitle')}
                 </p>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-zinc-300 mb-2 text-center">
-                  ৬-সংখ্যার OTP কোড (Enter 6-Digit OTP)
+                  {t('auth.otpCodeLabel')}
                 </label>
                 <div className="relative">
                   <input
@@ -583,12 +599,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
                 {isLoading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin text-zinc-950" />
-                    <span>OTP ভেরিফাই হচ্ছে...</span>
+                    <span>{t('auth.verifying')}</span>
                   </>
                 ) : (
                   <>
                     <ShieldCheck className="w-4 h-4" />
-                    <span>Verify OTP & Access App</span>
+                    <span>{t('auth.verifyAndLoginBtn')}</span>
                     <ArrowRight className="w-4 h-4 ml-auto" />
                   </>
                 )}
@@ -604,8 +620,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   {resendCooldown > 0
-                    ? `Resend OTP in ${resendCooldown}s`
-                    : 'Resend OTP (পুনরায় কোড পাঠান)'}
+                    ? `${t('auth.resendOtpIn')} ${resendCooldown}s`
+                    : t('auth.resendOtp')}
                 </button>
               </div>
             </form>
@@ -616,7 +632,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
             <form onSubmit={handleRequestResetSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
-                  রেজিস্টারকৃত ইমেইল এড্রেস (Registered Email Address)
+                  {t('auth.emailAddress')}
                 </label>
                 <div className="relative">
                   <input
@@ -639,12 +655,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
                 {isLoading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin text-zinc-950" />
-                    <span>OTP পাঠানো হচ্ছে...</span>
+                    <span>{t('auth.sending')}</span>
                   </>
                 ) : (
                   <>
                     <Key className="w-4 h-4" />
-                    <span>Send Reset OTP Code</span>
+                    <span>{t('auth.sendResetOtpBtn')}</span>
                     <ArrowRight className="w-4 h-4 ml-auto" />
                   </>
                 )}
@@ -657,16 +673,16 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
             <form onSubmit={handleVerifyResetOtpSubmit} className="space-y-5">
               <div className="text-center p-3 rounded-2xl bg-zinc-950/70 border border-zinc-800">
                 <p className="text-xs text-zinc-300">
-                  ইমেইল: <strong className="text-amber-300 font-mono">{email}</strong>
+                  {t('auth.emailAddress')}: <strong className="text-amber-300 font-mono">{email}</strong>
                 </p>
                 <p className="text-[11px] text-zinc-400 mt-0.5">
-                  পাসওয়ার্ড রিসেট করতে ইমেইলে পাঠানো ৬-সংখ্যার OTP কোডটি লিখুন।
+                  {t('auth.otpVerifySubtitle')}
                 </p>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-zinc-300 mb-2 text-center">
-                  ৬-সংখ্যার Reset OTP (Enter 6-Digit OTP)
+                  {t('auth.otpCodeLabel')}
                 </label>
                 <div className="relative">
                   <input
@@ -689,12 +705,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
                 {isLoading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin text-zinc-950" />
-                    <span>যাচাই করা হচ্ছে...</span>
+                    <span>{t('auth.verifying')}</span>
                   </>
                 ) : (
                   <>
                     <ShieldCheck className="w-4 h-4" />
-                    <span>Verify Code & Proceed</span>
+                    <span>{t('auth.verifyAndLoginBtn')}</span>
                     <ArrowRight className="w-4 h-4 ml-auto" />
                   </>
                 )}
@@ -709,8 +725,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   {resendCooldown > 0
-                    ? `Resend OTP in ${resendCooldown}s`
-                    : 'Resend Reset OTP'}
+                    ? `${t('auth.resendOtpIn')} ${resendCooldown}s`
+                    : t('auth.resendOtp')}
                 </button>
               </div>
             </form>
@@ -721,7 +737,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
             <form onSubmit={handleResetPasswordSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
-                  নতুন পাসওয়ার্ড (New Password)
+                  {t('auth.newPassword')}
                 </label>
                 <div className="relative">
                   <input
@@ -738,7 +754,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
 
               <div>
                 <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
-                  পাসওয়ার্ড নিশ্চিত করুন (Confirm New Password)
+                  {t('auth.confirmPassword')}
                 </label>
                 <div className="relative">
                   <input
@@ -761,12 +777,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
                 {isLoading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin text-zinc-950" />
-                    <span>পাসওয়ার্ড সেভ হচ্ছে...</span>
+                    <span>{t('auth.saving')}</span>
                   </>
                 ) : (
                   <>
                     <KeyRound className="w-4 h-4" />
-                    <span>Save New Password & Log In</span>
+                    <span>{t('auth.saveNewPasswordBtn')}</span>
                     <ArrowRight className="w-4 h-4 ml-auto" />
                   </>
                 )}
@@ -779,24 +795,24 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
             <div className="mt-6 pt-4 border-t border-zinc-800/80 text-center">
               {mode === 'login' ? (
                 <p className="text-xs text-zinc-400">
-                  New here? (নতুন ইউজার?){' '}
+                  {t('auth.newHere')}{' '}
                   <button
                     type="button"
                     onClick={() => resetToMode('signup')}
                     className="text-amber-400 font-semibold hover:underline cursor-pointer ml-1"
                   >
-                    Sign up for a new account
+                    {t('auth.signUpLink')}
                   </button>
                 </p>
               ) : (
                 <p className="text-xs text-zinc-400">
-                  Already have an account? (আগে থেকেই অ্যাকাউন্ট আছে?){' '}
+                  {t('auth.alreadyHaveAccount')}{' '}
                   <button
                     type="button"
                     onClick={() => resetToMode('login')}
                     className="text-amber-400 font-semibold hover:underline cursor-pointer ml-1"
                   >
-                    Log in
+                    {t('auth.logInLink')}
                   </button>
                 </p>
               )}
@@ -807,7 +823,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
         {/* Demo Admin Card Footer */}
         <div className="mt-5 p-3.5 rounded-2xl bg-zinc-900/60 border border-zinc-800 text-center space-y-1.5">
           <p className="text-[11px] text-zinc-400 font-medium">
-            💡 Demo Admin Account (2FA Enabled):
+            💡 {t('auth.demoAccount')}
           </p>
           <div className="flex items-center justify-center gap-2 text-[10px] font-mono text-amber-300 bg-zinc-950/80 py-1.5 px-3 rounded-xl border border-zinc-800 inline-flex">
             <span>japanprep25@gmail.com</span>

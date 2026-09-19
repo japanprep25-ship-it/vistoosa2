@@ -97,12 +97,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
         throw new Error(data.message || 'Invalid email or password');
       }
 
-      if (data.token && data.user) {
-        setSuccessMessage(
-          mode === 'signup'
-            ? t('auth.signupSuccessMsg')
-            : t('auth.loginSuccessMsg')
-        );
+      if (mode === 'signup') {
+        // Account created! Switch to Login mode so user signs in
+        setMode('login');
+        setPassword('');
+        setSuccessMessage(t('auth.signupSuccessMsg'));
+      } else if (data.token && data.user) {
+        setSuccessMessage(t('auth.loginSuccessMsg'));
         setTimeout(() => {
           onLoginSuccess(
             {
@@ -436,9 +437,20 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
 
           {/* Error Banner */}
           {errorMessage && (
-            <div className="p-3.5 mb-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-center gap-2.5 animate-in fade-in duration-150">
-              <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-              <span className="font-medium">{errorMessage}</span>
+            <div className="p-3.5 mb-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-center justify-between gap-2.5 animate-in fade-in duration-150">
+              <div className="flex items-center gap-2.5">
+                <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                <span className="font-medium">{errorMessage}</span>
+              </div>
+              {mode === 'login' && step === 'credentials' && (
+                <button
+                  type="button"
+                  onClick={() => resetToMode('signup')}
+                  className="px-2.5 py-1 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-semibold text-[11px] shrink-0 transition cursor-pointer"
+                >
+                  {t('auth.signUpLink')}
+                </button>
+              )}
             </div>
           )}
 

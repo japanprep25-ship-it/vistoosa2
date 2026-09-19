@@ -69,9 +69,8 @@ mountPathaoConfigRoutes(app);
 mountWhatsappRoutes(app);
 mountIntegrationsConfigRoutes(app);
 
-// 2FA OTP & Real Email Authentication Endpoints
-// Step 1 of Signup: Create Account & Dispatch OTP
-app.post('/api/auth/signup', async (req, res) => {
+// Direct Email & Password Authentication Endpoints (OTP Turned Off)
+app.post('/api/auth/signup', (req, res) => {
   try {
     const { email, password, name } = req.body || {};
     const cleanEmail = String(email || '').trim().toLowerCase();
@@ -79,16 +78,12 @@ app.post('/api/auth/signup', async (req, res) => {
     // Create user record in userStore (throws if invalid or duplicate email)
     const result = createUser(cleanEmail, password, name);
 
-    // Send 6-digit OTP verification code via Nodemailer SMTP or preview fallback
-    const otpRes = await createAndSendOtp(cleanEmail, 'signup');
-
     return res.json({
       success: true,
-      requiresOtp: true,
-      email: cleanEmail,
-      message: `Account created! Verification code sent to ${cleanEmail}.`,
-      expiresAt: otpRes.expiresAt,
-      debugOtp: otpRes.debugOtp,
+      requiresOtp: false,
+      message: 'Account created successfully.',
+      token: result.token,
+      user: result.user,
     });
   } catch (err: any) {
     return res.status(400).json({
@@ -98,44 +93,7 @@ app.post('/api/auth/signup', async (req, res) => {
   }
 });
 
-// Step 2 of Signup: Verify Signup OTP & Issue Token
-app.post('/api/auth/verify-signup-otp', (req, res) => {
-  try {
-    const { email, otpCode } = req.body || {};
-    const cleanEmail = String(email || '').trim().toLowerCase();
-
-    const otpResult = verifyOtpCode(cleanEmail, otpCode);
-    if (!otpResult.success) {
-      return res.status(400).json({
-        success: false,
-        message: otpResult.message || 'Invalid or expired OTP',
-      });
-    }
-
-    const user = findUserByEmail(cleanEmail);
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User account not found.' });
-    }
-
-    const profile = sanitizeUser(user);
-    const token = generateJwtToken(profile);
-
-    return res.json({
-      success: true,
-      message: 'Account verified successfully!',
-      token,
-      user: profile,
-    });
-  } catch (err: any) {
-    return res.status(400).json({
-      success: false,
-      message: err?.message || 'Verification failed.',
-    });
-  }
-});
-
-// Step 1 of Login: Check Password & Dispatch 6-Digit OTP
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', (req, res) => {
   try {
     const { email, password } = req.body || {};
     const cleanEmail = String(email || '').trim().toLowerCase();
@@ -143,57 +101,17 @@ app.post('/api/auth/login', async (req, res) => {
     // Validate email + password match stored hash
     const authResult = authenticateUserCredentials(cleanEmail, password);
 
-    // If valid, dispatch OTP (Do NOT issue token yet)
-    const otpRes = await createAndSendOtp(cleanEmail, 'login');
-
     return res.json({
       success: true,
-      requiresOtp: true,
-      email: cleanEmail,
-      message: `Password correct. Verification code sent to ${cleanEmail}.`,
-      expiresAt: otpRes.expiresAt,
-      debugOtp: otpRes.debugOtp,
+      requiresOtp: false,
+      message: 'Logged in successfully.',
+      token: authResult.token,
+      user: authResult.user,
     });
   } catch (err: any) {
     return res.status(401).json({
       success: false,
       message: err?.message || 'Invalid email or password',
-    });
-  }
-});
-
-// Step 2 of Login: Verify OTP & Issue Token
-app.post('/api/auth/verify-login-otp', (req, res) => {
-  try {
-    const { email, otpCode } = req.body || {};
-    const cleanEmail = String(email || '').trim().toLowerCase();
-
-    const otpResult = verifyOtpCode(cleanEmail, otpCode);
-    if (!otpResult.success) {
-      return res.status(400).json({
-        success: false,
-        message: otpResult.message || 'Invalid or expired OTP',
-      });
-    }
-
-    const user = findUserByEmail(cleanEmail);
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User account not found.' });
-    }
-
-    const profile = sanitizeUser(user);
-    const token = generateJwtToken(profile);
-
-    return res.json({
-      success: true,
-      message: 'Login successful!',
-      token,
-      user: profile,
-    });
-  } catch (err: any) {
-    return res.status(400).json({
-      success: false,
-      message: err?.message || 'Verification failed.',
     });
   }
 });

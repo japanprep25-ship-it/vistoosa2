@@ -94,7 +94,24 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
         throw new Error(data.message || 'Invalid email or password');
       }
 
-      if (data.requiresOtp) {
+      if (data.token && data.user) {
+        setSuccessMessage(
+          mode === 'signup'
+            ? 'অ্যাকাউন্ট সফলভাবে তৈরি হয়েছে! অ্যাপে প্রবেশ করা হচ্ছে...'
+            : 'লগইন সফল হয়েছে! অ্যাপে প্রবেশ করা হচ্ছে...'
+        );
+        setTimeout(() => {
+          onLoginSuccess(
+            {
+              email: data.user.email,
+              name: data.user.name,
+              role: data.user.role || 'Admin',
+              status: 'Active',
+            },
+            data.token
+          );
+        }, 400);
+      } else if (data.requiresOtp) {
         setStep('otp_verify');
         setOtpCode('');
         setDebugOtp(data.debugOtp || null);
@@ -519,8 +536,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
                     <KeyRound className="w-4 h-4" />
                     <span>
                       {mode === 'signup'
-                        ? 'Continue to Email Verification'
-                        : 'Verify Password & Send OTP'}
+                        ? 'Create Account (সাইন আপ করুন)'
+                        : 'Sign In (লগইন করুন)'}
                     </span>
                     <ArrowRight className="w-4 h-4 ml-auto" />
                   </>

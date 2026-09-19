@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   ShoppingBag,
   Plus,
@@ -20,10 +20,18 @@ import {
   Edit2,
   Package,
   MapPin,
+  RotateCcw,
 } from 'lucide-react';
 import { Order, OrderStatus, OrderChannel, Product } from '../types';
 import { useLanguage } from '../contexts/LanguageContext';
 import { ALL_DISTRICT_NAMES, detectDistrict } from '../utils/districtDetector';
+import {
+  OrderFilterPanel,
+  OrderFilterState,
+  initialFilterState,
+  filterOrders,
+  countActiveFilters,
+} from './OrderFilterPanel';
 
 interface OrderEngineViewProps {
   orders: Order[];
@@ -45,8 +53,8 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
   onUpdateOrder,
 }) => {
   const { t } = useLanguage();
-  const [selectedStatus, setSelectedStatus] = useState<OrderStatus | 'All'>('All');
-  const [selectedChannel, setSelectedChannel] = useState<OrderChannel | 'All'>('All');
+  const [filters, setFilters] = useState<OrderFilterState>(initialFilterState);
+  const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [selectedChatOrder, setSelectedChatOrder] = useState<Order | null>(null);
@@ -180,17 +188,12 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
     notes: '',
   });
 
-  const filteredOrders = orders.filter((o) => {
-    const matchStatus = selectedStatus === 'All' || o.status === selectedStatus;
-    const matchChannel = selectedChannel === 'All' || o.channel === selectedChannel;
-    const matchQuery =
-      searchQuery === '' ||
-      o.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      o.phone.includes(searchQuery) ||
-      o.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (o.pathaoTrackingId && o.pathaoTrackingId.toLowerCase().includes(searchQuery.toLowerCase()));
-    return matchStatus && matchChannel && matchQuery;
-  });
+  const filteredOrders = useMemo(
+    () => filterOrders(orders, filters, searchQuery),
+    [orders, filters, searchQuery]
+  );
+
+  const activeFilterCount = countActiveFilters(filters);
 
   const getStatusBadge = (status: OrderStatus) => {
     switch (status) {
@@ -319,62 +322,300 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
       </div>
 
       {/* Filter & Search Bar */}
-      <div className="glass-panel rounded-2xl p-3 flex flex-col md:flex-row items-center gap-3">
-        {/* Search */}
-        <div className="relative w-full md:w-80">
-          <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-2.5" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t('orders.searchPlaceholder')}
-            className="w-full pl-9 pr-4 py-2 rounded-xl bg-zinc-900/90 border border-zinc-800 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-500/80"
-          />
+      <div className="space-y-2.5">
+        <div className="glass-panel rounded-2xl p-3 flex flex-col md:flex-row items-center gap-3">
+          {/* Search */}
+          <div className="relative w-full md:w-72">
+            <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-2.5" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t('orders.searchPlaceholder')}
+              className="w-full pl-9 pr-4 py-2 rounded-xl bg-zinc-900/90 border border-zinc-800 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-500/80"
+            />
+          </div>
+
+          {/* Status Pills */}
+          <div className="flex items-center gap-1 overflow-x-auto w-full pb-1 md:pb-0 scrollbar-none">
+            {(['All', 'Pending', 'Approved', 'Dispatched', 'Delivered', 'Cancelled'] as const).map(
+              (st) => {
+                let label = st;
+                if (st === 'Pending') label = t('orders.pendingTab') as any;
+                else if (st === 'Approved') label = t('orders.approvedTab') as any;
+                else if (st === 'Dispatched') label = t('orders.dispatchedTab') as any;
+                else if (st === 'Delivered') label = t('orders.deliveredTab') as any;
+                else if (st === 'Cancelled') label = t('orders.cancelledTab') as any;
+
+                const isActive =
+                  st === 'All'
+                    ? filters.statuses.length === 0
+                    : filters.statuses.includes(st as OrderStatus);
+
+                return (
+                  <button
+                    key={st}
+                    onClick={() => {
+                      if (st === 'All') {
+                        setFilters((prev) => ({ ...prev, statuses: [] }));
+                      } else {
+                        setFilters((prev) => ({ ...prev, statuses: [st as OrderStatus] }));
+                      }
+                    }}
+                    className={`text-xs px-3 py-1.5 rounded-xl font-medium whitespace-nowrap transition cursor-pointer ${
+                      isActive
+                        ? 'bg-amber-500 text-zinc-950 font-bold shadow-sm shadow-amber-500/20'
+                        : 'bg-zinc-900/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              }
+            )}
+          </div>
+
+          {/* Channel Select & Filter Panel Button */}
+          <div className="flex items-center gap-2 ml-auto shrink-0">
+            <select
+              value={
+                filters.channels.length === 0
+                  ? 'All'
+                  : filters.channels.length === 1
+                  ? filters.channels[0]
+                  : 'Multiple'
+              }
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === 'All') {
+                  setFilters((prev) => ({ ...prev, channels: [] }));
+                } else if (val !== 'Multiple') {
+                  setFilters((prev) => ({ ...prev, channels: [val as OrderChannel] }));
+                }
+              }}
+              className="rounded-xl bg-zinc-900 border border-zinc-800 px-3 py-1.5 text-xs text-zinc-300 focus:outline-none focus:border-amber-500 cursor-pointer"
+            >
+              <option value="All">All Channels</option>
+              {filters.channels.length > 1 && (
+                <option value="Multiple">Multiple Channels ({filters.channels.length})</option>
+              )}
+              <option value="WhatsApp">WhatsApp</option>
+              <option value="Facebook">Facebook</option>
+              <option value="Instagram">Instagram</option>
+              <option value="Website">Website</option>
+              <option value="Showroom">Showroom</option>
+            </select>
+
+            {/* Excel Filter Panel Funnel Button */}
+            <button
+              id="btn-open-excel-filter-panel"
+              onClick={() => setIsFilterPanelOpen(true)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition cursor-pointer shrink-0 ${
+                activeFilterCount > 0
+                  ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 shadow-sm shadow-amber-500/20'
+                  : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:bg-zinc-800 hover:text-white'
+              }`}
+              title="Open Excel Advanced Filter Panel"
+            >
+              <Filter className="w-3.5 h-3.5 text-amber-400" />
+              <span>Filters</span>
+              {activeFilterCount > 0 && (
+                <span className="w-4 h-4 rounded-full bg-amber-500 text-zinc-950 text-[10px] font-extrabold flex items-center justify-center">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
 
-        {/* Status Pills */}
-        <div className="flex items-center gap-1 overflow-x-auto w-full pb-1 md:pb-0 scrollbar-none">
-          {(['All', 'Pending', 'Approved', 'Dispatched', 'Delivered', 'Cancelled'] as const).map(
-            (st) => {
-              let label = st;
-              if (st === 'Pending') label = t('orders.pendingTab') as any;
-              else if (st === 'Approved') label = t('orders.approvedTab') as any;
-              else if (st === 'Dispatched') label = t('orders.dispatchedTab') as any;
-              else if (st === 'Delivered') label = t('orders.deliveredTab') as any;
-              else if (st === 'Cancelled') label = t('orders.cancelledTab') as any;
+        {/* Active Filter Chips Bar */}
+        {activeFilterCount > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 p-2 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 animate-in fade-in duration-150">
+            <span className="text-[11px] font-bold text-zinc-400 mr-1 flex items-center gap-1">
+              <Filter className="w-3 h-3 text-amber-400" />
+              Active Filters:
+            </span>
 
-              return (
+            {/* Status Chips */}
+            {filters.statuses.map((st) => (
+              <span
+                key={st}
+                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-xl text-[11px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30"
+              >
+                Status: {st}
                 <button
-                  key={st}
-                  onClick={() => setSelectedStatus(st)}
-                  className={`text-xs px-3 py-1.5 rounded-xl font-medium whitespace-nowrap transition ${
-                    selectedStatus === st
-                      ? 'bg-amber-500 text-zinc-950 font-bold shadow-sm shadow-amber-500/20'
-                      : 'bg-zinc-900/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
-                  }`}
+                  onClick={() =>
+                    setFilters((f) => ({ ...f, statuses: f.statuses.filter((s) => s !== st) }))
+                  }
+                  className="hover:text-amber-100 cursor-pointer ml-0.5"
                 >
-                  {label}
+                  <X className="w-3 h-3" />
                 </button>
-              );
-            }
-          )}
-        </div>
+              </span>
+            ))}
 
-        {/* Channel Select */}
-        <div className="flex items-center gap-2 ml-auto shrink-0">
-          <Filter className="w-3.5 h-3.5 text-zinc-500" />
-          <select
-            value={selectedChannel}
-            onChange={(e) => setSelectedChannel(e.target.value as any)}
-            className="rounded-xl bg-zinc-900 border border-zinc-800 px-3 py-1.5 text-xs text-zinc-300 focus:outline-none focus:border-amber-500"
-          >
-            <option value="All">All Channels</option>
-            <option value="WhatsApp">WhatsApp</option>
-            <option value="Facebook">Facebook</option>
-            <option value="Instagram">Instagram</option>
-            <option value="Website">Website</option>
-            <option value="Showroom">Showroom</option>
-          </select>
+            {/* District Chips */}
+            {filters.districts.map((dist) => (
+              <span
+                key={dist}
+                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-xl text-[11px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+              >
+                District: {dist}
+                <button
+                  onClick={() =>
+                    setFilters((f) => ({ ...f, districts: f.districts.filter((d) => d !== dist) }))
+                  }
+                  className="hover:text-emerald-100 cursor-pointer ml-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+
+            {/* Channel Chips */}
+            {filters.channels.map((ch) => (
+              <span
+                key={ch}
+                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-xl text-[11px] font-semibold bg-blue-500/15 text-blue-300 border border-blue-500/30"
+              >
+                Channel: {ch}
+                <button
+                  onClick={() =>
+                    setFilters((f) => ({ ...f, channels: f.channels.filter((c) => c !== ch) }))
+                  }
+                  className="hover:text-blue-100 cursor-pointer ml-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+
+            {/* Payment Chips */}
+            {filters.paymentMethods.map((pm) => (
+              <span
+                key={pm}
+                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-xl text-[11px] font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/30"
+              >
+                Payment: {pm}
+                <button
+                  onClick={() =>
+                    setFilters((f) => ({
+                      ...f,
+                      paymentMethods: f.paymentMethods.filter((p) => p !== pm),
+                    }))
+                  }
+                  className="hover:text-purple-100 cursor-pointer ml-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+
+            {/* Date Range Chip */}
+            {(filters.fromDate || filters.toDate) && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-xl text-[11px] font-semibold bg-sky-500/15 text-sky-300 border border-sky-500/30 font-mono">
+                Date: {filters.fromDate || 'Start'} to {filters.toDate || 'End'}
+                <button
+                  onClick={() => setFilters((f) => ({ ...f, fromDate: '', toDate: '' }))}
+                  className="hover:text-sky-100 cursor-pointer ml-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {/* Amount Range Chip */}
+            {(filters.minAmount || filters.maxAmount) && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-xl text-[11px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono">
+                Amount: ৳{filters.minAmount || '0'} - ৳{filters.maxAmount || '∞'}
+                <button
+                  onClick={() => setFilters((f) => ({ ...f, minAmount: '', maxAmount: '' }))}
+                  className="hover:text-emerald-100 cursor-pointer ml-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {/* Pathao Status Chips */}
+            {filters.pathaoStatuses.map((ps) => (
+              <span
+                key={ps}
+                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-xl text-[11px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30"
+              >
+                Pathao: {ps}
+                <button
+                  onClick={() =>
+                    setFilters((f) => ({
+                      ...f,
+                      pathaoStatuses: f.pathaoStatuses.filter((p) => p !== ps),
+                    }))
+                  }
+                  className="hover:text-amber-100 cursor-pointer ml-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+
+            {/* Product Chips */}
+            {filters.products.map((prod) => (
+              <span
+                key={prod}
+                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-xl text-[11px] font-semibold bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 truncate max-w-xs"
+              >
+                Item: {prod}
+                <button
+                  onClick={() =>
+                    setFilters((f) => ({ ...f, products: f.products.filter((p) => p !== prod) }))
+                  }
+                  className="hover:text-cyan-100 cursor-pointer ml-0.5 shrink-0"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+
+            {/* Size Chips */}
+            {filters.sizes.map((sz) => (
+              <span
+                key={sz}
+                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-xl text-[11px] font-semibold bg-orange-500/15 text-orange-300 border border-orange-500/30 font-mono"
+              >
+                Size: {sz}
+                <button
+                  onClick={() =>
+                    setFilters((f) => ({ ...f, sizes: f.sizes.filter((s) => s !== sz) }))
+                  }
+                  className="hover:text-orange-100 cursor-pointer ml-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+
+            {/* Clear All Button */}
+            <button
+              onClick={() => setFilters(initialFilterState)}
+              className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-400 hover:text-amber-300 underline cursor-pointer ml-auto px-2 py-0.5"
+            >
+              <RotateCcw className="w-3 h-3" />
+              Clear All
+            </button>
+          </div>
+        )}
+
+        {/* Counter Readout */}
+        <div className="flex items-center justify-between text-xs text-zinc-400 font-mono px-1">
+          <span>
+            Showing <strong className="text-amber-400 font-bold">{filteredOrders.length}</strong> of{' '}
+            {orders.length} orders
+          </span>
+          {activeFilterCount > 0 && (
+            <span className="text-[11px] text-amber-400 font-sans font-semibold">
+              ({activeFilterCount} active filter criteria)
+            </span>
+          )}
         </div>
       </div>
 
@@ -1140,6 +1381,18 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Excel Advanced Filter Panel Drawer */}
+      <OrderFilterPanel
+        isOpen={isFilterPanelOpen}
+        onClose={() => setIsFilterPanelOpen(false)}
+        orders={orders}
+        filters={filters}
+        onUpdateFilters={setFilters}
+        onClearAll={() => setFilters(initialFilterState)}
+        totalOrdersCount={orders.length}
+        filteredOrdersCount={filteredOrders.length}
+      />
     </div>
   );
 };

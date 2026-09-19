@@ -25,8 +25,40 @@ import {
   Smartphone,
   Play,
   MessageCircle,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { ChannelIntegrationConfig, Order } from '../types';
+
+const SecretInput: React.FC<{
+  value: string;
+  onChange: (val: string) => void;
+  placeholder?: string;
+  className?: string;
+  required?: boolean;
+}> = ({ value, onChange, placeholder, className, required }) => {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="relative w-full">
+      <input
+        type={show ? 'text' : 'password'}
+        required={required}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className={className ? `${className} pr-9` : 'w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 pr-9 py-2 text-xs text-zinc-200 focus:outline-none focus:border-amber-500 font-mono'}
+      />
+      <button
+        type="button"
+        onClick={() => setShow(!show)}
+        className="absolute right-2.5 top-2.5 p-0.5 text-zinc-400 hover:text-amber-400 transition cursor-pointer"
+        title={show ? 'Hide secret' : 'Show secret'}
+      >
+        {show ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+      </button>
+    </div>
+  );
+};
 
 interface IntegrationsHubViewProps {
   config: ChannelIntegrationConfig;
@@ -748,23 +780,19 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
 
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-zinc-300">Consumer Key / API Key</label>
-                  <input
-                    type="password"
+                  <SecretInput
                     value={websiteConfig.apiKey}
-                    onChange={(e) => setWebsiteConfig({ ...websiteConfig, apiKey: e.target.value })}
+                    onChange={(val) => setWebsiteConfig({ ...websiteConfig, apiKey: val })}
                     placeholder="ck_7b9a8f2c..."
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-amber-500 font-mono"
                   />
                 </div>
 
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-zinc-300">Webhook Secret</label>
-                  <input
-                    type="password"
+                  <SecretInput
                     value={websiteConfig.webhookSecret}
-                    onChange={(e) => setWebsiteConfig({ ...websiteConfig, webhookSecret: e.target.value })}
+                    onChange={(val) => setWebsiteConfig({ ...websiteConfig, webhookSecret: val })}
                     placeholder="whsec_..."
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-amber-500 font-mono"
                   />
                 </div>
               </div>
@@ -945,12 +973,10 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
 
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-zinc-300">Client Secret</label>
-                  <input
-                    type="password"
+                  <SecretInput
                     value={pathaoConfig.clientSecret}
-                    onChange={(e) => setPathaoConfig({ ...pathaoConfig, clientSecret: e.target.value })}
+                    onChange={(val) => setPathaoConfig({ ...pathaoConfig, clientSecret: val })}
                     placeholder="sec_pth_live_..."
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-amber-500 font-mono"
                   />
                 </div>
 
@@ -969,12 +995,10 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
 
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-zinc-300">Pathao Account Password</label>
-                  <input
-                    type="password"
+                  <SecretInput
                     value={pathaoConfig.password || ''}
-                    onChange={(e) => setPathaoConfig({ ...pathaoConfig, password: e.target.value })}
+                    onChange={(val) => setPathaoConfig({ ...pathaoConfig, password: val })}
                     placeholder="••••••••"
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-amber-500 font-mono"
                   />
                 </div>
               </div>
@@ -1178,12 +1202,10 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
 
                     <div className="space-y-1.5">
                       <label className="text-xs font-medium text-zinc-300">Meta App Secret (HMAC-SHA256)</label>
-                      <input
-                        type="password"
+                      <SecretInput
                         value={metaConfig.metaAppSecret || ''}
-                        onChange={(e) => setMetaConfig({ ...metaConfig, metaAppSecret: e.target.value })}
+                        onChange={(val) => setMetaConfig({ ...metaConfig, metaAppSecret: val })}
                         placeholder="Meta App Secret for signature verification"
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-amber-500 font-mono"
                       />
                     </div>
 
@@ -1206,12 +1228,10 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
 
                     <div className="space-y-1.5">
                       <label className="text-xs font-medium text-zinc-300">Page Access Token (Long-Lived)</label>
-                      <input
-                        type="password"
+                      <SecretInput
                         value={metaConfig.pageAccessToken || ''}
-                        onChange={(e) => setMetaConfig({ ...metaConfig, pageAccessToken: e.target.value })}
+                        onChange={(val) => setMetaConfig({ ...metaConfig, pageAccessToken: val })}
                         placeholder="EAAB... (Never expires token)"
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-amber-500 font-mono"
                       />
                     </div>
                   </div>
@@ -1265,14 +1285,10 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
 
                     <div className="space-y-1.5 sm:col-span-2">
                       <label className="text-xs font-medium text-zinc-300">WhatsApp System User Permanent Token</label>
-                      <input
-                        type="password"
+                      <SecretInput
                         value={metaConfig.whatsappAccessToken || ''}
-                        onChange={(e) =>
-                          setMetaConfig({ ...metaConfig, whatsappAccessToken: e.target.value })
-                        }
+                        onChange={(val) => setMetaConfig({ ...metaConfig, whatsappAccessToken: val })}
                         placeholder="EAAB... (Permanent System User Token with whatsapp_business_messaging)"
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-amber-500 font-mono"
                       />
                     </div>
                   </div>
@@ -1311,14 +1327,10 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
 
                     <div className="space-y-1.5 sm:col-span-2">
                       <label className="text-xs font-medium text-zinc-300">Conversions API Access Token</label>
-                      <input
-                        type="password"
+                      <SecretInput
                         value={metaConfig.conversionsApiToken || ''}
-                        onChange={(e) =>
-                          setMetaConfig({ ...metaConfig, conversionsApiToken: e.target.value })
-                        }
+                        onChange={(val) => setMetaConfig({ ...metaConfig, conversionsApiToken: val })}
                         placeholder="EAAQ...capi_token"
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-amber-500 font-mono"
                       />
                     </div>
                   </div>
@@ -1742,11 +1754,10 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
 
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-zinc-300">Access Token</label>
-                  <input
-                    type="password"
+                  <SecretInput
                     required
                     value={whatsappConfig.accessToken}
-                    onChange={(e) => setWhatsappConfig({ ...whatsappConfig, accessToken: e.target.value })}
+                    onChange={(val) => setWhatsappConfig({ ...whatsappConfig, accessToken: val })}
                     placeholder="EAAG...token"
                     className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500 font-mono"
                   />

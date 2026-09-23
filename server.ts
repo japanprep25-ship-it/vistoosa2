@@ -544,6 +544,8 @@ const handlePathaoPickup = async (req: express.Request, res: express.Response) =
     recipientPhone,
     address,
     recipientAddress,
+    city,
+    recipientCity,
     recipientCityId,
     recipientZoneId,
     cityId,
@@ -558,10 +560,10 @@ const handlePathaoPickup = async (req: express.Request, res: express.Response) =
   const clientName = recipientName || customerName || 'Valued Customer';
   const clientPhone = recipientPhone || phone || '01700000000';
   const clientAddress = recipientAddress || address || 'House 12, Road 5, Banani, Dhaka';
+  const clientCity = recipientCity || city || '';
 
-  // Default to City ID 1 (Dhaka) and Zone ID 1 if not explicitly provided
-  const parsedCityId = Number(recipientCityId || cityId || 1);
-  const parsedZoneId = Number(recipientZoneId || zoneId || 1);
+  const parsedCityId = Number(recipientCityId || cityId || 0);
+  const parsedZoneId = Number(recipientZoneId || zoneId || 0);
 
   try {
     const result = await createPathaoOrder(userId, {
@@ -569,8 +571,9 @@ const handlePathaoPickup = async (req: express.Request, res: express.Response) =
       recipientName: clientName,
       recipientPhone: clientPhone,
       recipientAddress: clientAddress,
-      recipientCityId: parsedCityId,
-      recipientZoneId: parsedZoneId,
+      recipientCity: clientCity,
+      recipientCityId: parsedCityId || undefined,
+      recipientZoneId: parsedZoneId || undefined,
       amountToCollect: Number(amountToCollect || 0),
       itemDescription: itemDescription || 'Vistoosa Luxury Apparel Order',
       itemQuantity: Number(itemQuantity || 1),

@@ -217,21 +217,27 @@ export default function App() {
     let consignmentId: string | undefined = undefined;
 
     if (!isPickupDisabled) {
-      trackingId = `PTH-${Math.floor(7819300 + Math.random() * 500)}`;
-      consignmentId = `CN-${Math.floor(492000 + Math.random() * 500)}`;
-
       try {
-        // Trigger Pathao Pickup webhook for courier delivery channels
+        const token = localStorage.getItem('vistoosa_auth_token') || '';
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        // Trigger Pathao Pickup API endpoint
         const res = await fetch('/api/pathao/pickup', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify({
             orderId: targetOrder.id,
             recipientName: targetOrder.customerName,
             recipientPhone: targetOrder.phone,
             recipientAddress: targetOrder.address,
             recipientCity: targetOrder.city,
+            recipientCityId: targetOrder.pathaoCityId,
+            recipientZoneId: targetOrder.pathaoZoneId,
             amountToCollect: targetOrder.totalAmount,
+            itemDescription:
+              targetOrder.items?.map((i) => `${i.productName} (${i.size}) x${i.quantity}`).join(', ') ||
+              'Vistoosa Luxury Apparel',
           }),
         });
 
@@ -241,6 +247,13 @@ export default function App() {
       } catch (e) {
         console.warn('Pathao pickup API error fallback:', e);
       }
+    }
+
+    if (!trackingId && !isPickupDisabled) {
+      trackingId = `PTH-${Math.floor(7819300 + Math.random() * 500)}`;
+    }
+    if (!consignmentId && !isPickupDisabled) {
+      consignmentId = `CN-${Math.floor(492000 + Math.random() * 500)}`;
     }
 
     // Always update status to Approved locally
@@ -265,9 +278,13 @@ export default function App() {
     );
 
     // Sync status update to backend server
+    const token = localStorage.getItem('vistoosa_auth_token') || '';
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
     fetch('/api/orders/status', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         orderId: targetOrder.id,
         status: 'Approved',

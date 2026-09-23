@@ -27,6 +27,9 @@ import {
   saveUserWorkspaceData,
   getUserLanguage,
   setUserLanguage,
+  softDeleteUserOrders,
+  restoreUserOrders,
+  deleteUserOrdersPermanently,
 } from './userWorkspaceStore';
 
 const app = express();
@@ -957,6 +960,69 @@ app.post('/api/orders/import', extractOptionalAuth, async (req: AuthenticatedReq
   } catch (err: any) {
     console.error('[CSV Import Error]:', err);
     return res.status(500).json({ success: false, error: err?.message || 'Failed to import orders to Firestore' });
+  }
+});
+
+// Soft Delete Orders (Move to Trash)
+app.post('/api/orders/soft-delete', extractOptionalAuth, async (req: AuthenticatedRequest, res) => {
+  const userId = req.userId || 'usr_admin_default';
+  const { orderIds } = req.body || {};
+  if (!Array.isArray(orderIds) || orderIds.length === 0) {
+    return res.status(400).json({ success: false, error: 'Missing or invalid orderIds array' });
+  }
+
+  try {
+    await softDeleteUserOrders(userId, orderIds);
+    return res.json({
+      success: true,
+      message: `${orderIds.length} order(s) moved to Trash.`,
+      count: orderIds.length,
+    });
+  } catch (err: any) {
+    console.error('[Soft Delete Error]:', err);
+    return res.status(500).json({ success: false, error: err?.message || 'Failed to soft delete orders' });
+  }
+});
+
+// Restore Orders from Trash
+app.post('/api/orders/restore', extractOptionalAuth, async (req: AuthenticatedRequest, res) => {
+  const userId = req.userId || 'usr_admin_default';
+  const { orderIds } = req.body || {};
+  if (!Array.isArray(orderIds) || orderIds.length === 0) {
+    return res.status(400).json({ success: false, error: 'Missing or invalid orderIds array' });
+  }
+
+  try {
+    await restoreUserOrders(userId, orderIds);
+    return res.json({
+      success: true,
+      message: `${orderIds.length} order(s) restored from Trash.`,
+      count: orderIds.length,
+    });
+  } catch (err: any) {
+    console.error('[Restore Error]:', err);
+    return res.status(500).json({ success: false, error: err?.message || 'Failed to restore orders' });
+  }
+});
+
+// Permanently Delete Orders from Firestore
+app.post('/api/orders/permanent-delete', extractOptionalAuth, async (req: AuthenticatedRequest, res) => {
+  const userId = req.userId || 'usr_admin_default';
+  const { orderIds } = req.body || {};
+  if (!Array.isArray(orderIds) || orderIds.length === 0) {
+    return res.status(400).json({ success: false, error: 'Missing or invalid orderIds array' });
+  }
+
+  try {
+    await deleteUserOrdersPermanently(userId, orderIds);
+    return res.json({
+      success: true,
+      message: `${orderIds.length} order(s) permanently deleted.`,
+      count: orderIds.length,
+    });
+  } catch (err: any) {
+    console.error('[Permanent Delete Error]:', err);
+    return res.status(500).json({ success: false, error: err?.message || 'Failed to permanently delete orders' });
   }
 });
 

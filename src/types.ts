@@ -8,7 +8,7 @@ export interface AuthUser {
   avatarUrl?: string;
 }
 
-export type OrderStatus = 'Pending' | 'Approved' | 'Dispatched' | 'Delivered' | 'Cancelled';
+export type OrderStatus = 'Pending' | 'Approved' | 'Dispatched' | 'Delivered' | 'Cancelled' | 'Return' | 'Paid Return';
 
 export type OrderChannel = 'Facebook' | 'Instagram' | 'WhatsApp' | 'Website' | 'Showroom';
 
@@ -20,6 +20,10 @@ export interface OrderItem {
   size: 'S' | 'M' | 'L' | 'XL' | 'XXL';
   quantity: number;
   unitPrice: number;
+  // Dispatch Checklist status
+  isDispatched?: boolean;
+  dispatchedAt?: string;
+  scannedBarcode?: string;
   // If overridden during barcode packing
   overriddenFromSku?: string;
   overriddenFromSize?: string;
@@ -28,6 +32,7 @@ export interface OrderItem {
 export interface Order {
   id: string; // e.g. VIS-1082
   customerName: string;
+  email?: string;
   phone: string;
   address: string;
   city: 'Inside Dhaka' | 'Sub-Dhaka' | 'Outside Dhaka';
@@ -52,6 +57,8 @@ export interface Order {
   rawConversation?: { sender: string; text: string; timestamp?: string; attachmentUrl?: string }[];
   confidence?: 'complete' | 'incomplete';
   missingFields?: string[];
+  isDeleted?: boolean;
+  deletedAt?: string;
   overrideHistory?: {
     timestamp: string;
     originalSku: string;

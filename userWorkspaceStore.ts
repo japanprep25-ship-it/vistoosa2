@@ -213,3 +213,53 @@ export async function setUserLanguage(userId: string, language: 'en' | 'bn'): Pr
     console.error(`[UserWorkspaceStore]: setUserLanguage error for user ${userId}:`, err?.message || err);
   }
 }
+
+export async function softDeleteUserOrders(userId: string, orderIds: string[]): Promise<void> {
+  if (!userId || !Array.isArray(orderIds) || orderIds.length === 0) return;
+  try {
+    const batch = db.batch();
+    const deletedAt = new Date().toISOString();
+    for (const id of orderIds) {
+      if (!id) continue;
+      const docRef = db.collection(ORDERS_COLLECTION).doc(String(id));
+      batch.update(docRef, { isDeleted: true, deletedAt, updatedAt: deletedAt });
+    }
+    await batch.commit();
+    console.log(`[UserWorkspaceStore]: Soft deleted ${orderIds.length} orders for user ${userId}`);
+  } catch (err: any) {
+    console.error(`[UserWorkspaceStore]: softDeleteUserOrders error for user ${userId}:`, err?.message || err);
+  }
+}
+
+export async function restoreUserOrders(userId: string, orderIds: string[]): Promise<void> {
+  if (!userId || !Array.isArray(orderIds) || orderIds.length === 0) return;
+  try {
+    const batch = db.batch();
+    const updatedAt = new Date().toISOString();
+    for (const id of orderIds) {
+      if (!id) continue;
+      const docRef = db.collection(ORDERS_COLLECTION).doc(String(id));
+      batch.update(docRef, { isDeleted: false, deletedAt: null, updatedAt });
+    }
+    await batch.commit();
+    console.log(`[UserWorkspaceStore]: Restored ${orderIds.length} orders for user ${userId}`);
+  } catch (err: any) {
+    console.error(`[UserWorkspaceStore]: restoreUserOrders error for user ${userId}:`, err?.message || err);
+  }
+}
+
+export async function deleteUserOrdersPermanently(userId: string, orderIds: string[]): Promise<void> {
+  if (!userId || !Array.isArray(orderIds) || orderIds.length === 0) return;
+  try {
+    const batch = db.batch();
+    for (const id of orderIds) {
+      if (!id) continue;
+      const docRef = db.collection(ORDERS_COLLECTION).doc(String(id));
+      batch.delete(docRef);
+    }
+    await batch.commit();
+    console.log(`[UserWorkspaceStore]: Permanently deleted ${orderIds.length} orders for user ${userId}`);
+  } catch (err: any) {
+    console.error(`[UserWorkspaceStore]: deleteUserOrdersPermanently error for user ${userId}:`, err?.message || err);
+  }
+}

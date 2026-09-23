@@ -198,9 +198,10 @@ export default function App() {
     return () => clearInterval(interval);
   }, [currentUser, authToken]);
 
-  // Quick stats
-  const pendingOrdersCount = orders.filter((o) => o.status === 'Pending').length;
-  const approvedDispatchCount = orders.filter((o) => o.status === 'Approved').length;
+  // Quick stats (filter out soft deleted orders)
+  const activeOrdersList = orders.filter((o) => !o.isDeleted);
+  const pendingOrdersCount = activeOrdersList.filter((o) => o.status === 'Pending').length;
+  const approvedDispatchCount = activeOrdersList.filter((o) => o.status === 'Approved').length;
   const discrepancyCount = payouts.filter((p) => p.reconciliationStatus === 'Discrepancy').length;
 
   // Handlers for Orders
@@ -208,29 +209,37 @@ export default function App() {
     const targetOrder = orders.find((o) => o.id === orderId);
     if (!targetOrder) return;
 
-    let trackingId = `PTH-${Math.floor(7819300 + Math.random() * 500)}`;
-    let consignmentId = `CN-${Math.floor(492000 + Math.random() * 500)}`;
+    // SHOWROOM ORDER: Skip Pathao courier pickup request logic
+    const isShowroom = targetOrder.channel === 'Showroom';
 
-    try {
-      // Trigger Pathao Pickup webhook
-      const res = await fetch('/api/pathao/pickup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          orderId: targetOrder.id,
-          recipientName: targetOrder.customerName,
-          recipientPhone: targetOrder.phone,
-          recipientAddress: targetOrder.address,
-          recipientCity: targetOrder.city,
-          amountToCollect: targetOrder.totalAmount,
-        }),
-      });
+    let trackingId: string | undefined = undefined;
+    let consignmentId: string | undefined = undefined;
 
-      const data = await res.json();
-      if (data.trackingId) trackingId = data.trackingId;
-      if (data.consignmentId) consignmentId = data.consignmentId;
-    } catch (e) {
-      console.warn('Pathao pickup API error fallback:', e);
+    if (!isShowroom) {
+      trackingId = `PTH-${Math.floor(7819300 + Math.random() * 500)}`;
+      consignmentId = `CN-${Math.floor(492000 + Math.random() * 500)}`;
+
+      try {
+        // Trigger Pathao Pickup webhook for courier delivery channels
+        const res = await fetch('/api/pathao/pickup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orderId: targetOrder.id,
+            recipientName: targetOrder.customerName,
+            recipientPhone: targetOrder.phone,
+            recipientAddress: targetOrder.address,
+            recipientCity: targetOrder.city,
+            amountToCollect: targetOrder.totalAmount,
+          }),
+        });
+
+        const data = await res.json();
+        if (data.trackingId) trackingId = data.trackingId;
+        if (data.consignmentId) consignmentId = data.consignmentId;
+      } catch (e) {
+        console.warn('Pathao pickup API error fallback:', e);
+      }
     }
 
     // Always update status to Approved locally
@@ -243,7 +252,10 @@ export default function App() {
             approvedAt: new Date().toISOString(),
             pathaoTrackingId: trackingId,
             pathaoConsignmentId: consignmentId,
-            pathaoStatus: 'Pickup Requested',
+            pathaoStatus: isShowroom ? undefined : 'Pickup Requested',
+            notes: isShowroom
+              ? (o.notes ? `${o.notes} • ` : '') + 'Showroom Direct Sale (Pathao Pickup Skipped)'
+              : o.notes,
           };
         }
         return o;
@@ -362,6 +374,66 @@ export default function App() {
     }).catch((err) => {
       console.warn('Failed to sync updated order to server:', err);
     });
+  };
+
+  // Handlers for Soft Delete, Restore, and Permanent Delete
+  const handleSoftDeleteOrders = async (orderIds: string[]) => {
+    const deletedAt = new Date().toISOString();
+    setOrders((prev) =>
+      prev.map((o) => (orderIds.includes(o.id) ? { ...o, isDeleted: true, deletedAt } : o))
+    );
+
+    try {
+      const token = localStorage.getItem('vistoosa_auth_token');
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      await fetch('/api/orders/soft-delete', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ orderIds }),
+      });
+    } catch (err) {
+      console.warn('Soft delete API error:', err);
+    }
+  };
+
+  const handleRestoreOrders = async (orderIds: string[]) => {
+    setOrders((prev) =>
+      prev.map((o) => (orderIds.includes(o.id) ? { ...o, isDeleted: false, deletedAt: undefined } : o))
+    );
+
+    try {
+      const token = localStorage.getItem('vistoosa_auth_token');
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      await fetch('/api/orders/restore', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ orderIds }),
+      });
+    } catch (err) {
+      console.warn('Restore API error:', err);
+    }
+  };
+
+  const handlePermanentDeleteOrders = async (orderIds: string[]) => {
+    setOrders((prev) => prev.filter((o) => !orderIds.includes(o.id)));
+
+    try {
+      const token = localStorage.getItem('vistoosa_auth_token');
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      await fetch('/api/orders/permanent-delete', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ orderIds }),
+      });
+    } catch (err) {
+      console.warn('Permanent delete API error:', err);
+    }
   };
 
   // CRITICAL LOGIC: Barcode Dispatch & Real-Product Override Handler
@@ -597,6 +669,9 @@ export default function App() {
               }}
               onCreateOrder={handleCreateOrder}
               onUpdateOrder={handleUpdateOrder}
+              onSoftDeleteOrders={handleSoftDeleteOrders}
+              onRestoreOrders={handleRestoreOrders}
+              onPermanentDeleteOrders={handlePermanentDeleteOrders}
             />
           )}
 

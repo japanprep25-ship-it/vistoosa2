@@ -29,6 +29,11 @@ import {
   FileCheck,
   Check,
   FileText,
+  Trash2,
+  ArrowLeft,
+  AlertTriangle,
+  CheckSquare,
+  Square,
 } from 'lucide-react';
 import { Order, OrderStatus, OrderChannel, Product } from '../types';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -66,6 +71,9 @@ interface OrderEngineViewProps {
   onGoToDispatch: (orderId: string) => void;
   onCreateOrder: (newOrder: Partial<Order>) => void;
   onUpdateOrder?: (updatedOrder: Order) => void;
+  onSoftDeleteOrders?: (orderIds: string[]) => void;
+  onRestoreOrders?: (orderIds: string[]) => void;
+  onPermanentDeleteOrders?: (orderIds: string[]) => void;
 }
 
 export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
@@ -76,6 +84,9 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
   onGoToDispatch,
   onCreateOrder,
   onUpdateOrder,
+  onSoftDeleteOrders,
+  onRestoreOrders,
+  onPermanentDeleteOrders,
 }) => {
   const { t } = useLanguage();
   const [filters, setFilters] = useState<OrderFilterState>(initialFilterState);
@@ -84,6 +95,65 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [selectedChatOrder, setSelectedChatOrder] = useState<Order | null>(null);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
+
+  // Trash & Bulk selection state
+  const [viewMode, setViewMode] = useState<'active' | 'trash'>('active');
+  const [engineViewMode, setEngineViewMode] = useState<'queue' | 'dashboard'>('queue');
+  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
+  const [isSoftDeleteConfirmOpen, setIsSoftDeleteConfirmOpen] = useState(false);
+  const [isPermanentDeleteConfirmOpen, setIsPermanentDeleteConfirmOpen] = useState(false);
+
+  // Return sub-filter state
+  const [returnSubFilter, setReturnSubFilter] = useState<'all' | 'Return' | 'Paid Return'>('all');
+
+  // Dashboard view date range filter
+  const [dashboardFromDate, setDashboardFromDate] = useState('');
+  const [dashboardToDate, setDashboardToDate] = useState('');
+
+  // Partition orders into Active (non-deleted) and Trashed (isDeleted: true)
+  const activeOrders = useMemo(() => orders.filter((o) => !o.isDeleted), [orders]);
+  const trashedOrders = useMemo(() => orders.filter((o) => o.isDeleted === true), [orders]);
+
+  // Compute status counts for badge tabs
+  const statusCounts = useMemo(() => {
+    const list = activeOrders;
+    return {
+      all: list.length,
+      pending: list.filter((o) => o.status === 'Pending').length,
+      approved: list.filter((o) => o.status === 'Approved').length,
+      dispatched: list.filter((o) => o.status === 'Dispatched').length,
+      delivered: list.filter((o) => o.status === 'Delivered').length,
+      returnTotal: list.filter(
+        (o) =>
+          o.status === 'Return' ||
+          o.status === 'Paid Return' ||
+          o.pathaoStatus === 'Return' ||
+          o.pathaoStatus === 'Paid Return'
+      ).length,
+      returnStandard: list.filter(
+        (o) =>
+          (o.status === 'Return' || o.pathaoStatus === 'Return') &&
+          o.status !== 'Paid Return' &&
+          o.pathaoStatus !== 'Paid Return'
+      ).length,
+      returnPaid: list.filter((o) => o.status === 'Paid Return' || o.pathaoStatus === 'Paid Return').length,
+    };
+  }, [activeOrders]);
+
+  // Handle opening Pathao tracking URL in new tab
+  const handleOpenTrackingUrl = (order?: Order) => {
+    if (!order) return;
+    if (order.channel === 'Showroom') {
+      alert('Showroom Direct Sale: In-store order — No courier tracking URL available.');
+      return;
+    }
+    const trackingId = order.pathaoConsignmentId || order.pathaoTrackingId;
+    if (trackingId) {
+      window.open(`https://pathao.com/courier/tracking/?consignment_id=${trackingId}`, '_blank');
+    } else {
+      alert('No Pathao tracking ID found for this order.');
+    }
+  };
 
   // CSV Export & Import State
   const [exportFromDate, setExportFromDate] = useState('');
@@ -94,9 +164,9 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
   const [importSuccessMsg, setImportSuccessMsg] = useState('');
   const [uploadFileName, setUploadFileName] = useState('');
 
-  // CSV Export Handler with Date Range Filter
+  // CSV Export Handler with Date Range Filter (Active orders only)
   const handleExportCsv = () => {
-    let filtered = [...orders];
+    let filtered = [...activeOrders];
 
     if (exportFromDate) {
       const fromTime = new Date(`${exportFromDate}T00:00:00`).getTime();
@@ -439,41 +509,261 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
     setEditingOrder(order);
   };
 
-  const filteredOrders = useMemo(
-    () => filterOrders(orders, filters, searchQuery),
-    [orders, filters, searchQuery]
-  );
+  // Filter Active orders using the filter panel criteria and Return sub-filter
+  const filteredActiveOrders = useMemo(() => {
+    let list = filterOrders(activeOrders, filters, searchQuery);
+
+    if (filters.statuses.includes('Return' as OrderStatus)) {
+      if (returnSubFilter === 'Return') {
+        list = list.filter(
+          (o) =>
+            (o.status === 'Return' || o.pathaoStatus === 'Return') &&
+            o.status !== 'Paid Return' &&
+            o.pathaoStatus !== 'Paid Return'
+        );
+      } else if (returnSubFilter === 'Paid Return') {
+        list = list.filter(
+          (o) => o.status === 'Paid Return' || o.pathaoStatus === 'Paid Return'
+        );
+      } else {
+        list = list.filter(
+          (o) =>
+            o.status === 'Return' ||
+            o.status === 'Paid Return' ||
+            o.pathaoStatus === 'Return' ||
+            o.pathaoStatus === 'Paid Return'
+        );
+      }
+    }
+    return list;
+  }, [activeOrders, filters, searchQuery, returnSubFilter]);
+
+  // Filter active orders for Order Engine Analytics Dashboard based on Date Range
+  const dashboardFilteredOrders = useMemo(() => {
+    let list = [...activeOrders];
+    if (dashboardFromDate) {
+      const fromTime = new Date(`${dashboardFromDate}T00:00:00`).getTime();
+      list = list.filter((o) => new Date(o.createdAt || 0).getTime() >= fromTime);
+    }
+    if (dashboardToDate) {
+      const toTime = new Date(`${dashboardToDate}T23:59:59`).getTime();
+      list = list.filter((o) => new Date(o.createdAt || 0).getTime() <= toTime);
+    }
+    return list;
+  }, [activeOrders, dashboardFromDate, dashboardToDate]);
+
+  // Dashboard KPI metrics
+  const dashboardMetrics = useMemo(() => {
+    const list = dashboardFilteredOrders;
+    const totalOrders = list.length;
+    const deliveredCount = list.filter((o) => o.status === 'Delivered').length;
+    const returnStandardCount = list.filter(
+      (o) =>
+        (o.status === 'Return' || o.pathaoStatus === 'Return') &&
+        o.status !== 'Paid Return' &&
+        o.pathaoStatus !== 'Paid Return'
+    ).length;
+    const returnPaidCount = list.filter(
+      (o) => o.status === 'Paid Return' || o.pathaoStatus === 'Paid Return'
+    ).length;
+    const returnTotalCount = returnStandardCount + returnPaidCount;
+
+    const pendingCount = list.filter((o) => o.status === 'Pending').length;
+    const approvedCount = list.filter((o) => o.status === 'Approved').length;
+    const dispatchedCount = list.filter((o) => o.status === 'Dispatched').length;
+    const cancelledCount = list.filter((o) => o.status === 'Cancelled').length;
+
+    const totalRevenue = list.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+
+    // Channels breakdown
+    const channelMap: { [ch in OrderChannel]?: { count: number; total: number } } = {};
+    (['WhatsApp', 'Facebook', 'Instagram', 'Website', 'Showroom'] as OrderChannel[]).forEach((ch) => {
+      channelMap[ch] = { count: 0, total: 0 };
+    });
+
+    list.forEach((o) => {
+      if (channelMap[o.channel]) {
+        channelMap[o.channel]!.count += 1;
+        channelMap[o.channel]!.total += o.totalAmount || 0;
+      }
+    });
+
+    return {
+      totalOrders,
+      deliveredCount,
+      returnTotalCount,
+      returnStandardCount,
+      returnPaidCount,
+      pendingCount,
+      approvedCount,
+      dispatchedCount,
+      cancelledCount,
+      totalRevenue,
+      channelMap,
+    };
+  }, [dashboardFilteredOrders]);
+
+  // Filter Trashed orders using search query
+  const filteredTrashedOrders = useMemo(() => {
+    if (!searchQuery.trim()) return trashedOrders;
+    const q = searchQuery.toLowerCase().trim();
+    return trashedOrders.filter((o) => {
+      const firstItem = o.items && o.items[0];
+      return (
+        o.id.toLowerCase().includes(q) ||
+        o.customerName.toLowerCase().includes(q) ||
+        o.phone.includes(q) ||
+        (o.address && o.address.toLowerCase().includes(q)) ||
+        (o.district && o.district.toLowerCase().includes(q)) ||
+        (firstItem?.productName && firstItem.productName.toLowerCase().includes(q))
+      );
+    });
+  }, [trashedOrders, searchQuery]);
+
+  // Displayed orders depending on viewMode ('active' vs 'trash')
+  const displayedOrders = viewMode === 'active' ? filteredActiveOrders : filteredTrashedOrders;
+
+  // Selection state helpers
+  const isAllSelected =
+    displayedOrders.length > 0 &&
+    displayedOrders.every((o) => selectedOrderIds.includes(o.id));
+
+  const handleToggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedOrderIds([]);
+    } else {
+      setSelectedOrderIds(displayedOrders.map((o) => o.id));
+    }
+  };
+
+  const handleToggleSelectOrder = (id: string) => {
+    setSelectedOrderIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  // Soft Delete Action Handler
+  const handleConfirmSoftDelete = () => {
+    if (selectedOrderIds.length === 0) return;
+    if (onSoftDeleteOrders) {
+      onSoftDeleteOrders(selectedOrderIds);
+    }
+    setSelectedOrderIds([]);
+    setIsSoftDeleteConfirmOpen(false);
+  };
+
+  // Restore Action Handler
+  const handleConfirmRestore = () => {
+    if (selectedOrderIds.length === 0) return;
+    if (onRestoreOrders) {
+      onRestoreOrders(selectedOrderIds);
+    }
+    setSelectedOrderIds([]);
+  };
+
+  // Permanent Delete Action Handler
+  const handleConfirmPermanentDelete = () => {
+    if (selectedOrderIds.length === 0) return;
+    if (onPermanentDeleteOrders) {
+      onPermanentDeleteOrders(selectedOrderIds);
+    }
+    setSelectedOrderIds([]);
+    setIsPermanentDeleteConfirmOpen(false);
+  };
 
   const activeFilterCount = countActiveFilters(filters);
 
-  const getStatusBadge = (status: OrderStatus) => {
+  const getStatusBadge = (status: OrderStatus, order?: Order) => {
+    const hasTracking = Boolean(order?.pathaoTrackingId || order?.pathaoConsignmentId);
+    const clickHandler = order ? () => handleOpenTrackingUrl(order) : undefined;
+    const titleText = hasTracking
+      ? 'Click to open Pathao Courier Tracking URL in new tab'
+      : order?.channel === 'Showroom'
+      ? 'Showroom Direct Sale (In-store order — No courier tracking)'
+      : undefined;
+
     switch (status) {
       case 'Pending':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+          <span
+            onClick={clickHandler}
+            title={titleText}
+            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 ${
+              order ? 'cursor-pointer hover:bg-amber-500/25 transition' : ''
+            }`}
+          >
             <Clock className="w-3 h-3 text-amber-400" />
             Pending Review
           </span>
         );
       case 'Approved':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-500/15 text-blue-300 border border-blue-500/30">
+          <span
+            onClick={clickHandler}
+            title={titleText}
+            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-500/15 text-blue-300 border border-blue-500/30 ${
+              order ? 'cursor-pointer hover:bg-blue-500/25 transition' : ''
+            }`}
+          >
             <Truck className="w-3 h-3 text-blue-400" />
             Approved • Ready for Packing
+            {hasTracking && <ExternalLink className="w-2.5 h-2.5 text-blue-400 ml-0.5" />}
           </span>
         );
       case 'Dispatched':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/30">
+          <span
+            onClick={clickHandler}
+            title={titleText}
+            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/30 ${
+              order ? 'cursor-pointer hover:bg-purple-500/25 transition' : ''
+            }`}
+          >
             <CheckCircle2 className="w-3 h-3 text-purple-400" />
             Dispatched • In Transit
+            {hasTracking && <ExternalLink className="w-2.5 h-2.5 text-purple-300 ml-0.5" />}
           </span>
         );
       case 'Delivered':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+          <span
+            onClick={clickHandler}
+            title={titleText}
+            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 ${
+              order ? 'cursor-pointer hover:bg-emerald-500/25 transition' : ''
+            }`}
+          >
             <CheckCircle2 className="w-3 h-3 text-emerald-400" />
             Delivered
+            {hasTracking && <ExternalLink className="w-2.5 h-2.5 text-emerald-300 ml-0.5" />}
+          </span>
+        );
+      case 'Return':
+        return (
+          <span
+            onClick={clickHandler}
+            title={titleText}
+            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30 ${
+              order ? 'cursor-pointer hover:bg-rose-500/25 transition' : ''
+            }`}
+          >
+            <RotateCcw className="w-3 h-3 text-rose-400" />
+            Return
+            {hasTracking && <ExternalLink className="w-2.5 h-2.5 text-rose-300 ml-0.5" />}
+          </span>
+        );
+      case 'Paid Return':
+        return (
+          <span
+            onClick={clickHandler}
+            title={titleText}
+            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/40 ${
+              order ? 'cursor-pointer hover:bg-amber-500/30 transition' : ''
+            }`}
+          >
+            <RotateCcw className="w-3 h-3 text-amber-400" />
+            Paid Return
+            {hasTracking && <ExternalLink className="w-2.5 h-2.5 text-amber-300 ml-0.5" />}
           </span>
         );
       case 'Cancelled':
@@ -529,8 +819,56 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
           </p>
         </div>
 
-        {/* Action Controls: CSV Import, Date-filtered Export, New Order */}
+        {/* Action Controls: Engine View Mode, CSV Import, Date-filtered Export, Trash, New Order */}
         <div className="flex flex-wrap items-center gap-2.5">
+          {/* Order Engine View Mode Switcher (Queue vs Dashboard) */}
+          <div className="flex items-center p-1 rounded-2xl bg-zinc-900 border border-zinc-800 text-xs">
+            <button
+              onClick={() => setEngineViewMode('queue')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold transition cursor-pointer ${
+                engineViewMode === 'queue'
+                  ? 'bg-amber-500 text-zinc-950 shadow-sm'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              <ShoppingBag className="w-3.5 h-3.5" />
+              <span>Orders Queue</span>
+            </button>
+            <button
+              onClick={() => setEngineViewMode('dashboard')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold transition cursor-pointer ${
+                engineViewMode === 'dashboard'
+                  ? 'bg-amber-500 text-zinc-950 shadow-sm'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Dashboard</span>
+            </button>
+          </div>
+
+          {/* Trash Toggle Button */}
+          <button
+            onClick={() => {
+              setViewMode((prev) => (prev === 'active' ? 'trash' : 'active'));
+              setSelectedOrderIds([]);
+            }}
+            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-2xl border text-xs font-bold transition cursor-pointer ${
+              viewMode === 'trash'
+                ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 shadow-lg shadow-rose-500/10'
+                : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-zinc-800'
+            }`}
+            title="View Trashed & Soft Deleted Orders"
+          >
+            <Trash2 className="w-4 h-4 text-rose-400" />
+            <span>{viewMode === 'trash' ? 'Back to Orders' : 'Trash'}</span>
+            {trashedOrders.length > 0 && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] bg-rose-500 text-white font-mono font-bold">
+                {trashedOrders.length}
+              </span>
+            )}
+          </button>
+
           {/* Import from CSV Button */}
           <button
             onClick={() => setIsImportModalOpen(true)}
@@ -563,7 +901,7 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
             <button
               onClick={handleExportCsv}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-sm active:scale-95 transition cursor-pointer"
-              title="Export filtered orders to CSV"
+              title="Export filtered active orders to CSV"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Export to CSV</span>
@@ -582,9 +920,235 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
         </div>
       </div>
 
-      {/* Filter & Search Bar */}
-      <div className="space-y-2.5">
-        <div className="glass-panel rounded-2xl p-3 flex flex-col md:flex-row items-center gap-3">
+      {/* Trash Mode Banner */}
+      {viewMode === 'trash' && (
+        <div className="p-4 rounded-2xl bg-rose-950/30 border border-rose-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-fade-in">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30 shrink-0">
+              <Trash2 className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <span>Trash / Deleted Orders (ট্র্যাশ তালিকা)</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                  {trashedOrders.length} items
+                </span>
+              </h3>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                Soft-deleted orders reside here. You can Restore them to active orders or Delete them Permanently.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              setViewMode('active');
+              setSelectedOrderIds([]);
+            }}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-100 text-xs font-bold transition cursor-pointer shrink-0"
+          >
+            <ArrowLeft className="w-4 h-4 text-amber-400" />
+            <span>Back to Orders (মূল লিস্টে ফিরুন)</span>
+          </button>
+        </div>
+      )}
+
+      {/* ENGINE VIEW MODE: DASHBOARD VS QUEUE */}
+      {engineViewMode === 'dashboard' ? (
+        <div className="space-y-6 animate-fade-in">
+          {/* Date Range Controls */}
+          <div className="glass-panel rounded-3xl p-5 border border-amber-500/20 space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-amber-400" />
+                  <span>Order Engine Analytics & Channel Dashboard</span>
+                </h3>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Select date range to filter total orders, delivery rate, returns, and channel breakdown.
+                </p>
+              </div>
+
+              {/* Quick Date Presets */}
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => {
+                    const today = new Date().toISOString().split('T')[0];
+                    setDashboardFromDate(today);
+                    setDashboardToDate(today);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-xs text-zinc-300 font-medium transition cursor-pointer"
+                >
+                  Today
+                </button>
+                <button
+                  onClick={() => {
+                    const now = new Date();
+                    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+                    setDashboardFromDate(weekAgo);
+                    setDashboardToDate(now.toISOString().split('T')[0]);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-xs text-zinc-300 font-medium transition cursor-pointer"
+                >
+                  This Week
+                </button>
+                <button
+                  onClick={() => {
+                    const now = new Date();
+                    const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+                    setDashboardFromDate(monthAgo);
+                    setDashboardToDate(now.toISOString().split('T')[0]);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-xs text-zinc-300 font-medium transition cursor-pointer"
+                >
+                  This Month
+                </button>
+                <button
+                  onClick={() => {
+                    setDashboardFromDate('');
+                    setDashboardToDate('');
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold transition cursor-pointer"
+                >
+                  All Time
+                </button>
+              </div>
+            </div>
+
+            {/* Date Inputs */}
+            <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-zinc-800">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-zinc-400 font-medium">From Date:</span>
+                <input
+                  type="date"
+                  value={dashboardFromDate}
+                  onChange={(e) => setDashboardFromDate(e.target.value)}
+                  className="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-amber-500 cursor-pointer"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-zinc-400 font-medium">To Date:</span>
+                <input
+                  type="date"
+                  value={dashboardToDate}
+                  onChange={(e) => setDashboardToDate(e.target.value)}
+                  className="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-amber-500 cursor-pointer"
+                />
+              </div>
+              <span className="text-xs text-amber-400 font-mono font-bold ml-auto">
+                Showing {dashboardMetrics.totalOrders} order(s) in selected date range
+              </span>
+            </div>
+          </div>
+
+          {/* KPI Cards Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Total Orders */}
+            <div className="glass-card rounded-2xl p-5 border-amber-500/30">
+              <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider block mb-1">
+                Total Orders (মোট অর্ডার)
+              </span>
+              <div className="flex items-baseline justify-between">
+                <span className="text-3xl font-black text-amber-400 font-mono">
+                  {dashboardMetrics.totalOrders}
+                </span>
+                <span className="text-xs font-mono text-zinc-400">
+                  ৳{dashboardMetrics.totalRevenue.toLocaleString()}
+                </span>
+              </div>
+            </div>
+
+            {/* Delivered Orders */}
+            <div className="glass-card rounded-2xl p-5 border-emerald-500/30">
+              <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider block mb-1">
+                Delivered Orders (ডেলিভার্ড)
+              </span>
+              <div className="flex items-baseline justify-between">
+                <span className="text-3xl font-black text-emerald-400 font-mono">
+                  {dashboardMetrics.deliveredCount}
+                </span>
+                <span className="text-xs font-semibold text-emerald-300">
+                  {dashboardMetrics.totalOrders > 0
+                    ? `${Math.round((dashboardMetrics.deliveredCount / dashboardMetrics.totalOrders) * 100)}% Success Rate`
+                    : '0%'}
+                </span>
+              </div>
+            </div>
+
+            {/* Returns Total */}
+            <div className="glass-card rounded-2xl p-5 border-rose-500/30">
+              <span className="text-[11px] font-bold text-rose-400 uppercase tracking-wider block mb-1">
+                Returns (রিটার্ন মোট)
+              </span>
+              <div className="flex items-baseline justify-between">
+                <span className="text-3xl font-black text-rose-400 font-mono">
+                  {dashboardMetrics.returnTotalCount}
+                </span>
+                <span className="text-[11px] text-zinc-400 font-mono">
+                  Std: {dashboardMetrics.returnStandardCount} • Paid: {dashboardMetrics.returnPaidCount}
+                </span>
+              </div>
+            </div>
+
+            {/* Pending & In-Pipeline */}
+            <div className="glass-card rounded-2xl p-5 border-blue-500/30">
+              <span className="text-[11px] font-bold text-blue-400 uppercase tracking-wider block mb-1">
+                In Pipeline (প্রসেসিং)
+              </span>
+              <div className="flex items-baseline justify-between">
+                <span className="text-2xl font-black text-blue-300 font-mono">
+                  {dashboardMetrics.pendingCount + dashboardMetrics.approvedCount + dashboardMetrics.dispatchedCount}
+                </span>
+                <span className="text-[10px] text-zinc-400 font-mono">
+                  P:{dashboardMetrics.pendingCount} | A:{dashboardMetrics.approvedCount} | D:{dashboardMetrics.dispatchedCount}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Channel Breakdown Card */}
+          <div className="glass-panel rounded-3xl p-6 border-zinc-800 space-y-4">
+            <h4 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+              <Layers className="w-4 h-4 text-amber-400" />
+              <span>Channel Wise Order Breakdown (চ্যানেল পারফরম্যান্স)</span>
+            </h4>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+              {(['WhatsApp', 'Facebook', 'Instagram', 'Website', 'Showroom'] as OrderChannel[]).map((channel) => {
+                const data = dashboardMetrics.channelMap[channel] || { count: 0, total: 0 };
+                const pct =
+                  dashboardMetrics.totalOrders > 0
+                    ? Math.round((data.count / dashboardMetrics.totalOrders) * 100)
+                    : 0;
+
+                return (
+                  <div key={channel} className="p-4 rounded-2xl bg-zinc-950/80 border border-zinc-800 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${getChannelColor(channel)}`}>
+                        {channel}
+                      </span>
+                      <span className="text-xs font-mono font-bold text-amber-400">{pct}%</span>
+                    </div>
+
+                    <div className="pt-2 flex items-baseline justify-between">
+                      <span className="text-2xl font-extrabold text-white font-mono">{data.count}</span>
+                      <span className="text-xs text-zinc-400 font-mono">৳{data.total.toLocaleString()}</span>
+                    </div>
+
+                    {/* Progress bar */}
+                    <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                      <div className="h-full bg-amber-500 rounded-full" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Filter & Search Bar */}
+          <div className="space-y-2.5">
+            <div className="glass-panel rounded-2xl p-3 flex flex-col md:flex-row items-center gap-3">
           {/* Search */}
           <div className="relative w-full md:w-72">
             <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-2.5" />
@@ -597,43 +1161,48 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
             />
           </div>
 
-          {/* Status Pills */}
-          <div className="flex items-center gap-1 overflow-x-auto w-full pb-1 md:pb-0 scrollbar-none">
-            {(['All', 'Pending', 'Approved', 'Dispatched', 'Delivered', 'Cancelled'] as const).map(
-              (st) => {
-                let label = st;
-                if (st === 'Pending') label = t('orders.pendingTab') as any;
-                else if (st === 'Approved') label = t('orders.approvedTab') as any;
-                else if (st === 'Dispatched') label = t('orders.dispatchedTab') as any;
-                else if (st === 'Delivered') label = t('orders.deliveredTab') as any;
-                else if (st === 'Cancelled') label = t('orders.cancelledTab') as any;
+          {/* Status Filter Tabs with Badge Counts */}
+          <div className="flex items-center gap-1.5 overflow-x-auto w-full pb-1 md:pb-0 scrollbar-none">
+            {[
+              { id: 'All', label: 'All', count: statusCounts.all },
+              { id: 'Pending', label: t('orders.pendingTab'), count: statusCounts.pending },
+              { id: 'Approved', label: t('orders.approvedTab'), count: statusCounts.approved },
+              { id: 'Dispatched', label: t('orders.dispatchedTab'), count: statusCounts.dispatched },
+              { id: 'Delivered', label: t('orders.deliveredTab'), count: statusCounts.delivered },
+              { id: 'Return', label: 'Return', count: statusCounts.returnTotal },
+            ].map((tab) => {
+              const isActive =
+                tab.id === 'All'
+                  ? filters.statuses.length === 0
+                  : filters.statuses.includes(tab.id as OrderStatus);
 
-                const isActive =
-                  st === 'All'
-                    ? filters.statuses.length === 0
-                    : filters.statuses.includes(st as OrderStatus);
-
-                return (
-                  <button
-                    key={st}
-                    onClick={() => {
-                      if (st === 'All') {
-                        setFilters((prev) => ({ ...prev, statuses: [] }));
-                      } else {
-                        setFilters((prev) => ({ ...prev, statuses: [st as OrderStatus] }));
-                      }
-                    }}
-                    className={`text-xs px-3 py-1.5 rounded-xl font-medium whitespace-nowrap transition cursor-pointer ${
-                      isActive
-                        ? 'bg-amber-500 text-zinc-950 font-bold shadow-sm shadow-amber-500/20'
-                        : 'bg-zinc-900/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => {
+                    if (tab.id === 'All') {
+                      setFilters((prev) => ({ ...prev, statuses: [] }));
+                    } else {
+                      setFilters((prev) => ({ ...prev, statuses: [tab.id as OrderStatus] }));
+                    }
+                  }}
+                  className={`text-xs px-3 py-1.5 rounded-xl font-medium whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 ${
+                    isActive
+                      ? 'bg-amber-500 text-zinc-950 font-bold shadow-sm shadow-amber-500/20'
+                      : 'bg-zinc-900/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                  <span
+                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
+                      isActive ? 'bg-zinc-950 text-amber-300' : 'bg-zinc-800 text-zinc-400'
                     }`}
                   >
-                    {label}
-                  </button>
-                );
-              }
-            )}
+                    {tab.count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
           {/* Channel Select & Filter Panel Button */}
@@ -688,6 +1257,46 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Return Sub-Tabs Bar (Shown when Return status is selected) */}
+        {filters.statuses.includes('Return' as OrderStatus) && (
+          <div className="flex items-center gap-2 p-2 rounded-2xl bg-rose-950/20 border border-rose-500/30 text-xs animate-fade-in">
+            <span className="text-[11px] font-bold text-rose-300 px-2 flex items-center gap-1">
+              <RotateCcw className="w-3.5 h-3.5 text-rose-400" />
+              Return Category Filter:
+            </span>
+            <button
+              onClick={() => setReturnSubFilter('all')}
+              className={`px-3 py-1 rounded-xl font-bold transition cursor-pointer ${
+                returnSubFilter === 'all'
+                  ? 'bg-rose-500 text-white shadow-sm'
+                  : 'bg-zinc-900 text-zinc-400 hover:text-white'
+              }`}
+            >
+              All Returns ({statusCounts.returnTotal})
+            </button>
+            <button
+              onClick={() => setReturnSubFilter('Return')}
+              className={`px-3 py-1 rounded-xl font-bold transition cursor-pointer ${
+                returnSubFilter === 'Return'
+                  ? 'bg-rose-500 text-white shadow-sm'
+                  : 'bg-zinc-900 text-zinc-400 hover:text-white'
+              }`}
+            >
+              Standard Return ({statusCounts.returnStandard})
+            </button>
+            <button
+              onClick={() => setReturnSubFilter('Paid Return')}
+              className={`px-3 py-1 rounded-xl font-bold transition cursor-pointer ${
+                returnSubFilter === 'Paid Return'
+                  ? 'bg-amber-500 text-zinc-950 shadow-sm'
+                  : 'bg-zinc-900 text-zinc-400 hover:text-white'
+              }`}
+            >
+              Paid Return ({statusCounts.returnPaid})
+            </button>
+          </div>
+        )}
 
         {/* Active Filter Chips Bar */}
         {activeFilterCount > 0 && (
@@ -866,42 +1475,123 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
           </div>
         )}
 
-        {/* Counter Readout */}
-        <div className="flex items-center justify-between text-xs text-zinc-400 font-mono px-1">
-          <span>
-            Showing <strong className="text-amber-400 font-bold">{filteredOrders.length}</strong> of{' '}
-            {orders.length} orders
-          </span>
-          {activeFilterCount > 0 && (
+        {/* Counter Readout & Selection Toolbar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-zinc-400 px-1">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleToggleSelectAll}
+              className="flex items-center gap-2 px-2.5 py-1 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-200 hover:text-white hover:border-zinc-700 text-xs font-bold transition cursor-pointer"
+            >
+              {isAllSelected ? (
+                <CheckSquare className="w-4 h-4 text-amber-400" />
+              ) : (
+                <Square className="w-4 h-4 text-zinc-500" />
+              )}
+              <span>Select All ({displayedOrders.length})</span>
+            </button>
+            <span className="font-mono">
+              Showing <strong className="text-amber-400 font-bold">{displayedOrders.length}</strong> of{' '}
+              {viewMode === 'active' ? activeOrders.length : trashedOrders.length} {viewMode === 'active' ? 'active' : 'trashed'} orders
+            </span>
+          </div>
+
+          {activeFilterCount > 0 && viewMode === 'active' && (
             <span className="text-[11px] text-amber-400 font-sans font-semibold">
               ({activeFilterCount} active filter criteria)
             </span>
           )}
         </div>
+
+        {/* Floating Bulk Action Bar when items are selected */}
+        {selectedOrderIds.length > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 shadow-xl shadow-amber-500/5 animate-fade-in">
+            <div className="flex items-center gap-2.5">
+              <span className="px-2.5 py-1 rounded-full bg-amber-500 text-zinc-950 font-bold text-xs font-mono">
+                {selectedOrderIds.length}
+              </span>
+              <span className="text-xs font-bold text-amber-200">
+                {selectedOrderIds.length}টি অর্ডার সিলেক্ট করা হয়েছে
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+              {viewMode === 'active' ? (
+                <button
+                  onClick={() => setIsSoftDeleteConfirmOpen(true)}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-lg shadow-rose-600/20 active:scale-95 transition cursor-pointer"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Delete Selected ({selectedOrderIds.length})</span>
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={handleConfirmRestore}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/20 active:scale-95 transition cursor-pointer"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    <span>Restore Selected ({selectedOrderIds.length})</span>
+                  </button>
+                  <button
+                    onClick={() => setIsPermanentDeleteConfirmOpen(true)}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-700 hover:bg-rose-600 text-white text-xs font-bold shadow-lg shadow-rose-700/20 active:scale-95 transition cursor-pointer"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>Delete Permanently ({selectedOrderIds.length})</span>
+                  </button>
+                </>
+              )}
+              <button
+                onClick={() => setSelectedOrderIds([])}
+                className="px-3 py-2 rounded-xl text-xs text-zinc-400 hover:text-white hover:bg-zinc-800 transition cursor-pointer"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Orders List / Cards */}
       <div className="space-y-3">
-        {filteredOrders.length === 0 ? (
+        {displayedOrders.length === 0 ? (
           <div className="text-center py-12 glass-panel rounded-3xl">
             <ShoppingBag className="w-10 h-10 text-zinc-600 mx-auto mb-2" />
-            <p className="text-sm font-semibold text-zinc-300">No orders found</p>
-            <p className="text-xs text-zinc-500">Try changing your search query or status filter</p>
+            <p className="text-sm font-semibold text-zinc-300">
+              {viewMode === 'trash' ? 'Trash is empty (ট্র্যাশে কোনো অর্ডার নেই)' : 'No active orders found'}
+            </p>
+            <p className="text-xs text-zinc-500">
+              {viewMode === 'trash'
+                ? 'Soft-deleted orders will appear here for 30 days or until permanently removed.'
+                : 'Try changing your search query or status filter'}
+            </p>
           </div>
         ) : (
-          filteredOrders.map((order) => (
+          displayedOrders.map((order) => (
             <div
               key={order.id}
-              className="glass-card rounded-2xl p-4 transition-all duration-200 hover:border-zinc-700 relative overflow-hidden"
+              className={`glass-card rounded-2xl p-4 transition-all duration-200 relative overflow-hidden ${
+                selectedOrderIds.includes(order.id)
+                  ? 'border-amber-500/60 bg-amber-500/5'
+                  : 'hover:border-zinc-700'
+              }`}
             >
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
                 {/* Order Top Meta */}
                 <div className="space-y-1.5">
                   <div className="flex flex-wrap items-center gap-2">
+                    {/* Select Row Checkbox */}
+                    <input
+                      type="checkbox"
+                      checked={selectedOrderIds.includes(order.id)}
+                      onChange={() => handleToggleSelectOrder(order.id)}
+                      className="w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-amber-500 focus:ring-amber-500 cursor-pointer accent-amber-500"
+                    />
+
                     <span className="font-mono text-xs font-bold text-amber-400 px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800">
                       {order.id}
                     </span>
-                    {getStatusBadge(order.status)}
+                    {getStatusBadge(order.status, order)}
                     <span
                       className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${getChannelColor(
                         order.channel
@@ -909,6 +1599,27 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                     >
                       {order.channel}
                     </span>
+
+                    {/* Dispatch Checklist Progress Badge */}
+                    {(() => {
+                      const totalCount = order.items?.length || 0;
+                      const checkedCount =
+                        order.items?.filter((i) => i.isDispatched || order.status === 'Dispatched').length || 0;
+                      if (totalCount > 0) {
+                        return (
+                          <span
+                            className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold border ${
+                              checkedCount === totalCount
+                                ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                            }`}
+                          >
+                            Checklist: {checkedCount}/{totalCount} verified
+                          </span>
+                        );
+                      }
+                      return null;
+                    })()}
 
                     {/* Meta / Inbound Source Tag */}
                     {order.source && (
@@ -1026,78 +1737,123 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                     )}
                   </div>
 
-                  {/* Actions according to Order State */}
+                  {/* Actions according to View Mode & Order State */}
                   <div className="flex items-center gap-2">
-                    {order.status === 'Pending' && (
+                    {viewMode === 'trash' ? (
                       <>
+                        {order.deletedAt && (
+                          <span className="text-[10px] text-rose-400 font-mono px-2 py-0.5 rounded bg-rose-500/10 border border-rose-500/20">
+                            Deleted {new Date(order.deletedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        )}
                         <button
-                          id={`btn-edit-order-${order.id}`}
-                          onClick={() => handleOpenEditModal(order)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-amber-500/20 text-amber-300 hover:text-amber-200 border border-zinc-700 hover:border-amber-500/40 text-xs font-semibold shadow-sm transition active:scale-95"
-                          title="Edit Customer Details, Phone, Address, Product, Size"
+                          onClick={() => {
+                            if (onRestoreOrders) onRestoreOrders([order.id]);
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-sm transition active:scale-95 cursor-pointer"
+                          title="Restore order back to active list"
                         >
-                          <Edit2 className="w-3.5 h-3.5 text-amber-400" />
-                          <span>Edit</span>
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>Restore</span>
                         </button>
-
                         <button
-                          id={`btn-approve-order-${order.id}`}
-                          onClick={() => onApproveOrder(order.id)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-zinc-950 text-xs font-bold shadow-sm transition active:scale-95"
-                          title="Trigger automated Pathao pickup and move to Approved"
+                          onClick={() => {
+                            setSelectedOrderIds([order.id]);
+                            setIsPermanentDeleteConfirmOpen(true);
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-700 hover:bg-rose-600 text-white text-xs font-bold shadow-sm transition active:scale-95 cursor-pointer"
+                          title="Permanently remove order document"
                         >
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>Approve & Pathao Pickup</span>
-                        </button>
-
-                        <button
-                          onClick={() => onCancelOrder(order.id)}
-                          className="px-2.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-red-500/20 text-zinc-400 hover:text-red-400 text-xs font-medium transition"
-                        >
-                          Dismiss
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Permanently Delete</span>
                         </button>
                       </>
+                    ) : (
+                      <>
+                        {order.status === 'Pending' && (
+                          <>
+                            <button
+                              id={`btn-edit-order-${order.id}`}
+                              onClick={() => handleOpenEditModal(order)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-amber-500/20 text-amber-300 hover:text-amber-200 border border-zinc-700 hover:border-amber-500/40 text-xs font-semibold shadow-sm transition active:scale-95 cursor-pointer"
+                              title="Edit Customer Details, Phone, Address, Product, Size"
+                            >
+                              <Edit2 className="w-3.5 h-3.5 text-amber-400" />
+                              <span>Edit</span>
+                            </button>
+
+                            <button
+                              id={`btn-approve-order-${order.id}`}
+                              onClick={() => onApproveOrder(order.id)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-zinc-950 text-xs font-bold shadow-sm transition active:scale-95 cursor-pointer"
+                              title="Trigger automated Pathao pickup and move to Approved"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Approve & Pathao Pickup</span>
+                            </button>
+
+                            <button
+                              onClick={() => onCancelOrder(order.id)}
+                              className="px-2.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-red-500/20 text-zinc-400 hover:text-red-400 text-xs font-medium transition cursor-pointer"
+                            >
+                              Dismiss
+                            </button>
+                          </>
+                        )}
+
+                        {order.status === 'Approved' && (
+                          <button
+                            id={`btn-dispatch-order-${order.id}`}
+                            onClick={() => onGoToDispatch(order.id)}
+                            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold shadow-sm transition active:scale-95 cursor-pointer"
+                          >
+                            <Layers className="w-3.5 h-3.5" />
+                            <span>Pack & Scan Barcode</span>
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+
+                        {order.status === 'Dispatched' && (
+                          <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-300 text-xs">
+                            <Truck className="w-3.5 h-3.5 text-purple-400" />
+                            <span>Pathao Pickup En Route</span>
+                          </div>
+                        )}
+
+                        {/* Direct Soft Delete Trash Icon */}
+                        <button
+                          onClick={() => {
+                            setSelectedOrderIds([order.id]);
+                            setIsSoftDeleteConfirmOpen(true);
+                          }}
+                          className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 transition cursor-pointer"
+                          title="Move Order to Trash"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+
+                        {/* Direct WhatsApp Call / Message */}
+                        <a
+                          href={`https://wa.me/880${order.phone.replace(/^0/, '')}?text=${encodeURIComponent(
+                            `Assalamu Alaikum ${order.customerName}, this is Vistoosa Haute Couture regarding your order #${order.id}.`
+                          )}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-emerald-400 hover:bg-zinc-800 transition"
+                          title="WhatsApp Customer"
+                        >
+                          <MessageSquare className="w-3.5 h-3.5" />
+                        </a>
+
+                        <a
+                          href={`tel:${order.phone}`}
+                          className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-800 transition"
+                          title="Direct Call"
+                        >
+                          <Phone className="w-3.5 h-3.5" />
+                        </a>
+                      </>
                     )}
-
-                    {order.status === 'Approved' && (
-                      <button
-                        id={`btn-dispatch-order-${order.id}`}
-                        onClick={() => onGoToDispatch(order.id)}
-                        className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold shadow-sm transition active:scale-95"
-                      >
-                        <Layers className="w-3.5 h-3.5" />
-                        <span>Pack & Scan Barcode</span>
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-
-                    {order.status === 'Dispatched' && (
-                      <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-300 text-xs">
-                        <Truck className="w-3.5 h-3.5 text-purple-400" />
-                        <span>Pathao Pickup En Route</span>
-                      </div>
-                    )}
-
-                    {/* Direct WhatsApp Call / Message */}
-                    <a
-                      href={`https://wa.me/880${order.phone.replace(/^0/, '')}?text=${encodeURIComponent(
-                        `Assalamu Alaikum ${order.customerName}, this is Vistoosa Haute Couture regarding your order #${order.id}.`
-                      )}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-emerald-400 hover:bg-zinc-800 transition"
-                      title="WhatsApp Customer"
-                    >
-                      <MessageSquare className="w-3.5 h-3.5" />
-                    </a>
-
-                    <a
-                      href={`tel:${order.phone}`}
-                      className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-800 transition"
-                      title="Direct Call"
-                    >
-                      <Phone className="w-3.5 h-3.5" />
-                    </a>
                   </div>
                 </div>
               </div>
@@ -1105,6 +1861,8 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
           ))
         )}
       </div>
+        </>
+      )}
 
       {/* Shared Create Order Modal */}
       <OrderFormModal
@@ -1475,6 +2233,81 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
         </div>
       )}
 
+      {/* Soft Delete Confirmation Modal */}
+      {isSoftDeleteConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-md rounded-3xl bg-zinc-900 border border-zinc-700 p-6 shadow-2xl relative space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-2xl bg-rose-500/15 text-rose-400 border border-rose-500/30">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Move to Trash / ট্র্যাশে পাঠান</h3>
+                <p className="text-xs text-zinc-400">Soft Delete Confirmation</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-zinc-300 leading-relaxed bg-zinc-950/80 p-3.5 rounded-2xl border border-zinc-800">
+              আপনি কি নিশ্চিত এই <strong className="text-amber-400 font-bold">{selectedOrderIds.length}</strong> টি অর্ডার Trash-এ পাঠাতে চান? (পরবর্তীতে Trash থেকে রিস্টোর করা যাবে)
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                onClick={() => setIsSoftDeleteConfirmOpen(false)}
+                className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold text-xs transition cursor-pointer"
+              >
+                Cancel (বাতিল)
+              </button>
+              <button
+                onClick={handleConfirmSoftDelete}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg shadow-rose-600/20 active:scale-95 transition cursor-pointer"
+              >
+                Move to Trash (ট্র্যাশে পাঠান)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Permanent Delete Warning Confirmation Modal */}
+      {isPermanentDeleteConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-md rounded-3xl bg-zinc-900 border border-rose-500/40 p-6 shadow-2xl relative space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-2xl bg-rose-500/20 text-rose-400 border border-rose-500/40 animate-pulse">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-rose-400">⚠️ Permanent Delete Warning</h3>
+                <p className="text-xs text-zinc-400">স্থায়ীভাবে মুছে ফেলার সতর্কতা</p>
+              </div>
+            </div>
+
+            <div className="text-xs text-zinc-200 leading-relaxed bg-rose-950/40 p-4 rounded-2xl border border-rose-500/30 space-y-2">
+              <p className="font-bold text-rose-300">⚠️ এই অ্যাকশন Undo করা যাবে না!</p>
+              <p>
+                আপনি কি নিশ্চিত এই <strong className="text-amber-400 font-bold">{selectedOrderIds.length}</strong> টি অর্ডার সম্পূর্ণভাবে মুছে ফেলতে চান?
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                onClick={() => setIsPermanentDeleteConfirmOpen(false)}
+                className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold text-xs transition cursor-pointer"
+              >
+                Cancel (বাতিল)
+              </button>
+              <button
+                onClick={handleConfirmPermanentDelete}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg shadow-rose-600/30 active:scale-95 transition cursor-pointer"
+              >
+                Yes, Delete Permanently (হ্যাঁ, স্থায়ীভাবে মুছুন)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Excel Advanced Filter Panel Drawer */}
       <OrderFilterPanel
         isOpen={isFilterPanelOpen}
@@ -1483,8 +2316,8 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
         filters={filters}
         onUpdateFilters={setFilters}
         onClearAll={() => setFilters(initialFilterState)}
-        totalOrdersCount={orders.length}
-        filteredOrdersCount={filteredOrders.length}
+        totalOrdersCount={activeOrders.length}
+        filteredOrdersCount={filteredActiveOrders.length}
       />
     </div>
   );

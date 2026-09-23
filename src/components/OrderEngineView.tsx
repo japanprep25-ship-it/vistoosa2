@@ -1600,6 +1600,13 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                       {order.channel}
                     </span>
 
+                    {/* Pathao Pickup Disabled Badge */}
+                    {order.disablePathaoPickup && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-300 font-medium font-mono">
+                        Pickup Off (No Pathao Req)
+                      </span>
+                    )}
+
                     {/* Dispatch Checklist Progress Badge */}
                     {(() => {
                       const totalCount = order.items?.length || 0;

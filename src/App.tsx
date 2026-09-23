@@ -209,13 +209,14 @@ export default function App() {
     const targetOrder = orders.find((o) => o.id === orderId);
     if (!targetOrder) return;
 
-    // SHOWROOM ORDER: Skip Pathao courier pickup request logic
+    // Check if Pathao courier pickup request is disabled manually or by Showroom channel
     const isShowroom = targetOrder.channel === 'Showroom';
+    const isPickupDisabled = Boolean(targetOrder.disablePathaoPickup || isShowroom);
 
     let trackingId: string | undefined = undefined;
     let consignmentId: string | undefined = undefined;
 
-    if (!isShowroom) {
+    if (!isPickupDisabled) {
       trackingId = `PTH-${Math.floor(7819300 + Math.random() * 500)}`;
       consignmentId = `CN-${Math.floor(492000 + Math.random() * 500)}`;
 
@@ -252,9 +253,10 @@ export default function App() {
             approvedAt: new Date().toISOString(),
             pathaoTrackingId: trackingId,
             pathaoConsignmentId: consignmentId,
-            pathaoStatus: isShowroom ? undefined : 'Pickup Requested',
-            notes: isShowroom
-              ? (o.notes ? `${o.notes} • ` : '') + 'Showroom Direct Sale (Pathao Pickup Skipped)'
+            pathaoStatus: isPickupDisabled ? undefined : 'Pickup Requested',
+            notes: isPickupDisabled
+              ? (o.notes ? `${o.notes} • ` : '') +
+                (targetOrder.disablePathaoPickup ? 'Manual Pathao Pickup Disabled' : 'Showroom Direct Sale')
               : o.notes,
           };
         }

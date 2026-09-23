@@ -128,6 +128,14 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
   const pathaoWebhookFullUrl = `${originUrl}/api/webhooks/pathao`;
   const metaWebhookFullUrl = `${originUrl}/webhook/meta`;
 
+  const getAuthHeaders = () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('vistoosa_auth_token') || '' : '';
+    return {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+  };
+
   const handleCopy = (text: string, keyName: string) => {
     navigator.clipboard.writeText(text);
     setCopiedKey(keyName);
@@ -136,8 +144,10 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
 
   // Prefill configuration from backend endpoints on mount
   useEffect(() => {
+    const headers = getAuthHeaders();
+
     // 1. Website & Meta settings
-    fetch('/api/settings/integrations')
+    fetch('/api/settings/integrations', { headers })
       .then((res) => res.json())
       .then((data) => {
         if (data && data.success && data.config) {
@@ -152,7 +162,7 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
       .catch((err) => console.error('Error loading integration settings:', err));
 
     // 1b. Specific Meta Order Integration Settings
-    fetch('/api/settings/meta-order')
+    fetch('/api/settings/meta-order', { headers })
       .then((res) => res.json())
       .then((data) => {
         if (data && data.success && data.config) {
@@ -168,7 +178,7 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
       .catch((err) => console.warn('Could not fetch meta-order settings:', err));
 
     // 2. Pathao configuration
-    fetch('/api/settings/pathao')
+    fetch('/api/settings/pathao', { headers })
       .then((res) => res.json())
       .then((data) => {
         if (data && data.configured) {
@@ -187,7 +197,7 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
       .catch((err) => console.error('Error loading Pathao settings:', err));
 
     // 3. WhatsApp configuration
-    fetch('/api/settings/whatsapp')
+    fetch('/api/settings/whatsapp', { headers })
       .then((res) => res.json())
       .then((data) => {
         if (data && data.configured) {
@@ -220,7 +230,7 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
     try {
       await fetch('/api/settings/integrations', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ website: updatedWeb }),
       });
     } catch (err) {
@@ -248,7 +258,7 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
     try {
       const res = await fetch('/api/settings/pathao', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(payload),
       });
 
@@ -304,12 +314,12 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
       await Promise.all([
         fetch('/api/settings/meta-order', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(),
           body: JSON.stringify(updatedMeta),
         }),
         fetch('/api/settings/integrations', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(),
           body: JSON.stringify({ meta: updatedMeta }),
         }),
       ]);
@@ -332,7 +342,7 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
     try {
       const res = await fetch('/api/settings/meta-order/test-connection', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(metaConfig),
       });
       const data = await res.json();
@@ -372,7 +382,7 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
     try {
       const res = await fetch('/api/meta/simulate-message', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           channel: simChannel,
           senderId: simSenderId,
@@ -442,7 +452,7 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
 
       const res = await fetch('/api/webhooks/website/orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(samplePayload),
       });
 
@@ -477,7 +487,7 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
     try {
       const res = await fetch('/api/integrations/test-pathao', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           clientId: pathaoConfig.clientId,
           clientSecret: pathaoConfig.clientSecret,
@@ -509,7 +519,7 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
     try {
       const res = await fetch('/api/settings/whatsapp', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           phoneNumberId: whatsappConfig.phoneNumberId,
           accessToken: whatsappConfig.accessToken,
@@ -551,7 +561,7 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
     try {
       const res = await fetch('/api/settings/whatsapp/test', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           testPhone: '01700000000',
           customerName: 'Shakib Al Hasan',

@@ -52,6 +52,7 @@ export interface Order {
   pathaoTrackingId?: string;
   pathaoConsignmentId?: string;
   pathaoStatus?: 'Pickup Requested' | 'In Transit' | 'Delivered' | 'Exchange' | 'Partial Delivery' | 'Return' | 'Paid Return';
+  disablePathaoPickup?: boolean;
   notes?: string;
   productImageUrl?: string;
   rawConversation?: { sender: string; text: string; timestamp?: string; attachmentUrl?: string }[];

@@ -149,6 +149,7 @@ export const OrderFormModal: React.FC<OrderFormModalProps> = ({
     'Cash on Delivery'
   );
   const [notes, setNotes] = useState('');
+  const [disablePathaoPickup, setDisablePathaoPickup] = useState(false);
   const [isAutoDistrictDetected, setIsAutoDistrictDetected] = useState(false);
 
   // Items State
@@ -176,6 +177,11 @@ export const OrderFormModal: React.FC<OrderFormModalProps> = ({
         'Dhaka';
       setDistrict(existingDist);
       setChannel(initialOrder.channel || 'WhatsApp');
+      setDisablePathaoPickup(
+        initialOrder.disablePathaoPickup !== undefined
+          ? initialOrder.disablePathaoPickup
+          : initialOrder.channel === 'Showroom'
+      );
       setDeliveryFee(
         initialOrder.deliveryFee !== undefined
           ? initialOrder.deliveryFee
@@ -214,6 +220,7 @@ export const OrderFormModal: React.FC<OrderFormModalProps> = ({
       setAddress('');
       setDistrict('Dhaka');
       setChannel('WhatsApp');
+      setDisablePathaoPickup(false);
       setDeliveryFee(70);
       setIsManualDeliveryFee(false);
       setPaymentMethod('Cash on Delivery');
@@ -281,9 +288,12 @@ export const OrderFormModal: React.FC<OrderFormModalProps> = ({
     }
   };
 
-  // Channel change updates delivery fee automatically (Showroom -> ৳0)
+  // Channel change updates delivery fee automatically (Showroom -> ৳0) & disables Pathao pickup for Showroom
   const handleChannelChange = (newChannel: OrderChannel) => {
     setChannel(newChannel);
+    if (newChannel === 'Showroom') {
+      setDisablePathaoPickup(true);
+    }
     if (!isManualDeliveryFee) {
       setDeliveryFee(calculateDeliveryFee(district, newChannel));
     }
@@ -420,6 +430,7 @@ export const OrderFormModal: React.FC<OrderFormModalProps> = ({
       deliveryFee: Number(deliveryFee) || 0,
       totalAmount,
       paymentMethod,
+      disablePathaoPickup,
       status: initialOrder ? initialOrder.status : 'Pending',
       notes: notes.trim(),
       createdAt: initialOrder ? initialOrder.createdAt : new Date().toISOString(),
@@ -630,7 +641,7 @@ export const OrderFormModal: React.FC<OrderFormModalProps> = ({
                 >
                   <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
                     {/* EAN / Barcode Input with Camera Scanner */}
-                    <div className="md:col-span-4">
+                    <div className="md:col-span-3">
                       <label className="block text-[11px] text-zinc-400 mb-1 font-medium">
                         EAN Code / Barcode #{idx + 1}
                       </label>
@@ -656,7 +667,7 @@ export const OrderFormModal: React.FC<OrderFormModalProps> = ({
                     {/* Product Name */}
                     <div className="md:col-span-3">
                       <label className="block text-[11px] text-zinc-400 mb-1 font-medium">
-                        Product Name
+                        Product Name (প্রোডাক্ট)
                       </label>
                       <input
                         type="text"
@@ -668,14 +679,14 @@ export const OrderFormModal: React.FC<OrderFormModalProps> = ({
                     </div>
 
                     {/* Size */}
-                    <div className="md:col-span-2">
+                    <div className="md:col-span-1">
                       <label className="block text-[11px] text-zinc-400 mb-1 font-medium">
                         Size
                       </label>
                       <select
                         value={item.size}
                         onChange={(e) => updateItemField(idx, 'size', e.target.value)}
-                        className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-2.5 py-2 text-amber-400 font-bold text-xs focus:outline-none focus:border-amber-500 cursor-pointer"
+                        className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-2 py-2 text-amber-400 font-bold text-xs focus:outline-none focus:border-amber-500 cursor-pointer"
                       >
                         <option value="S">S</option>
                         <option value="M">M</option>
@@ -697,28 +708,41 @@ export const OrderFormModal: React.FC<OrderFormModalProps> = ({
                         onChange={(e) =>
                           updateItemField(idx, 'quantity', Math.max(1, parseInt(e.target.value, 10) || 1))
                         }
-                        className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-2.5 py-2 text-white font-bold text-xs focus:outline-none focus:border-amber-500"
+                        className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-2 py-2 text-white font-bold text-xs text-center focus:outline-none focus:border-amber-500"
                       />
                     </div>
 
-                    {/* Unit Price */}
-                    <div className="md:col-span-1">
-                      <label className="block text-[11px] text-zinc-400 mb-1 font-medium">
-                        Price (৳)
+                    {/* Unit Price (৳) - PROPERLY SIZED AND VISIBLE */}
+                    <div className="md:col-span-2">
+                      <label className="block text-[11px] text-zinc-300 mb-1 font-semibold">
+                        Unit Price (দাম ৳) <span className="text-rose-400">*</span>
                       </label>
-                      <input
-                        type="number"
-                        min={0}
-                        value={item.unitPrice}
-                        onChange={(e) =>
-                          updateItemField(idx, 'unitPrice', Math.max(0, parseInt(e.target.value, 10) || 0))
-                        }
-                        className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-2 py-2 text-emerald-400 font-bold text-xs focus:outline-none focus:border-amber-500"
-                      />
+                      <div className="relative flex items-center">
+                        <span className="absolute left-2.5 text-emerald-400 font-bold text-xs pointer-events-none">৳</span>
+                        <input
+                          type="number"
+                          min={0}
+                          value={item.unitPrice}
+                          onChange={(e) =>
+                            updateItemField(idx, 'unitPrice', Math.max(0, parseInt(e.target.value, 10) || 0))
+                          }
+                          className="w-full rounded-xl bg-zinc-900 border border-zinc-700 pl-6 pr-2 py-2 text-emerald-400 font-mono font-extrabold text-xs focus:outline-none focus:border-emerald-500 focus:bg-zinc-950 transition"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Item Subtotal Preview Badge */}
+                    <div className="md:col-span-1 flex flex-col justify-end">
+                      <div className="px-2 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800 text-right">
+                        <span className="text-[9px] text-zinc-500 block uppercase font-medium">Total</span>
+                        <span className="text-xs font-mono font-bold text-amber-300">
+                          ৳{((Number(item.unitPrice) || 0) * (Number(item.quantity) || 1)).toLocaleString()}
+                        </span>
+                      </div>
                     </div>
 
                     {/* Delete Item Button */}
-                    <div className="md:col-span-1 flex justify-end">
+                    <div className="md:col-span-1 flex justify-end pb-0.5">
                       <button
                         type="button"
                         disabled={items.length <= 1}
@@ -748,50 +772,79 @@ export const OrderFormModal: React.FC<OrderFormModalProps> = ({
             </div>
           </div>
 
-          {/* SECTION 4: DELIVERY CHARGE & PAYMENT METHOD & NOTES */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-zinc-900/60 p-4 rounded-2xl border border-zinc-800/80">
-            {/* Delivery Charge */}
-            <div>
-              <label className="block text-zinc-400 mb-1 font-semibold flex items-center justify-between">
-                <span className="flex items-center gap-1.5">
-                  <Truck className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Delivery Charge (৳)</span>
+          {/* SECTION 4: PATHAO PICKUP OPTION & DELIVERY CHARGE & PAYMENT METHOD */}
+          <div className="bg-zinc-900/60 p-4 rounded-2xl border border-zinc-800/80 space-y-4">
+            {/* PATHAO PICKUP REQUEST OPTION TOGGLE */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-2xl bg-zinc-950 border border-zinc-800">
+              <div className="space-y-0.5">
+                <span className="text-xs font-bold text-white flex items-center gap-2">
+                  <Truck className="w-4 h-4 text-amber-400" />
+                  <span>Pathao Courier Pickup Request (পাঠাও পিকআপ রিকোয়েস্ট)</span>
                 </span>
-                {isManualDeliveryFee && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsManualDeliveryFee(false);
-                      setDeliveryFee(calculateDeliveryFee(district, channel));
-                    }}
-                    className="text-[10px] text-amber-400 hover:underline flex items-center gap-0.5"
-                  >
-                    <RefreshCw className="w-2.5 h-2.5" /> Reset Auto
-                  </button>
-                )}
-              </label>
-              <div className="relative">
-                <input
-                  type="number"
-                  min={0}
-                  value={deliveryFee}
-                  onChange={(e) => {
-                    setIsManualDeliveryFee(true);
-                    setDeliveryFee(Math.max(0, parseInt(e.target.value, 10) || 0));
-                  }}
-                  className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-3.5 py-2.5 text-emerald-400 font-mono font-bold text-sm focus:outline-none focus:border-amber-500"
-                />
+                <p className="text-[11px] text-zinc-400">
+                  {disablePathaoPickup
+                    ? '🔴 Disabled: এই অর্ডারের জন্য Pathao-তে পিকআপ রিকোয়েস্ট পাঠানো হবে না (Manual/In-Store Delivery)'
+                    : '🟢 Enabled: অর্ডার Approve করলে পাঠাও কুরিয়ারে অটোমেটিক পিকআপ রিকোয়েস্ট যাবে'}
+                </p>
               </div>
-              <p className="text-[10px] text-zinc-500 mt-1">
-                {channel === 'Showroom'
-                  ? 'Showroom channel = ৳0'
-                  : district === 'Dhaka'
-                  ? 'Dhaka = ৳70'
-                  : district === 'Gazipur' || district === 'Narayanganj'
-                  ? 'Gazipur/Narayanganj = ৳100'
-                  : 'Other Districts = ৳130'}
-              </p>
+
+              <button
+                type="button"
+                onClick={() => setDisablePathaoPickup((prev) => !prev)}
+                className={`px-3.5 py-1.5 rounded-xl font-bold text-xs transition cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                  disablePathaoPickup
+                    ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                    : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                }`}
+              >
+                <span className={`w-2 h-2 rounded-full ${disablePathaoPickup ? 'bg-rose-400' : 'bg-emerald-400 animate-pulse'}`} />
+                <span>{disablePathaoPickup ? 'Pickup Off (বন্ধ)' : 'Pickup On (চালু)'}</span>
+              </button>
             </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Delivery Charge */}
+              <div>
+                <label className="block text-zinc-400 mb-1 font-semibold flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Truck className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Delivery Charge (৳)</span>
+                  </span>
+                  {isManualDeliveryFee && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsManualDeliveryFee(false);
+                        setDeliveryFee(calculateDeliveryFee(district, channel));
+                      }}
+                      className="text-[10px] text-amber-400 hover:underline flex items-center gap-0.5"
+                    >
+                      <RefreshCw className="w-2.5 h-2.5" /> Reset Auto
+                    </button>
+                  )}
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min={0}
+                    value={deliveryFee}
+                    onChange={(e) => {
+                      setIsManualDeliveryFee(true);
+                      setDeliveryFee(Math.max(0, parseInt(e.target.value, 10) || 0));
+                    }}
+                    className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-3.5 py-2.5 text-emerald-400 font-mono font-bold text-sm focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+                <p className="text-[10px] text-zinc-500 mt-1">
+                  {channel === 'Showroom'
+                    ? 'Showroom channel = ৳0'
+                    : district === 'Dhaka'
+                    ? 'Dhaka = ৳70'
+                    : district === 'Gazipur' || district === 'Narayanganj'
+                    ? 'Gazipur/Narayanganj = ৳100'
+                    : 'Other Districts = ৳130'}
+                </p>
+              </div>
 
             {/* Payment Method */}
             <div>
@@ -824,6 +877,7 @@ export const OrderFormModal: React.FC<OrderFormModalProps> = ({
               />
             </div>
           </div>
+        </div>
 
           {/* SECTION 5: TOTAL AMOUNT SUMMARY CARD */}
           <div className="p-4 rounded-2xl bg-gradient-to-r from-zinc-900 to-zinc-950 border border-amber-500/30 flex items-center justify-between shadow-lg">

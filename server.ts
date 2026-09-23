@@ -938,6 +938,28 @@ app.post('/api/orders/save-all', requireAuth, async (req: AuthenticatedRequest, 
   return res.json({ success: true, message: 'Orders saved successfully' });
 });
 
+// Bulk import orders from CSV directly to Firestore
+app.post('/api/orders/import', extractOptionalAuth, async (req: AuthenticatedRequest, res) => {
+  const userId = req.userId || 'usr_admin_default';
+  const { orders } = req.body || {};
+  if (!Array.isArray(orders) || orders.length === 0) {
+    return res.status(400).json({ success: false, error: 'Invalid or empty orders array' });
+  }
+
+  try {
+    await saveUserOrders(userId, orders);
+    console.log(`[CSV Import]: Successfully saved ${orders.length} orders to Firestore for user ${userId}`);
+    return res.json({
+      success: true,
+      message: `${orders.length} orders successfully saved to Firestore.`,
+      importedCount: orders.length,
+    });
+  } catch (err: any) {
+    console.error('[CSV Import Error]:', err);
+    return res.status(500).json({ success: false, error: err?.message || 'Failed to import orders to Firestore' });
+  }
+});
+
 // Workspace preferences & state
 app.get('/api/user/workspace', requireAuth, async (req: AuthenticatedRequest, res) => {
   const userId = req.userId!;

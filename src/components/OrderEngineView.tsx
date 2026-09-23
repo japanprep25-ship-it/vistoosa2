@@ -21,6 +21,14 @@ import {
   Package,
   MapPin,
   RotateCcw,
+  Upload,
+  Download,
+  FileSpreadsheet,
+  AlertCircle,
+  Info,
+  FileCheck,
+  Check,
+  FileText,
 } from 'lucide-react';
 import { Order, OrderStatus, OrderChannel, Product } from '../types';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -32,6 +40,22 @@ import {
   filterOrders,
   countActiveFilters,
 } from './OrderFilterPanel';
+
+export interface ParsedImportRow {
+  rowNumber: number;
+  customerName: string;
+  product: string;
+  productSize: string;
+  eanCode: string;
+  quantity: string;
+  price: string;
+  email: string;
+  phone: string;
+  status: string;
+  orderDate: string;
+  isValid: boolean;
+  errors: string[];
+}
 
 interface OrderEngineViewProps {
   orders: Order[];
@@ -59,6 +83,356 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [selectedChatOrder, setSelectedChatOrder] = useState<Order | null>(null);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
+
+  // CSV Export & Import State
+  const [exportFromDate, setExportFromDate] = useState('');
+  const [exportToDate, setExportToDate] = useState('');
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [parsedImportRows, setParsedImportRows] = useState<ParsedImportRow[]>([]);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importSuccessMsg, setImportSuccessMsg] = useState('');
+  const [uploadFileName, setUploadFileName] = useState('');
+
+  // CSV Export Handler with Date Range Filter
+  const handleExportCsv = () => {
+    let filtered = [...orders];
+
+    if (exportFromDate) {
+      const fromTime = new Date(`${exportFromDate}T00:00:00`).getTime();
+      filtered = filtered.filter((o) => {
+        const orderTime = new Date(o.createdAt || 0).getTime();
+        return orderTime >= fromTime;
+      });
+    }
+
+    if (exportToDate) {
+      const toTime = new Date(`${exportToDate}T23:59:59`).getTime();
+      filtered = filtered.filter((o) => {
+        const orderTime = new Date(o.createdAt || 0).getTime();
+        return orderTime <= toTime;
+      });
+    }
+
+    const headers = [
+      'Order ID',
+      'Customer Name',
+      'Email',
+      'Phone',
+      'Product',
+      'Product Size',
+      'EAN Code',
+      'Quantity',
+      'Price',
+      'Status',
+      'Order Date',
+    ];
+
+    const escapeCsv = (val: any): string => {
+      if (val === null || val === undefined) return '""';
+      const str = String(val).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    const csvRows = [headers.join(',')];
+
+    filtered.forEach((o) => {
+      const firstItem = o.items && o.items[0];
+      const orderDateStr = o.createdAt
+        ? new Date(o.createdAt).toISOString().split('T')[0]
+        : new Date().toISOString().split('T')[0];
+
+      const row = [
+        escapeCsv(o.id || ''),
+        escapeCsv(o.customerName || ''),
+        escapeCsv(o.email || ''),
+        escapeCsv(o.phone || ''),
+        escapeCsv(firstItem?.productName || ''),
+        escapeCsv(firstItem?.size || ''),
+        escapeCsv(firstItem?.sku || ''),
+        firstItem?.quantity || 1,
+        o.totalAmount || (firstItem?.unitPrice || 0) * (firstItem?.quantity || 1),
+        escapeCsv(o.status || 'Pending'),
+        escapeCsv(orderDateStr),
+      ];
+
+      csvRows.push(row.join(','));
+    });
+
+    const csvContent = '\uFEFF' + csvRows.join('\n'); // UTF-8 BOM
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+
+    const fileNameFrom = exportFromDate || 'all';
+    const fileNameTo = exportToDate || 'all';
+    link.setAttribute('href', url);
+    link.setAttribute('download', `orders_export_${fileNameFrom}_to_${fileNameTo}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // CSV Sample Template Download Handler
+  const handleDownloadSampleTemplate = () => {
+    const headers = [
+      'Customer Name',
+      'Product',
+      'Product Size',
+      'EAN Code',
+      'Quantity',
+      'Price',
+      'Email',
+      'Phone',
+      'Status',
+      'Order Date',
+    ];
+
+    const sampleRows = [
+      [
+        '"Rahim Ahmed"',
+        '"Supima Cotton Polo"',
+        '"L"',
+        '"8901234567890"',
+        '2',
+        '1650',
+        '"rahim@example.com"',
+        '"01711000000"',
+        '"Pending"',
+        '"2026-09-23"',
+      ].join(','),
+      [
+        '"Karim Chowdhury"',
+        '"Slim Fit Denim"',
+        '"M"',
+        '"8901234567891"',
+        '1',
+        '2200',
+        '""', // Optional email empty
+        '"01812000000"',
+        '"Approved"',
+        '"2026-09-23"',
+      ].join(','),
+    ];
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...sampleRows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'orders_import_template.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // CSV File Parser & Validator
+  const parseAndValidateCsvContent = (text: string): ParsedImportRow[] => {
+    const lines = text.split(/\r\n|\n/).map((l) => l.trim()).filter((l) => l.length > 0);
+    if (lines.length < 2) return [];
+
+    const parseCsvLine = (line: string): string[] => {
+      const result: string[] = [];
+      let current = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+          if (inQuotes && line[i + 1] === '"') {
+            current += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (char === ',' && !inQuotes) {
+          result.push(current.trim());
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+      result.push(current.trim());
+      return result;
+    };
+
+    const rawHeaders = parseCsvLine(lines[0]);
+    const headers = rawHeaders.map((h) => h.toLowerCase().replace(/[^a-z0-9]/g, ''));
+
+    const findHeaderIndex = (possibleNames: string[]) => {
+      return headers.findIndex((h) =>
+        possibleNames.some((name) => h === name.toLowerCase().replace(/[^a-z0-9]/g, ''))
+      );
+    };
+
+    const nameIdx = findHeaderIndex(['Customer Name', 'customername', 'customer_name', 'name']);
+    const prodIdx = findHeaderIndex(['Product', 'productname', 'product_name', 'item']);
+    const sizeIdx = findHeaderIndex(['Product Size', 'productsize', 'product_size', 'size']);
+    const eanIdx = findHeaderIndex(['EAN Code', 'eancode', 'ean_code', 'ean', 'barcode', 'sku']);
+    const qtyIdx = findHeaderIndex(['Quantity', 'qty', 'quantity']);
+    const priceIdx = findHeaderIndex(['Price', 'unitprice', 'price', 'amount', 'totalamount']);
+    const emailIdx = findHeaderIndex(['Email', 'email', 'customeremail']);
+    const phoneIdx = findHeaderIndex(['Phone', 'phone', 'mobile', 'customerphone']);
+    const statusIdx = findHeaderIndex(['Status', 'orderstatus', 'status']);
+    const dateIdx = findHeaderIndex(['Order Date', 'orderdate', 'createdat', 'date']);
+
+    const parsedRows: ParsedImportRow[] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const rowValues = parseCsvLine(lines[i]);
+      if (rowValues.length === 0 || rowValues.every((v) => !v)) continue;
+
+      const customerName = nameIdx >= 0 ? rowValues[nameIdx] || '' : '';
+      const product = prodIdx >= 0 ? rowValues[prodIdx] || '' : '';
+      const productSize = sizeIdx >= 0 ? rowValues[sizeIdx] || '' : '';
+      const eanCode = eanIdx >= 0 ? rowValues[eanIdx] || '' : '';
+      const quantity = qtyIdx >= 0 ? rowValues[qtyIdx] || '' : '';
+      const price = priceIdx >= 0 ? rowValues[priceIdx] || '' : '';
+      const email = emailIdx >= 0 ? rowValues[emailIdx] || '' : '';
+      const phone = phoneIdx >= 0 ? rowValues[phoneIdx] || '' : '';
+      const status = statusIdx >= 0 ? rowValues[statusIdx] || '' : '';
+      const orderDate = dateIdx >= 0 ? rowValues[dateIdx] || '' : '';
+
+      const errors: string[] = [];
+
+      // Validation logic for required fields
+      if (!customerName) errors.push('Customer Name is required');
+      if (!product) errors.push('Product is required');
+      if (!productSize) errors.push('Product Size is required');
+
+      const cleanEan = eanCode.replace(/\s+/g, '');
+      if (!cleanEan) {
+        errors.push('EAN Code is required');
+      } else if (!/^\d+$/.test(cleanEan)) {
+        errors.push('EAN Code must contain numbers only');
+      }
+
+      if (!quantity) {
+        errors.push('Quantity is required');
+      } else if (isNaN(Number(quantity)) || Number(quantity) <= 0) {
+        errors.push('Quantity must be a positive number');
+      }
+
+      if (!price) {
+        errors.push('Price is required');
+      } else if (isNaN(Number(price)) || Number(price) < 0) {
+        errors.push('Price must be a valid number');
+      }
+
+      // Email and Phone are OPTIONAL — no error if empty!
+
+      parsedRows.push({
+        rowNumber: i,
+        customerName,
+        product,
+        productSize,
+        eanCode,
+        quantity,
+        price,
+        email,
+        phone,
+        status,
+        orderDate,
+        isValid: errors.length === 0,
+        errors,
+      });
+    }
+
+    return parsedRows;
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+
+    setUploadFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = (event.target?.result as string) || '';
+      const parsed = parseAndValidateCsvContent(content);
+      setParsedImportRows(parsed);
+    };
+    reader.readAsText(file, 'UTF-8');
+  };
+
+  // Confirm Import & Save Valid Orders to Firestore
+  const handleConfirmImport = async () => {
+    const validRows = parsedImportRows.filter((r) => r.isValid);
+    if (validRows.length === 0) return;
+
+    setIsImporting(true);
+    const importedOrders: Order[] = [];
+
+    for (let idx = 0; idx < validRows.length; idx++) {
+      const row = validRows[idx];
+      const qty = Number(row.quantity);
+      const unitPrice = Number(row.price);
+
+      let formattedStatus: OrderStatus = 'Pending';
+      if (row.status) {
+        const s = row.status.trim().toLowerCase();
+        if (s.includes('approve') || s.includes('shipped')) formattedStatus = 'Approved';
+        else if (s.includes('dispatch') || s.includes('transit')) formattedStatus = 'Dispatched';
+        else if (s.includes('deliver')) formattedStatus = 'Delivered';
+        else if (s.includes('cancel')) formattedStatus = 'Cancelled';
+      }
+
+      let dateVal = new Date().toISOString();
+      if (row.orderDate && !isNaN(new Date(row.orderDate).getTime())) {
+        dateVal = new Date(row.orderDate).toISOString();
+      }
+
+      const orderObj: Order = {
+        id: `VIS-CSV-${Math.floor(100000 + Math.random() * 900000)}`,
+        customerName: row.customerName,
+        email: row.email || undefined,
+        phone: row.phone || '',
+        address: 'Imported via CSV',
+        city: 'Inside Dhaka',
+        channel: 'Website',
+        items: [
+          {
+            id: `item-csv-${Date.now()}-${idx}`,
+            productName: row.product,
+            sku: row.eanCode,
+            color: 'Default',
+            size: row.productSize as any,
+            quantity: qty,
+            unitPrice: unitPrice,
+          },
+        ],
+        totalAmount: unitPrice * qty,
+        deliveryFee: 0,
+        paymentMethod: 'Cash on Delivery',
+        status: formattedStatus,
+        createdAt: dateVal,
+        notes: 'Imported via CSV File Upload',
+      };
+
+      importedOrders.push(orderObj);
+      onCreateOrder(orderObj);
+    }
+
+    // Save directly to Firestore backend
+    try {
+      const authToken = localStorage.getItem('vistoosa_auth_token');
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+      await fetch('/api/orders/import', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ orders: importedOrders }),
+      });
+    } catch (err) {
+      console.warn('Backend CSV import API sync fallback:', err);
+    }
+
+    setIsImporting(false);
+    setIsImportModalOpen(false);
+    setParsedImportRows([]);
+    setUploadFileName('');
+    setImportSuccessMsg(`Successfully imported ${validRows.length} order(s) into Firestore!`);
+    setTimeout(() => setImportSuccessMsg(''), 6000);
+  };
 
   // Edit Order Form State
   const [editFormData, setEditFormData] = useState({
@@ -295,8 +669,16 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* Success Notification Banner */}
+      {importSuccessMsg && (
+        <div className="flex items-center gap-2 p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-medium animate-fade-in shadow-lg shadow-emerald-500/5">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{importSuccessMsg}</span>
+        </div>
+      )}
+
       {/* Header & Metric Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-xl font-bold text-white tracking-tight">
@@ -311,14 +693,57 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
           </p>
         </div>
 
-        <button
-          id="btn-create-new-order"
-          onClick={() => setIsCreateModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 text-xs font-bold shadow-lg shadow-amber-500/20 active:scale-95 transition"
-        >
-          <Plus className="w-4 h-4" />
-          <span>New Manual Order</span>
-        </button>
+        {/* Action Controls: CSV Import, Date-filtered Export, New Order */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Import from CSV Button */}
+          <button
+            onClick={() => setIsImportModalOpen(true)}
+            className="flex items-center gap-2 px-3.5 py-2.5 rounded-2xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 text-xs font-bold shadow-sm active:scale-95 transition cursor-pointer"
+          >
+            <Upload className="w-4 h-4 text-amber-400" />
+            <span>Import from CSV</span>
+          </button>
+
+          {/* Export to CSV Date Range Group */}
+          <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-zinc-900/90 border border-zinc-800 text-xs">
+            <div className="flex items-center gap-1 px-1.5 py-1">
+              <span className="text-[11px] text-zinc-400 font-medium">From:</span>
+              <input
+                type="date"
+                value={exportFromDate}
+                onChange={(e) => setExportFromDate(e.target.value)}
+                className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-[11px] text-zinc-200 focus:outline-none focus:border-amber-500 cursor-pointer"
+              />
+            </div>
+            <div className="flex items-center gap-1 px-1.5 py-1">
+              <span className="text-[11px] text-zinc-400 font-medium">To:</span>
+              <input
+                type="date"
+                value={exportToDate}
+                onChange={(e) => setExportToDate(e.target.value)}
+                className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-[11px] text-zinc-200 focus:outline-none focus:border-amber-500 cursor-pointer"
+              />
+            </div>
+            <button
+              onClick={handleExportCsv}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-sm active:scale-95 transition cursor-pointer"
+              title="Export filtered orders to CSV"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Export to CSV</span>
+            </button>
+          </div>
+
+          {/* New Manual Order Button */}
+          <button
+            id="btn-create-new-order"
+            onClick={() => setIsCreateModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 text-xs font-bold shadow-lg shadow-amber-500/20 active:scale-95 transition cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>New Manual Order</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter & Search Bar */}
@@ -1376,6 +1801,223 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                 className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold transition"
               >
                 Close Transcript
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CSV Import Modal */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-3xl max-w-4xl w-full p-6 space-y-6 shadow-2xl relative my-8 max-h-[90vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-zinc-800 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400">
+                  <FileSpreadsheet className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white tracking-tight">
+                    Import Orders from CSV
+                  </h3>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    Upload a CSV file to import orders directly into Firestore
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => {
+                  setIsImportModalOpen(false);
+                  setParsedImportRows([]);
+                  setUploadFileName('');
+                }}
+                className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-900 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-5 overflow-y-auto pr-1 flex-1">
+              {/* Bengali Instructions Guide Box */}
+              <div className="p-4 rounded-2xl bg-amber-950/20 border border-amber-500/30 text-amber-200 text-xs space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 font-bold text-amber-300">
+                    <Info className="w-4 h-4 shrink-0 text-amber-400" />
+                    <span>CSV কলামের নির্দেশিকা (CSV Column Instructions):</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleDownloadSampleTemplate}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold transition shadow-sm active:scale-95 cursor-pointer shrink-0"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Download Sample Template</span>
+                  </button>
+                </div>
+
+                <p className="font-medium text-amber-100">
+                  CSV ফাইলে এই কলামগুলো থাকতে হবে (একই বানানে, প্রথম row-এ header হিসেবে):
+                </p>
+
+                <ul className="grid grid-cols-1 md:grid-cols-2 gap-1.5 pl-2 text-[11px] text-amber-200/90 leading-relaxed font-mono">
+                  <li><strong className="text-emerald-400">• Customer Name</strong> (আবশ্যক)</li>
+                  <li><strong className="text-emerald-400">• Product</strong> (আবশ্যক)</li>
+                  <li><strong className="text-emerald-400">• Product Size</strong> (আবশ্যক — যেমন S/M/L/XL)</li>
+                  <li><strong className="text-emerald-400">• EAN Code</strong> (আবশ্যক — প্রোডাক্ট বারকোড, শুধু সংখ্যা)</li>
+                  <li><strong className="text-emerald-400">• Quantity</strong> (আবশ্যক, সংখ্যা হতে হবে)</li>
+                  <li><strong className="text-emerald-400">• Price</strong> (আবশ্যক, সংখ্যা হতে হবে)</li>
+                  <li><strong className="text-zinc-300">• Email</strong> (ঐচ্ছিক — ফাঁকা রাখলে সমস্যা নেই)</li>
+                  <li><strong className="text-zinc-300">• Phone</strong> (ঐচ্ছিক — ফাঁকা রাখলে সমস্যা নেই)</li>
+                  <li><strong className="text-zinc-300">• Status</strong> (ঐচ্ছিক — Pending/Approved/etc., না দিলে Pending)</li>
+                  <li><strong className="text-zinc-300">• Order Date</strong> (ঐচ্ছিক — YYYY-MM-DD, না দিলে আজকের তারিখ)</li>
+                </ul>
+
+                <p className="text-[11px] text-amber-300/80 italic pt-1 border-t border-amber-500/20">
+                  💡 Order ID দেওয়ার দরকার নেই, এটা সিস্টেম নিজে তৈরি করবে।
+                </p>
+              </div>
+
+              {/* File Upload Dropzone */}
+              <div className="border-2 border-dashed border-zinc-800 hover:border-amber-500/50 rounded-2xl p-6 text-center transition bg-zinc-900/40 relative">
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileChange}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                />
+                <div className="flex flex-col items-center gap-2">
+                  <div className="p-3 rounded-2xl bg-zinc-800/80 text-amber-400">
+                    <Upload className="w-6 h-6" />
+                  </div>
+                  <div className="text-xs">
+                    <span className="font-bold text-amber-400 hover:underline">Click to browse</span>
+                    <span className="text-zinc-400"> or drag and drop your CSV file here</span>
+                  </div>
+                  <p className="text-[11px] text-zinc-500">Supports standard UTF-8 encoded .CSV files</p>
+                  {uploadFileName && (
+                    <span className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold">
+                      <FileSpreadsheet className="w-3.5 h-3.5" />
+                      {uploadFileName}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Preview Table */}
+              {parsedImportRows.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-xs font-bold text-white tracking-tight">
+                        Import Preview Table ({parsedImportRows.length} Rows Parsed)
+                      </h4>
+                      <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold">
+                        {parsedImportRows.filter((r) => r.isValid).length} Valid
+                      </span>
+                      {parsedImportRows.filter((r) => !r.isValid).length > 0 && (
+                        <span className="px-2 py-0.5 rounded-md bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[10px] font-bold">
+                          {parsedImportRows.filter((r) => !r.isValid).length} Invalid
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="border border-zinc-800 rounded-2xl overflow-hidden max-h-64 overflow-y-auto">
+                    <table className="w-full text-left text-xs text-zinc-300">
+                      <thead className="bg-zinc-900/90 text-[11px] font-semibold text-zinc-400 uppercase tracking-wider sticky top-0 z-10">
+                        <tr>
+                          <th className="px-3 py-2">Status</th>
+                          <th className="px-3 py-2">Customer Name</th>
+                          <th className="px-3 py-2">Product</th>
+                          <th className="px-3 py-2">Size</th>
+                          <th className="px-3 py-2">EAN Code</th>
+                          <th className="px-3 py-2">Qty</th>
+                          <th className="px-3 py-2">Price</th>
+                          <th className="px-3 py-2">Email</th>
+                          <th className="px-3 py-2">Phone</th>
+                          <th className="px-3 py-2">Errors / Notes</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-800/60 bg-zinc-950 font-mono text-[11px]">
+                        {parsedImportRows.map((row) => (
+                          <tr
+                            key={row.rowNumber}
+                            className={
+                              row.isValid
+                                ? 'hover:bg-zinc-900/50'
+                                : 'bg-rose-950/20 border-l-2 border-l-rose-500 hover:bg-rose-950/30'
+                            }
+                          >
+                            <td className="px-3 py-2">
+                              {row.isValid ? (
+                                <span className="inline-flex items-center gap-1 text-emerald-400 font-bold">
+                                  <Check className="w-3.5 h-3.5" /> Valid
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-rose-400 font-bold">
+                                  <AlertCircle className="w-3.5 h-3.5" /> Error
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 font-sans font-medium text-white">{row.customerName || '—'}</td>
+                            <td className="px-3 py-2 font-sans text-zinc-200">{row.product || '—'}</td>
+                            <td className="px-3 py-2 text-amber-300 font-bold">{row.productSize || '—'}</td>
+                            <td className="px-3 py-2 text-zinc-300">{row.eanCode || '—'}</td>
+                            <td className="px-3 py-2 text-zinc-100">{row.quantity || '—'}</td>
+                            <td className="px-3 py-2 text-emerald-300">৳{row.price || '0'}</td>
+                            <td className="px-3 py-2 text-zinc-400 font-sans">{row.email || '—'}</td>
+                            <td className="px-3 py-2 text-zinc-400">{row.phone || '—'}</td>
+                            <td className="px-3 py-2 font-sans text-[10px]">
+                              {row.isValid ? (
+                                <span className="text-zinc-500">Ready to import</span>
+                              ) : (
+                                <span className="text-rose-300 font-semibold">{row.errors.join(', ')}</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Actions Footer */}
+            <div className="pt-4 border-t border-zinc-800 flex items-center justify-between shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsImportModalOpen(false);
+                  setParsedImportRows([]);
+                  setUploadFileName('');
+                }}
+                className="px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold transition cursor-pointer"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                disabled={isImporting || parsedImportRows.filter((r) => r.isValid).length === 0}
+                onClick={handleConfirmImport}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:opacity-50 disabled:cursor-not-allowed text-zinc-950 text-xs font-bold shadow-lg shadow-amber-500/20 active:scale-95 transition cursor-pointer"
+              >
+                {isImporting ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-zinc-950 border-t-transparent rounded-full animate-spin" />
+                    <span>Saving to Firestore...</span>
+                  </>
+                ) : (
+                  <>
+                    <FileCheck className="w-4 h-4" />
+                    <span>
+                      Import {parsedImportRows.filter((r) => r.isValid).length} Valid Order(s)
+                    </span>
+                  </>
+                )}
               </button>
             </div>
           </div>

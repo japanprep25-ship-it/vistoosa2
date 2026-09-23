@@ -146,12 +146,11 @@ export default function App() {
 
   // Periodically poll for live inbound website orders received via WooCommerce / Shopify webhooks
   React.useEffect(() => {
-    if (!currentUser) return;
-
     const fetchInboundOrders = async () => {
       try {
+        const token = authToken || (typeof window !== 'undefined' ? localStorage.getItem('vistoosa_auth_token') : null);
         const headers: Record<string, string> = {};
-        if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+        if (token) headers['Authorization'] = `Bearer ${token}`;
 
         const res = await fetch('/api/orders/inbound', { headers });
         if (!res.ok) return;
@@ -194,7 +193,7 @@ export default function App() {
     };
 
     fetchInboundOrders();
-    const interval = setInterval(fetchInboundOrders, 3000);
+    const interval = setInterval(fetchInboundOrders, 2500);
     return () => clearInterval(interval);
   }, [currentUser, authToken]);
 

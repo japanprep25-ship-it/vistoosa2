@@ -69,12 +69,26 @@ export async function getUserOrders(userId: string): Promise<any[]> {
   if (!userId) return [];
 
   try {
-    const snapshot = await db
-      .collection(ORDERS_COLLECTION)
-      .where('userId', '==', userId)
-      .get();
+    const promises = [
+      db.collection(ORDERS_COLLECTION).where('userId', '==', userId).get(),
+    ];
 
-    if (snapshot.empty) {
+    if (userId !== 'usr_admin_default') {
+      promises.push(db.collection(ORDERS_COLLECTION).where('userId', '==', 'usr_admin_default').get());
+    }
+
+    const snapshots = await Promise.all(promises);
+    const orderMap = new Map<string, any>();
+
+    for (const snapshot of snapshots) {
+      if (!snapshot.empty) {
+        snapshot.docs.forEach((doc) => {
+          orderMap.set(doc.id, doc.data());
+        });
+      }
+    }
+
+    if (orderMap.size === 0) {
       // Seed default sample orders for user's fresh workspace in Firestore
       const seedOrders = DEFAULT_SEED_ORDERS.map((o) => ({
         ...o,
@@ -91,7 +105,7 @@ export async function getUserOrders(userId: string): Promise<any[]> {
       return seedOrders;
     }
 
-    const orders = snapshot.docs.map((doc) => doc.data());
+    const orders = Array.from(orderMap.values());
     // Sort orders descending by createdAt timestamp
     return orders.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
   } catch (err: any) {

@@ -57,7 +57,15 @@ export async function testFirestoreConnection(): Promise<boolean> {
     console.log(`Firebase Firestore connected successfully to database "(default)" in project "${TARGET_PROJECT_ID}"`);
     return true;
   } catch (err: any) {
-    console.error('Firebase Firestore connection test failed:', err?.message || err, err);
+    console.error('[Firestore DETAILED CONNECTION ERROR]:', {
+      message: err?.message,
+      code: err?.code,
+      details: err?.details,
+      status: err?.status,
+      name: err?.name,
+      projectIdUsed: TARGET_PROJECT_ID,
+      stack: err?.stack,
+    });
     return false;
   }
 }

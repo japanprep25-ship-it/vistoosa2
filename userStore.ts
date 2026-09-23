@@ -22,6 +22,17 @@ export interface UserProfile {
   createdAt: string;
 }
 
+function logFullError(context: string, err: any) {
+  console.error(`[UserStore DETAILED ERROR] ${context}:`, {
+    message: err?.message,
+    code: err?.code,
+    details: err?.details,
+    status: err?.status,
+    name: err?.name,
+    stack: err?.stack,
+  });
+}
+
 const DEFAULT_USERS: UserRecord[] = [
   {
     id: 'usr_admin_default',
@@ -55,7 +66,7 @@ async function ensureDefaultUsersSeeded(): Promise<void> {
     }
     defaultUsersSeeded = true;
   } catch (err: any) {
-    console.error('[UserStore]: Error seeding default users in Firestore:', err?.message || err);
+    logFullError('Error seeding default users in Firestore', err);
   }
 }
 
@@ -86,7 +97,7 @@ export async function findUserByEmail(email: string): Promise<UserRecord | null>
     const doc = snapshot.docs[0];
     return doc.data() as UserRecord;
   } catch (err: any) {
-    console.error('[UserStore]: findUserByEmail error:', err?.message || err);
+    logFullError('findUserByEmail error', err);
     const defaultMatch = DEFAULT_USERS.find((u) => u.email.toLowerCase() === cleanEmail);
     return defaultMatch || null;
   }
@@ -175,7 +186,7 @@ export async function createUser(
   try {
     await db.collection(USERS_COLLECTION).doc(userId).set(newUser);
   } catch (err: any) {
-    console.error('[UserStore]: Error creating user document in Firestore:', err?.message || err);
+    logFullError('Error creating user document in Firestore', err);
     throw new Error('Database error while saving user account.');
   }
 

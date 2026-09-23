@@ -1,13 +1,13 @@
 // pathaoOrderService.ts
 // -----------------------------------------------------------------------
-// REAL Pathao Courier API integration (Per-User Configuration).
+// REAL Pathao Courier API integration (Per-User Configuration in Firestore).
 //
-// Reads credentials from `loadPathaoConfig(userId)` saved via Settings UI in pathao-config.json.
+// Reads credentials from `await loadPathaoConfig(userId)` saved via Settings UI in Firestore.
 
 import { loadPathaoConfig } from './pathaoConfigStore';
 
-function getCredentials(userId: string) {
-  const fileConfig = loadPathaoConfig(userId);
+async function getCredentials(userId: string) {
+  const fileConfig = await loadPathaoConfig(userId);
   const baseUrl = fileConfig?.baseUrl || process.env.PATHAO_BASE_URL || 'https://api-hermes.pathao.com';
   const clientId = fileConfig?.clientId || process.env.PATHAO_CLIENT_ID;
   const clientSecret = fileConfig?.clientSecret || process.env.PATHAO_CLIENT_SECRET;
@@ -22,7 +22,7 @@ function getCredentials(userId: string) {
 const tokenCacheMap = new Map<string, { accessToken: string; refreshToken: string; expiresAt: number }>();
 
 async function fetchNewToken(userId: string) {
-  const creds = getCredentials(userId);
+  const creds = await getCredentials(userId);
   if (!creds.clientId || !creds.clientSecret || !creds.username || !creds.password) {
     throw new Error('Pathao credentials missing for your account. Please set them in Settings > Connect Channels > Pathao Courier.');
   }
@@ -71,7 +71,7 @@ export interface PathaoOrderInput {
 
 export async function createPathaoOrder(userId: string, order: PathaoOrderInput) {
   const token = await getAccessToken(userId);
-  const creds = getCredentials(userId);
+  const creds = await getCredentials(userId);
 
   if (!creds.storeId) {
     throw new Error('Pathao Store ID is required for your account. Please set it in Settings > Connect Channels > Pathao Courier.');
@@ -140,7 +140,7 @@ const DEFAULT_PATHAO_CITIES = [
 
 export async function getPathaoCities(userId: string) {
   try {
-    const creds = getCredentials(userId);
+    const creds = await getCredentials(userId);
     if (!creds.clientId || !creds.clientSecret) {
       return DEFAULT_PATHAO_CITIES;
     }
@@ -160,7 +160,7 @@ export async function getPathaoCities(userId: string) {
 
 export async function getPathaoZones(userId: string, cityId: number) {
   try {
-    const creds = getCredentials(userId);
+    const creds = await getCredentials(userId);
     if (!creds.clientId || !creds.clientSecret || !cityId) {
       return [];
     }
@@ -177,4 +177,3 @@ export async function getPathaoZones(userId: string, cityId: number) {
     return [];
   }
 }
-

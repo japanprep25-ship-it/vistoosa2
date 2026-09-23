@@ -6,14 +6,13 @@
 // Gemini AI (Bengali/English), buffers multi-message chats, creates Pending
 // orders in the Unified Order Engine, and sends automated confirmation replies.
 
-import fs from 'fs';
-import path from 'path';
 import crypto from 'crypto';
 import type { Express, Request, Response } from 'express';
 import { GoogleGenAI } from '@google/genai';
 import { detectDistrict } from './src/utils/districtDetector';
+import { db } from './firebaseAdmin';
 
-const CONFIG_PATH = path.join(process.cwd(), 'meta-config.json');
+const META_COLLECTION = 'metaConfig';
 
 export interface MetaConfig {
   metaAppId: string;
@@ -71,34 +70,36 @@ export function registerOrderCreationHook(hook: (order: any) => void) {
 }
 
 // -----------------------------------------------------------------------
-// 1. Config Persistence
+// 1. Config Persistence in Firestore
 // -----------------------------------------------------------------------
 
-export function loadMetaConfig(): MetaConfig {
-  let fileConfig: Partial<MetaConfig> = {};
+export async function loadMetaConfig(docId: string = 'global'): Promise<MetaConfig> {
+  let dbConfig: Partial<MetaConfig> = {};
   try {
-    if (fs.existsSync(CONFIG_PATH)) {
-      fileConfig = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
+    const docRef = db.collection(META_COLLECTION).doc(docId);
+    const doc = await docRef.get();
+    if (doc.exists) {
+      dbConfig = doc.data() as Partial<MetaConfig>;
     }
   } catch (err) {
-    console.warn('[Meta Config]: Failed to read meta-config.json, using defaults/env', err);
+    console.warn('[Meta Config]: Failed to read metaConfig from Firestore, using defaults/env', err);
   }
 
   return {
-    metaAppId: fileConfig.metaAppId || process.env.META_APP_ID || '',
-    metaAppSecret: fileConfig.metaAppSecret || process.env.META_APP_SECRET || '',
-    metaVerifyToken: fileConfig.metaVerifyToken || process.env.META_VERIFY_TOKEN || DEFAULT_VERIFY_TOKEN,
-    pageAccessToken: fileConfig.pageAccessToken || process.env.PAGE_ACCESS_TOKEN || '',
-    pageId: fileConfig.pageId || process.env.PAGE_ID || '',
-    instagramBusinessAccountId: fileConfig.instagramBusinessAccountId || process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID || '',
-    whatsappPhoneNumberId: fileConfig.whatsappPhoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID || '',
-    whatsappBusinessAccountId: fileConfig.whatsappBusinessAccountId || process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || '',
-    whatsappAccessToken: fileConfig.whatsappAccessToken || process.env.WHATSAPP_ACCESS_TOKEN || '',
+    metaAppId: dbConfig.metaAppId || process.env.META_APP_ID || '',
+    metaAppSecret: dbConfig.metaAppSecret || process.env.META_APP_SECRET || '',
+    metaVerifyToken: dbConfig.metaVerifyToken || process.env.META_VERIFY_TOKEN || DEFAULT_VERIFY_TOKEN,
+    pageAccessToken: dbConfig.pageAccessToken || process.env.PAGE_ACCESS_TOKEN || '',
+    pageId: dbConfig.pageId || process.env.PAGE_ID || '',
+    instagramBusinessAccountId: dbConfig.instagramBusinessAccountId || process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID || '',
+    whatsappPhoneNumberId: dbConfig.whatsappPhoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID || '',
+    whatsappBusinessAccountId: dbConfig.whatsappBusinessAccountId || process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || '',
+    whatsappAccessToken: dbConfig.whatsappAccessToken || process.env.WHATSAPP_ACCESS_TOKEN || '',
   };
 }
 
-export function saveMetaConfig(config: Partial<MetaConfig>) {
-  const current = loadMetaConfig();
+export async function saveMetaConfig(config: Partial<MetaConfig>, docId: string = 'global'): Promise<MetaConfig> {
+  const current = await loadMetaConfig(docId);
   const merged: MetaConfig = {
     metaAppId: config.metaAppId !== undefined ? String(config.metaAppId).trim() : current.metaAppId,
     metaAppSecret: config.metaAppSecret !== undefined ? String(config.metaAppSecret).trim() : current.metaAppSecret,
@@ -113,7 +114,12 @@ export function saveMetaConfig(config: Partial<MetaConfig>) {
     whatsappAccessToken: config.whatsappAccessToken !== undefined ? String(config.whatsappAccessToken).trim() : current.whatsappAccessToken,
   };
 
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(merged, null, 2), 'utf-8');
+  try {
+    await db.collection(META_COLLECTION).doc(docId).set({ ...merged, updatedAt: new Date().toISOString() }, { merge: true });
+  } catch (err: any) {
+    console.error('[Meta Config]: Failed to save metaConfig to Firestore:', err?.message || err);
+  }
+
   return merged;
 }
 
@@ -390,7 +396,7 @@ export async function sendMetaReply(
   recipientId: string,
   messageText: string
 ): Promise<{ success: boolean; data?: any; error?: any }> {
-  const config = loadMetaConfig();
+  const config = await loadMetaConfig();
 
   try {
     if (channel === 'whatsapp') {
@@ -454,7 +460,8 @@ export async function sendMetaReply(
 // -----------------------------------------------------------------------
 
 export async function testMetaConnection(overrideConfig?: Partial<MetaConfig>) {
-  const config = { ...loadMetaConfig(), ...overrideConfig };
+  const currentConfig = await loadMetaConfig();
+  const config = { ...currentConfig, ...overrideConfig };
   const results: {
     pageAccess: { ok: boolean; pageName?: string; pageId?: string; error?: string };
     whatsapp: { ok: boolean; verifiedName?: string; phoneNumber?: string; error?: string };
@@ -527,12 +534,12 @@ export function verifyMetaSignature(req: Request, appSecret: string): boolean {
 
 export function mountMetaIntegrationRoutes(app: Express) {
   // Webhook Verification (GET /webhook/meta and /api/webhook/meta)
-  const handleWebhookVerification = (req: Request, res: Response) => {
+  const handleWebhookVerification = async (req: Request, res: Response) => {
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];
     const challenge = req.query['hub.challenge'];
 
-    const config = loadMetaConfig();
+    const config = await loadMetaConfig();
     const expectedToken = config.metaVerifyToken || DEFAULT_VERIFY_TOKEN;
 
     if (mode === 'subscribe' && token === expectedToken) {
@@ -551,8 +558,8 @@ export function mountMetaIntegrationRoutes(app: Express) {
   app.get('/api/webhooks/meta', handleWebhookVerification);
 
   // Incoming Meta Webhook Messages (POST /webhook/meta and /api/webhook/meta)
-  const handleIncomingMetaWebhook = (req: Request, res: Response) => {
-    const config = loadMetaConfig();
+  const handleIncomingMetaWebhook = async (req: Request, res: Response) => {
+    const config = await loadMetaConfig();
 
     // Verify HMAC signature if secret is present
     if (config.metaAppSecret && !verifyMetaSignature(req, config.metaAppSecret)) {
@@ -676,8 +683,8 @@ export function mountMetaIntegrationRoutes(app: Express) {
   });
 
   // GET /api/settings/meta-order -> Retrieve settings & status
-  app.get('/api/settings/meta-order', (req: Request, res: Response) => {
-    const config = loadMetaConfig();
+  app.get('/api/settings/meta-order', async (req: Request, res: Response) => {
+    const config = await loadMetaConfig();
     const appUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
 
     return res.json({
@@ -700,9 +707,9 @@ export function mountMetaIntegrationRoutes(app: Express) {
   });
 
   // POST /api/settings/meta-order -> Save settings
-  app.post('/api/settings/meta-order', (req: Request, res: Response) => {
+  app.post('/api/settings/meta-order', async (req: Request, res: Response) => {
     const payload = req.body || {};
-    const existing = loadMetaConfig();
+    const existing = await loadMetaConfig();
 
     // Don't overwrite tokens if submitted as '••••••••'
     const toSave: Partial<MetaConfig> = { ...payload };
@@ -710,7 +717,7 @@ export function mountMetaIntegrationRoutes(app: Express) {
     if (payload.pageAccessToken === '••••••••') toSave.pageAccessToken = existing.pageAccessToken;
     if (payload.whatsappAccessToken === '••••••••') toSave.whatsappAccessToken = existing.whatsappAccessToken;
 
-    const updated = saveMetaConfig(toSave);
+    const updated = await saveMetaConfig(toSave);
 
     return res.json({
       success: true,
@@ -727,7 +734,7 @@ export function mountMetaIntegrationRoutes(app: Express) {
   // POST /api/settings/meta-order/test-connection -> Live Test Connection
   app.post('/api/settings/meta-order/test-connection', async (req: Request, res: Response) => {
     const payload = req.body || {};
-    const existing = loadMetaConfig();
+    const existing = await loadMetaConfig();
 
     const configToTest: Partial<MetaConfig> = { ...payload };
     if (payload.metaAppSecret === '••••••••') configToTest.metaAppSecret = existing.metaAppSecret;

@@ -1,9 +1,8 @@
-import fs from 'fs';
-import path from 'path';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { db } from './firebaseAdmin';
 
-const USERS_FILE_PATH = path.join(process.cwd(), 'users-db.json');
+const USERS_COLLECTION = 'users';
 const JWT_SECRET = process.env.JWT_SECRET || 'vistoosa-jwt-secret-key-2026-v2';
 
 export interface UserRecord {
@@ -42,26 +41,21 @@ const DEFAULT_USERS: UserRecord[] = [
   },
 ];
 
-function loadUsers(): UserRecord[] {
-  try {
-    if (!fs.existsSync(USERS_FILE_PATH)) {
-      fs.writeFileSync(USERS_FILE_PATH, JSON.stringify(DEFAULT_USERS, null, 2), 'utf-8');
-      return DEFAULT_USERS;
-    }
-    const data = fs.readFileSync(USERS_FILE_PATH, 'utf-8');
-    const users: UserRecord[] = JSON.parse(data);
-    return Array.isArray(users) ? users : DEFAULT_USERS;
-  } catch (err) {
-    console.error('Error reading users DB file:', err);
-    return DEFAULT_USERS;
-  }
-}
+let defaultUsersSeeded = false;
 
-function saveUsers(users: UserRecord[]): void {
+async function ensureDefaultUsersSeeded(): Promise<void> {
+  if (defaultUsersSeeded) return;
   try {
-    fs.writeFileSync(USERS_FILE_PATH, JSON.stringify(users, null, 2), 'utf-8');
-  } catch (err) {
-    console.error('Error writing users DB file:', err);
+    for (const user of DEFAULT_USERS) {
+      const docRef = db.collection(USERS_COLLECTION).doc(user.id);
+      const doc = await docRef.get();
+      if (!doc.exists) {
+        await docRef.set(user);
+      }
+    }
+    defaultUsersSeeded = true;
+  } catch (err: any) {
+    console.error('[UserStore]: Error seeding default users in Firestore:', err?.message || err);
   }
 }
 
@@ -70,15 +64,54 @@ export function sanitizeUser(user: UserRecord): UserProfile {
   return sanitized;
 }
 
-export function findUserByEmail(email: string): UserRecord | null {
-  const clean = email.trim().toLowerCase();
-  const users = loadUsers();
-  return users.find((u) => u.email.toLowerCase() === clean) || null;
+export async function findUserByEmail(email: string): Promise<UserRecord | null> {
+  const cleanEmail = email.trim().toLowerCase();
+  if (!cleanEmail) return null;
+
+  await ensureDefaultUsersSeeded();
+
+  try {
+    const snapshot = await db
+      .collection(USERS_COLLECTION)
+      .where('email', '==', cleanEmail)
+      .limit(1)
+      .get();
+
+    if (snapshot.empty) {
+      // Check default fallback in memory
+      const defaultMatch = DEFAULT_USERS.find((u) => u.email.toLowerCase() === cleanEmail);
+      return defaultMatch || null;
+    }
+
+    const doc = snapshot.docs[0];
+    return doc.data() as UserRecord;
+  } catch (err: any) {
+    console.error('[UserStore]: findUserByEmail error:', err?.message || err);
+    const defaultMatch = DEFAULT_USERS.find((u) => u.email.toLowerCase() === cleanEmail);
+    return defaultMatch || null;
+  }
 }
 
-export function findUserById(id: string): UserRecord | null {
-  const users = loadUsers();
-  return users.find((u) => u.id === id) || null;
+export async function findUserById(id: string): Promise<UserRecord | null> {
+  if (!id) return null;
+
+  await ensureDefaultUsersSeeded();
+
+  try {
+    const docRef = db.collection(USERS_COLLECTION).doc(id);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      const defaultMatch = DEFAULT_USERS.find((u) => u.id === id);
+      return defaultMatch || null;
+    }
+
+    return doc.data() as UserRecord;
+  } catch (err: any) {
+    console.error('[UserStore]: findUserById error:', err?.message || err);
+    const defaultMatch = DEFAULT_USERS.find((u) => u.id === id);
+    return defaultMatch || null;
+  }
 }
 
 export function generateJwtToken(user: UserProfile): string {
@@ -94,11 +127,11 @@ export function generateJwtToken(user: UserProfile): string {
   );
 }
 
-export function verifyJwtToken(token: string): UserProfile | null {
+export async function verifyJwtToken(token: string): Promise<UserProfile | null> {
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as UserProfile;
     if (!decoded || !decoded.id) return null;
-    const user = findUserById(decoded.id);
+    const user = await findUserById(decoded.id);
     if (!user) return null;
     return sanitizeUser(user);
   } catch (err) {
@@ -106,9 +139,13 @@ export function verifyJwtToken(token: string): UserProfile | null {
   }
 }
 
-export function createUser(email: string, password: string, name?: string): { user: UserProfile; token: string } {
+export async function createUser(
+  email: string,
+  password: string,
+  name?: string
+): Promise<{ user: UserProfile; token: string }> {
   const cleanEmail = email.trim().toLowerCase();
-  
+
   if (!cleanEmail || !cleanEmail.includes('@')) {
     throw new Error('Please enter a valid email address.');
   }
@@ -117,17 +154,17 @@ export function createUser(email: string, password: string, name?: string): { us
     throw new Error('Password must be at least 4 characters long.');
   }
 
-  const existing = findUserByEmail(cleanEmail);
+  const existing = await findUserByEmail(cleanEmail);
   if (existing) {
     throw new Error('An account with this email already exists. Please log in instead.');
   }
 
-  const users = loadUsers();
   const passwordHash = bcrypt.hashSync(password, 10);
   const displayName = (name && name.trim()) || cleanEmail.split('@')[0] || 'User';
+  const userId = `usr_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
 
   const newUser: UserRecord = {
-    id: `usr_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`,
+    id: userId,
     email: cleanEmail,
     passwordHash,
     name: displayName,
@@ -135,8 +172,12 @@ export function createUser(email: string, password: string, name?: string): { us
     createdAt: new Date().toISOString(),
   };
 
-  users.push(newUser);
-  saveUsers(users);
+  try {
+    await db.collection(USERS_COLLECTION).doc(userId).set(newUser);
+  } catch (err: any) {
+    console.error('[UserStore]: Error creating user document in Firestore:', err?.message || err);
+    throw new Error('Database error while saving user account.');
+  }
 
   const profile = sanitizeUser(newUser);
   const token = generateJwtToken(profile);
@@ -144,9 +185,12 @@ export function createUser(email: string, password: string, name?: string): { us
   return { user: profile, token };
 }
 
-export function authenticateUserCredentials(email: string, password: string): { user: UserProfile; token: string } {
+export async function authenticateUserCredentials(
+  email: string,
+  password: string
+): Promise<{ user: UserProfile; token: string }> {
   const cleanEmail = email.trim().toLowerCase();
-  const user = findUserByEmail(cleanEmail);
+  const user = await findUserByEmail(cleanEmail);
 
   if (!user) {
     throw new Error('Invalid email or password');
@@ -163,23 +207,34 @@ export function authenticateUserCredentials(email: string, password: string): { 
   return { user: profile, token };
 }
 
-export function updateUserPassword(email: string, newPassword: string): { user: UserProfile; token: string } {
+export async function updateUserPassword(
+  email: string,
+  newPassword: string
+): Promise<{ user: UserProfile; token: string }> {
   const cleanEmail = email.trim().toLowerCase();
   if (!newPassword || newPassword.length < 4) {
     throw new Error('New password must be at least 4 characters long.');
   }
 
-  const users = loadUsers();
-  const userIdx = users.findIndex((u) => u.email.toLowerCase() === cleanEmail);
-  if (userIdx < 0) {
+  const user = await findUserByEmail(cleanEmail);
+  if (!user) {
     throw new Error('User account not found.');
   }
 
   const passwordHash = bcrypt.hashSync(newPassword, 10);
-  users[userIdx].passwordHash = passwordHash;
-  saveUsers(users);
+  const updatedUser: UserRecord = {
+    ...user,
+    passwordHash,
+  };
 
-  const profile = sanitizeUser(users[userIdx]);
+  try {
+    await db.collection(USERS_COLLECTION).doc(user.id).set(updatedUser, { merge: true });
+  } catch (err: any) {
+    console.error('[UserStore]: Error updating user password in Firestore:', err?.message || err);
+    throw new Error('Database error while updating password.');
+  }
+
+  const profile = sanitizeUser(updatedUser);
   const token = generateJwtToken(profile);
 
   return { user: profile, token };

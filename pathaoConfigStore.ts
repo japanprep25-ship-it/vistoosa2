@@ -1,14 +1,13 @@
 // pathaoConfigStore.ts
 // -----------------------------------------------------------------------
-// Stores Pathao credentials per-user in `pathao-config.json`.
+// Stores Pathao credentials per-user in Firestore collection `pathaoConfig`.
 // Each user (userId) has an isolated configuration record.
 
-import fs from 'fs';
-import path from 'path';
 import type { Express, Response } from 'express';
 import { requireAuth, AuthenticatedRequest } from './authMiddleware';
+import { db } from './firebaseAdmin';
 
-const CONFIG_PATH = path.join(process.cwd(), 'pathao-config.json');
+const PATHAO_COLLECTION = 'pathaoConfig';
 
 export interface PathaoConfig {
   baseUrl: string;
@@ -19,86 +18,95 @@ export interface PathaoConfig {
   storeId: string;
 }
 
-type PerUserPathaoConfigs = Record<string, PathaoConfig>;
+export async function loadPathaoConfig(userId: string): Promise<PathaoConfig | null> {
+  if (!userId) return null;
 
-function loadAllConfigs(): PerUserPathaoConfigs {
   try {
-    if (!fs.existsSync(CONFIG_PATH)) return {};
-    const data = fs.readFileSync(CONFIG_PATH, 'utf-8');
-    const parsed = JSON.parse(data);
-    
-    // Legacy migration check: if file is single PathaoConfig object without userId keys
-    if (parsed && typeof parsed === 'object' && 'clientId' in parsed && !('usr_' in parsed)) {
-      return { usr_admin_default: parsed as PathaoConfig };
-    }
-    return (parsed as PerUserPathaoConfigs) || {};
-  } catch {
-    return {};
+    const docRef = db.collection(PATHAO_COLLECTION).doc(userId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) return null;
+    return doc.data() as PathaoConfig;
+  } catch (err: any) {
+    console.error(`[PathaoConfigStore]: Error loading Pathao config for user ${userId}:`, err?.message || err);
+    return null;
   }
 }
 
-export function loadPathaoConfig(userId: string): PathaoConfig | null {
-  if (!userId) return null;
-  const all = loadAllConfigs();
-  return all[userId] || null;
-}
-
-export function savePathaoConfig(userId: string, config: PathaoConfig) {
+export async function savePathaoConfig(userId: string, config: PathaoConfig): Promise<void> {
   if (!userId) return;
-  const all = loadAllConfigs();
-  all[userId] = config;
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(all, null, 2), 'utf-8');
+
+  try {
+    const docRef = db.collection(PATHAO_COLLECTION).doc(userId);
+    await docRef.set(
+      {
+        ...config,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+  } catch (err: any) {
+    console.error(`[PathaoConfigStore]: Error saving Pathao config for user ${userId}:`, err?.message || err);
+  }
 }
 
 export function mountPathaoConfigRoutes(app: Express) {
   // Save Pathao credentials for logged-in user
-  app.post('/api/settings/pathao', requireAuth, (req: AuthenticatedRequest, res: Response) => {
-    const userId = req.userId!;
-    const { baseUrl, clientId, clientSecret, username, password, storeId } = req.body || {};
+  app.post('/api/settings/pathao', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const userId = req.userId!;
+      const { baseUrl, clientId, clientSecret, username, password, storeId } = req.body || {};
 
-    if (!clientId || !clientSecret || !username || !password || !storeId) {
-      return res.status(400).json({ success: false, message: 'All fields are required.' });
+      if (!clientId || !clientSecret || !username || !password || !storeId) {
+        return res.status(400).json({ success: false, message: 'All fields are required.' });
+      }
+
+      // Preserve existing secrets if user sent masked values '••••••••'
+      let finalClientSecret = clientSecret;
+      let finalPassword = password;
+      const existing = await loadPathaoConfig(userId);
+
+      if (clientSecret === '••••••••' && existing) {
+        finalClientSecret = existing.clientSecret;
+      }
+      if (password === '••••••••' && existing) {
+        finalPassword = existing.password;
+      }
+
+      await savePathaoConfig(userId, {
+        baseUrl: baseUrl || 'https://api-hermes.pathao.com',
+        clientId: String(clientId).trim(),
+        clientSecret: String(finalClientSecret).trim(),
+        username: String(username).trim(),
+        password: String(finalPassword).trim(),
+        storeId: String(storeId).trim(),
+      });
+
+      return res.json({ success: true, message: 'Your Pathao credentials saved successfully in Firestore.' });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err?.message || 'Failed to save Pathao configuration.' });
     }
-
-    // Preserve existing secrets if user sent masked values '••••••••'
-    let finalClientSecret = clientSecret;
-    let finalPassword = password;
-    const existing = loadPathaoConfig(userId);
-
-    if (clientSecret === '••••••••' && existing) {
-      finalClientSecret = existing.clientSecret;
-    }
-    if (password === '••••••••' && existing) {
-      finalPassword = existing.password;
-    }
-
-    savePathaoConfig(userId, {
-      baseUrl: baseUrl || 'https://api-hermes.pathao.com',
-      clientId: String(clientId).trim(),
-      clientSecret: String(finalClientSecret).trim(),
-      username: String(username).trim(),
-      password: String(finalPassword).trim(),
-      storeId: String(storeId).trim(),
-    });
-
-    return res.json({ success: true, message: 'Your Pathao credentials saved successfully.' });
   });
 
   // Prefill Settings page for logged-in user
-  app.get('/api/settings/pathao', requireAuth, (req: AuthenticatedRequest, res: Response) => {
-    const userId = req.userId!;
-    const config = loadPathaoConfig(userId);
+  app.get('/api/settings/pathao', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const userId = req.userId!;
+      const config = await loadPathaoConfig(userId);
 
-    if (!config) return res.json({ configured: false });
+      if (!config) return res.json({ configured: false });
 
-    return res.json({
-      configured: true,
-      baseUrl: config.baseUrl,
-      clientId: config.clientId,
-      storeId: config.storeId,
-      username: config.username,
-      clientSecret: '••••••••',
-      password: '••••••••',
-    });
+      return res.json({
+        configured: true,
+        baseUrl: config.baseUrl,
+        clientId: config.clientId,
+        storeId: config.storeId,
+        username: config.username,
+        clientSecret: '••••••••',
+        password: '••••••••',
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err?.message || 'Failed to retrieve Pathao settings.' });
+    }
   });
 }

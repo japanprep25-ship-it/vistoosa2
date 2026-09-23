@@ -1,7 +1,7 @@
-import fs from 'fs';
-import path from 'path';
+import { db } from './firebaseAdmin';
 
-const WORKSPACE_FILE_PATH = path.join(process.cwd(), 'user-workspaces.json');
+const ORDERS_COLLECTION = 'orders';
+const WORKSPACES_COLLECTION = 'workspaces';
 
 export interface UserWorkspaceData {
   orders?: any[];
@@ -10,8 +10,6 @@ export interface UserWorkspaceData {
   products?: any[];
   settings?: Record<string, any>;
 }
-
-type PerUserWorkspaces = Record<string, UserWorkspaceData>;
 
 const DEFAULT_SEED_ORDERS = [
   {
@@ -67,95 +65,151 @@ const DEFAULT_SEED_ORDERS = [
   },
 ];
 
-function loadAllWorkspaces(): PerUserWorkspaces {
-  try {
-    if (!fs.existsSync(WORKSPACE_FILE_PATH)) return {};
-    const data = fs.readFileSync(WORKSPACE_FILE_PATH, 'utf-8');
-    const parsed = JSON.parse(data);
-    return (parsed as PerUserWorkspaces) || {};
-  } catch (err) {
-    console.error('Error loading user workspaces:', err);
-    return {};
-  }
-}
-
-function saveAllWorkspaces(workspaces: PerUserWorkspaces): void {
-  try {
-    fs.writeFileSync(WORKSPACE_FILE_PATH, JSON.stringify(workspaces, null, 2), 'utf-8');
-  } catch (err) {
-    console.error('Error saving user workspaces:', err);
-  }
-}
-
-export function getUserOrders(userId: string): any[] {
+export async function getUserOrders(userId: string): Promise<any[]> {
   if (!userId) return [];
-  const workspaces = loadAllWorkspaces();
-  if (!workspaces[userId]) {
-    // Seed default sample orders for user's fresh workspace
-    workspaces[userId] = {
-      orders: JSON.parse(JSON.stringify(DEFAULT_SEED_ORDERS)),
+
+  try {
+    const snapshot = await db
+      .collection(ORDERS_COLLECTION)
+      .where('userId', '==', userId)
+      .get();
+
+    if (snapshot.empty) {
+      // Seed default sample orders for user's fresh workspace in Firestore
+      const seedOrders = DEFAULT_SEED_ORDERS.map((o) => ({
+        ...o,
+        userId,
+      }));
+
+      const batch = db.batch();
+      for (const order of seedOrders) {
+        const docRef = db.collection(ORDERS_COLLECTION).doc(order.id);
+        batch.set(docRef, order);
+      }
+      await batch.commit();
+
+      return seedOrders;
+    }
+
+    const orders = snapshot.docs.map((doc) => doc.data());
+    // Sort orders descending by createdAt timestamp
+    return orders.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+  } catch (err: any) {
+    console.error(`[UserWorkspaceStore]: getUserOrders error for user ${userId}:`, err?.message || err);
+    return DEFAULT_SEED_ORDERS.map((o) => ({ ...o, userId }));
+  }
+}
+
+export async function saveUserOrders(userId: string, orders: any[]): Promise<void> {
+  if (!userId || !Array.isArray(orders)) return;
+
+  try {
+    const batch = db.batch();
+    for (const order of orders) {
+      if (!order || !order.id) continue;
+      const docRef = db.collection(ORDERS_COLLECTION).doc(String(order.id));
+      batch.set(docRef, { ...order, userId }, { merge: true });
+    }
+    await batch.commit();
+  } catch (err: any) {
+    console.error(`[UserWorkspaceStore]: saveUserOrders error for user ${userId}:`, err?.message || err);
+  }
+}
+
+export async function addOrUpdateUserOrder(userId: string, order: any): Promise<void> {
+  if (!userId || !order || !order.id) return;
+
+  try {
+    const docRef = db.collection(ORDERS_COLLECTION).doc(String(order.id));
+    await docRef.set(
+      {
+        ...order,
+        userId,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+  } catch (err: any) {
+    console.error(`[UserWorkspaceStore]: addOrUpdateUserOrder error for user ${userId}:`, err?.message || err);
+  }
+}
+
+export async function getUserWorkspaceData(userId: string): Promise<UserWorkspaceData> {
+  if (!userId) return {};
+
+  try {
+    const orders = await getUserOrders(userId);
+
+    const docRef = db.collection(WORKSPACES_COLLECTION).doc(userId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      return {
+        orders,
+        cashEntries: [],
+        expenses: [],
+        products: [],
+        settings: {},
+      };
+    }
+
+    const data = doc.data() as UserWorkspaceData;
+    return {
+      ...data,
+      orders,
+    };
+  } catch (err: any) {
+    console.error(`[UserWorkspaceStore]: getUserWorkspaceData error for user ${userId}:`, err?.message || err);
+    return {
+      orders: [],
       cashEntries: [],
       expenses: [],
+      products: [],
+      settings: {},
     };
-    saveAllWorkspaces(workspaces);
   }
-  return workspaces[userId].orders || [];
 }
 
-export function saveUserOrders(userId: string, orders: any[]): void {
+export async function saveUserWorkspaceData(userId: string, data: Partial<UserWorkspaceData>): Promise<void> {
   if (!userId) return;
-  const workspaces = loadAllWorkspaces();
-  if (!workspaces[userId]) {
-    workspaces[userId] = {};
+
+  try {
+    if (data.orders && Array.isArray(data.orders)) {
+      await saveUserOrders(userId, data.orders);
+    }
+
+    const { orders, ...nonOrderData } = data;
+    if (Object.keys(nonOrderData).length > 0) {
+      const docRef = db.collection(WORKSPACES_COLLECTION).doc(userId);
+      await docRef.set(nonOrderData, { merge: true });
+    }
+  } catch (err: any) {
+    console.error(`[UserWorkspaceStore]: saveUserWorkspaceData error for user ${userId}:`, err?.message || err);
   }
-  workspaces[userId].orders = orders;
-  saveAllWorkspaces(workspaces);
 }
 
-export function addOrUpdateUserOrder(userId: string, order: any): void {
-  if (!userId || !order) return;
-  const currentOrders = getUserOrders(userId);
-  const existingIdx = currentOrders.findIndex((o: any) => o.id === order.id);
-
-  if (existingIdx >= 0) {
-    currentOrders[existingIdx] = { ...currentOrders[existingIdx], ...order };
-  } else {
-    currentOrders.unshift(order);
-  }
-
-  saveUserOrders(userId, currentOrders);
-}
-
-export function getUserWorkspaceData(userId: string): UserWorkspaceData {
-  if (!userId) return {};
-  const workspaces = loadAllWorkspaces();
-  return workspaces[userId] || {};
-}
-
-export function saveUserWorkspaceData(userId: string, data: Partial<UserWorkspaceData>): void {
-  if (!userId) return;
-  const workspaces = loadAllWorkspaces();
-  workspaces[userId] = {
-    ...workspaces[userId],
-    ...data,
-  };
-  saveAllWorkspaces(workspaces);
-}
-
-export function getUserLanguage(userId: string): 'en' | 'bn' {
+export async function getUserLanguage(userId: string): Promise<'en' | 'bn'> {
   if (!userId) return 'en';
-  const workspace = getUserWorkspaceData(userId);
-  return (workspace.settings?.language as 'en' | 'bn') || 'en';
+  try {
+    const workspace = await getUserWorkspaceData(userId);
+    return (workspace.settings?.language as 'en' | 'bn') || 'en';
+  } catch {
+    return 'en';
+  }
 }
 
-export function setUserLanguage(userId: string, language: 'en' | 'bn'): void {
+export async function setUserLanguage(userId: string, language: 'en' | 'bn'): Promise<void> {
   if (!userId) return;
-  const workspace = getUserWorkspaceData(userId);
-  const currentSettings = workspace.settings || {};
-  saveUserWorkspaceData(userId, {
-    settings: {
-      ...currentSettings,
-      language,
-    },
-  });
+  try {
+    const workspace = await getUserWorkspaceData(userId);
+    const currentSettings = workspace.settings || {};
+    await saveUserWorkspaceData(userId, {
+      settings: {
+        ...currentSettings,
+        language,
+      },
+    });
+  } catch (err: any) {
+    console.error(`[UserWorkspaceStore]: setUserLanguage error for user ${userId}:`, err?.message || err);
+  }
 }

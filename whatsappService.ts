@@ -1,16 +1,15 @@
 // whatsappService.ts
 // -----------------------------------------------------------------------
-// WhatsApp Cloud API Integration & Notification Service (Per-User Storage)
+// WhatsApp Cloud API Integration & Notification Service (Firestore Storage)
 //
-// Saves & loads config per user ID from `whatsapp-config.json`
+// Saves & loads config per user ID from Firestore collection `whatsappConfig`
 // and handles sending automated order tracking notifications via Meta WhatsApp API.
 
-import fs from 'fs';
-import path from 'path';
 import type { Express, Response } from 'express';
 import { requireAuth, AuthenticatedRequest } from './authMiddleware';
+import { db } from './firebaseAdmin';
 
-const CONFIG_PATH = path.join(process.cwd(), 'whatsapp-config.json');
+const WHATSAPP_COLLECTION = 'whatsappConfig';
 
 export interface WhatsappConfig {
   phoneNumberId: string;
@@ -19,86 +18,95 @@ export interface WhatsappConfig {
   languageCode: string;
 }
 
-type PerUserWhatsappConfigs = Record<string, WhatsappConfig>;
+export async function loadWhatsappConfig(userId: string): Promise<WhatsappConfig | null> {
+  if (!userId) return null;
 
-function loadAllWhatsappConfigs(): PerUserWhatsappConfigs {
   try {
-    if (!fs.existsSync(CONFIG_PATH)) return {};
-    const data = fs.readFileSync(CONFIG_PATH, 'utf-8');
-    const parsed = JSON.parse(data);
+    const docRef = db.collection(WHATSAPP_COLLECTION).doc(userId);
+    const doc = await docRef.get();
 
-    // Legacy migration check: if file is single WhatsappConfig object
-    if (parsed && typeof parsed === 'object' && 'phoneNumberId' in parsed && !('usr_' in parsed)) {
-      return { usr_admin_default: parsed as WhatsappConfig };
-    }
-    return (parsed as PerUserWhatsappConfigs) || {};
-  } catch {
-    return {};
+    if (!doc.exists) return null;
+    return doc.data() as WhatsappConfig;
+  } catch (err: any) {
+    console.error(`[WhatsappService]: Error loading WhatsApp config for user ${userId}:`, err?.message || err);
+    return null;
   }
 }
 
-export function loadWhatsappConfig(userId: string): WhatsappConfig | null {
-  if (!userId) return null;
-  const all = loadAllWhatsappConfigs();
-  return all[userId] || null;
-}
-
-export function saveWhatsappConfig(userId: string, config: WhatsappConfig) {
+export async function saveWhatsappConfig(userId: string, config: WhatsappConfig): Promise<void> {
   if (!userId) return;
-  const all = loadAllWhatsappConfigs();
-  all[userId] = config;
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(all, null, 2), 'utf-8');
+
+  try {
+    const docRef = db.collection(WHATSAPP_COLLECTION).doc(userId);
+    await docRef.set(
+      {
+        ...config,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+  } catch (err: any) {
+    console.error(`[WhatsappService]: Error saving WhatsApp config for user ${userId}:`, err?.message || err);
+  }
 }
 
 export function mountWhatsappRoutes(app: Express) {
   // POST /api/settings/whatsapp -> Save WhatsApp credentials for logged in user
-  app.post('/api/settings/whatsapp', requireAuth, (req: AuthenticatedRequest, res: Response) => {
-    const userId = req.userId!;
-    const { phoneNumberId, accessToken, templateName, languageCode } = req.body || {};
+  app.post('/api/settings/whatsapp', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const userId = req.userId!;
+      const { phoneNumberId, accessToken, templateName, languageCode } = req.body || {};
 
-    if (!phoneNumberId || !accessToken || !templateName) {
-      return res.status(400).json({
-        success: false,
-        message: 'Phone Number ID, Access Token, and Template Name are required.',
+      if (!phoneNumberId || !accessToken || !templateName) {
+        return res.status(400).json({
+          success: false,
+          message: 'Phone Number ID, Access Token, and Template Name are required.',
+        });
+      }
+
+      // Preserve existing access token if user didn't modify masked value '••••••••'
+      let tokenToSave = accessToken;
+      if (accessToken === '••••••••') {
+        const existing = await loadWhatsappConfig(userId);
+        if (existing) tokenToSave = existing.accessToken;
+      }
+
+      await saveWhatsappConfig(userId, {
+        phoneNumberId: String(phoneNumberId).trim(),
+        accessToken: String(tokenToSave).trim(),
+        templateName: String(templateName).trim(),
+        languageCode: String(languageCode || 'en_US').trim(),
       });
+
+      return res.json({
+        success: true,
+        message: 'Your WhatsApp Cloud API settings saved successfully in Firestore.',
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err?.message || 'Failed to save WhatsApp config.' });
     }
-
-    // Preserve existing access token if user didn't modify masked value '••••••••'
-    let tokenToSave = accessToken;
-    if (accessToken === '••••••••') {
-      const existing = loadWhatsappConfig(userId);
-      if (existing) tokenToSave = existing.accessToken;
-    }
-
-    saveWhatsappConfig(userId, {
-      phoneNumberId: String(phoneNumberId).trim(),
-      accessToken: String(tokenToSave).trim(),
-      templateName: String(templateName).trim(),
-      languageCode: String(languageCode || 'en_US').trim(),
-    });
-
-    return res.json({
-      success: true,
-      message: 'Your WhatsApp Cloud API settings saved successfully.',
-    });
   });
 
   // GET /api/settings/whatsapp -> Prefill settings form for logged in user
-  app.get('/api/settings/whatsapp', requireAuth, (req: AuthenticatedRequest, res: Response) => {
-    const userId = req.userId!;
-    const config = loadWhatsappConfig(userId);
+  app.get('/api/settings/whatsapp', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const userId = req.userId!;
+      const config = await loadWhatsappConfig(userId);
 
-    if (!config) {
-      return res.json({ configured: false });
+      if (!config) {
+        return res.json({ configured: false });
+      }
+
+      return res.json({
+        configured: true,
+        phoneNumberId: config.phoneNumberId,
+        templateName: config.templateName,
+        languageCode: config.languageCode,
+        accessToken: config.accessToken ? '••••••••' : '',
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err?.message || 'Failed to load WhatsApp settings.' });
     }
-
-    return res.json({
-      configured: true,
-      phoneNumberId: config.phoneNumberId,
-      templateName: config.templateName,
-      languageCode: config.languageCode,
-      accessToken: config.accessToken ? '••••••••' : '',
-    });
   });
 
   // POST /api/settings/whatsapp/test -> Send test WhatsApp message
@@ -142,7 +150,7 @@ export async function sendTrackingWhatsapp(
   customerName: string,
   trackingId: string
 ) {
-  const config = loadWhatsappConfig(userId);
+  const config = await loadWhatsappConfig(userId);
   const phoneNumberId = config?.phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID;
   const accessToken = config?.accessToken || process.env.WHATSAPP_ACCESS_TOKEN;
   const templateName = config?.templateName || process.env.WHATSAPP_TEMPLATE_NAME || 'vistoosa_order_tracking';

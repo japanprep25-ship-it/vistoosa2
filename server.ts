@@ -8,6 +8,7 @@ import { mountPathaoConfigRoutes } from './pathaoConfigStore';
 import { mountWhatsappRoutes, sendTrackingWhatsapp } from './whatsappService';
 import { mountIntegrationsConfigRoutes } from './integrationsConfigStore';
 import { mountMetaIntegrationRoutes, registerOrderCreationHook } from './metaIntegrationService';
+import { testFirestoreConnection } from './firebaseAdmin';
 import {
   createUser,
   authenticateUserCredentials,
@@ -69,15 +70,22 @@ app.use((req, res, next) => {
 mountPathaoConfigRoutes(app);
 mountWhatsappRoutes(app);
 mountIntegrationsConfigRoutes(app);
+mountMetaIntegrationRoutes(app);
+
+registerOrderCreationHook((newOrder) => {
+  addOrUpdateUserOrder('usr_admin_default', newOrder).catch((err) => {
+    console.error('[Meta Order Creation Hook Firestore Error]:', err);
+  });
+});
 
 // Direct Email & Password Authentication Endpoints (OTP Turned Off)
-app.post('/api/auth/signup', (req, res) => {
+app.post('/api/auth/signup', async (req, res) => {
   try {
     const { email, password, name } = req.body || {};
     const cleanEmail = String(email || '').trim().toLowerCase();
 
     // Create user record in userStore (throws if invalid or duplicate email)
-    const result = createUser(cleanEmail, password, name);
+    const result = await createUser(cleanEmail, password, name);
 
     return res.json({
       success: true,
@@ -94,13 +102,13 @@ app.post('/api/auth/signup', (req, res) => {
   }
 });
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body || {};
     const cleanEmail = String(email || '').trim().toLowerCase();
 
     // Validate email + password match stored hash
-    const authResult = authenticateUserCredentials(cleanEmail, password);
+    const authResult = await authenticateUserCredentials(cleanEmail, password);
 
     return res.json({
       success: true,
@@ -127,7 +135,7 @@ app.post('/api/auth/request-reset-otp', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Please enter a valid registered email address.' });
     }
 
-    const user = findUserByEmail(cleanEmail);
+    const user = await findUserByEmail(cleanEmail);
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -153,12 +161,12 @@ app.post('/api/auth/request-reset-otp', async (req, res) => {
 });
 
 // Forgot Password Step 2: Verify Reset OTP
-app.post('/api/auth/verify-reset-otp', (req, res) => {
+app.post('/api/auth/verify-reset-otp', async (req, res) => {
   try {
     const { email, otpCode } = req.body || {};
     const cleanEmail = String(email || '').trim().toLowerCase();
 
-    const otpResult = verifyOtpCode(cleanEmail, otpCode);
+    const otpResult = await verifyOtpCode(cleanEmail, otpCode);
     if (!otpResult.success) {
       return res.status(400).json({
         success: false,
@@ -179,12 +187,12 @@ app.post('/api/auth/verify-reset-otp', (req, res) => {
 });
 
 // Forgot Password Step 3: Set New Password & Update Hash
-app.post('/api/auth/reset-password', (req, res) => {
+app.post('/api/auth/reset-password', async (req, res) => {
   try {
     const { email, newPassword } = req.body || {};
     const cleanEmail = String(email || '').trim().toLowerCase();
 
-    const result = updateUserPassword(cleanEmail, newPassword);
+    const result = await updateUserPassword(cleanEmail, newPassword);
 
     return res.json({
       success: true,
@@ -571,14 +579,14 @@ const handlePathaoPickup = async (req: express.Request, res: express.Response) =
 
     // Update status in user's order array
     if (orderId) {
-      const userOrders = getUserOrders(userId);
+      const userOrders = await getUserOrders(userId);
       const matchInbound = userOrders.find((o: any) => o.id === orderId);
       if (matchInbound) {
         matchInbound.status = 'Approved';
         matchInbound.pathaoTrackingId = trackingId;
         matchInbound.pathaoConsignmentId = result.consignment_id;
         matchInbound.pathaoStatus = 'Pickup Requested';
-        addOrUpdateUserOrder(userId, matchInbound);
+        await addOrUpdateUserOrder(userId, matchInbound);
       }
     }
 
@@ -829,24 +837,10 @@ const handleWebsiteWebhook = (req: express.Request, res: express.Response) => {
   // Parse WooCommerce Order or Custom Website Order into Vistoosa Pending Order
   const formattedOrder = parseWooCommerceOrderToVistoosa(payload);
 
-  // De-duplicate or prepend to inbound orders queue
-  const existingIndex = inboundWebsiteOrders.findIndex((o) => o.id === formattedOrder.id);
-  if (existingIndex >= 0) {
-    // Preserve current status if order was already approved/dispatched/delivered/cancelled in ERP
-    const currentStatus = inboundWebsiteOrders[existingIndex].status;
-    if (currentStatus && currentStatus !== 'Pending') {
-      formattedOrder.status = currentStatus;
-      if (inboundWebsiteOrders[existingIndex].pathaoTrackingId) {
-        formattedOrder.pathaoTrackingId = inboundWebsiteOrders[existingIndex].pathaoTrackingId;
-      }
-      if (inboundWebsiteOrders[existingIndex].pathaoConsignmentId) {
-        formattedOrder.pathaoConsignmentId = inboundWebsiteOrders[existingIndex].pathaoConsignmentId;
-      }
-    }
-    inboundWebsiteOrders[existingIndex] = formattedOrder;
-  } else {
-    inboundWebsiteOrders.unshift(formattedOrder);
-  }
+  // Save order directly into Firestore for default user
+  addOrUpdateUserOrder('usr_admin_default', formattedOrder).catch((err) => {
+    console.error('[WooCommerce Webhook Firestore Save Error]:', err);
+  });
 
   console.log(
     `[WooCommerce Inbound Order Queued]: Order #${formattedOrder.id} (${formattedOrder.status}) for ${formattedOrder.customerName} (${formattedOrder.phone}) - Total: ৳${formattedOrder.totalAmount}`
@@ -873,9 +867,9 @@ app.all(
 );
 
 // Endpoint for Frontend PWA to poll inbound website orders for logged-in user
-app.get('/api/orders/inbound', extractOptionalAuth, (req: AuthenticatedRequest, res) => {
+app.get('/api/orders/inbound', extractOptionalAuth, async (req: AuthenticatedRequest, res) => {
   const userId = req.userId || 'usr_admin_default';
-  const orders = getUserOrders(userId);
+  const orders = await getUserOrders(userId);
   res.json({
     success: true,
     orders,
@@ -883,9 +877,9 @@ app.get('/api/orders/inbound', extractOptionalAuth, (req: AuthenticatedRequest, 
   });
 });
 
-app.get('/api/orders', extractOptionalAuth, (req: AuthenticatedRequest, res) => {
+app.get('/api/orders', extractOptionalAuth, async (req: AuthenticatedRequest, res) => {
   const userId = req.userId || 'usr_admin_default';
-  const orders = getUserOrders(userId);
+  const orders = await getUserOrders(userId);
   res.json({
     success: true,
     orders,
@@ -893,20 +887,20 @@ app.get('/api/orders', extractOptionalAuth, (req: AuthenticatedRequest, res) => 
 });
 
 // Endpoint to update order status (Approved, Dispatched, Delivered, Cancelled) on server
-app.post('/api/orders/status', extractOptionalAuth, (req: AuthenticatedRequest, res) => {
+app.post('/api/orders/status', extractOptionalAuth, async (req: AuthenticatedRequest, res) => {
   const userId = req.userId || 'usr_admin_default';
   const { orderId, status, trackingId, consignmentId } = req.body || {};
   if (!orderId || !status) {
     return res.status(400).json({ success: false, error: 'Missing orderId or status' });
   }
 
-  const userOrders = getUserOrders(userId);
+  const userOrders = await getUserOrders(userId);
   const existingOrder = userOrders.find((o: any) => o.id === orderId);
   if (existingOrder) {
     existingOrder.status = status;
     if (trackingId) existingOrder.pathaoTrackingId = trackingId;
     if (consignmentId) existingOrder.pathaoConsignmentId = consignmentId;
-    addOrUpdateUserOrder(userId, existingOrder);
+    await addOrUpdateUserOrder(userId, existingOrder);
     console.log(`[Order Status Updated on Server for user ${userId}]: #${orderId} -> ${status}`);
   }
 
@@ -918,14 +912,14 @@ app.post('/api/orders/status', extractOptionalAuth, (req: AuthenticatedRequest, 
 });
 
 // Endpoint to update full order details (Customer Name, Phone, Address, City, Items, Product, Size, Notes, etc.)
-app.post('/api/orders/update', extractOptionalAuth, (req: AuthenticatedRequest, res) => {
+app.post('/api/orders/update', extractOptionalAuth, async (req: AuthenticatedRequest, res) => {
   const userId = req.userId || 'usr_admin_default';
   const updatedOrder = req.body;
   if (!updatedOrder || !updatedOrder.id) {
     return res.status(400).json({ success: false, error: 'Missing updated order payload or order id' });
   }
 
-  addOrUpdateUserOrder(userId, updatedOrder);
+  await addOrUpdateUserOrder(userId, updatedOrder);
   console.log(`[Order Edited on Server for user ${userId}]: #${updatedOrder.id} (${updatedOrder.customerName})`);
   return res.json({
     success: true,
@@ -935,41 +929,41 @@ app.post('/api/orders/update', extractOptionalAuth, (req: AuthenticatedRequest, 
 });
 
 // Save all orders for user
-app.post('/api/orders/save-all', requireAuth, (req: AuthenticatedRequest, res) => {
+app.post('/api/orders/save-all', requireAuth, async (req: AuthenticatedRequest, res) => {
   const userId = req.userId!;
   const { orders } = req.body || {};
   if (Array.isArray(orders)) {
-    saveUserOrders(userId, orders);
+    await saveUserOrders(userId, orders);
   }
   return res.json({ success: true, message: 'Orders saved successfully' });
 });
 
 // Workspace preferences & state
-app.get('/api/user/workspace', requireAuth, (req: AuthenticatedRequest, res) => {
+app.get('/api/user/workspace', requireAuth, async (req: AuthenticatedRequest, res) => {
   const userId = req.userId!;
-  const workspace = getUserWorkspaceData(userId);
+  const workspace = await getUserWorkspaceData(userId);
   return res.json({ success: true, workspace });
 });
 
-app.post('/api/user/workspace', requireAuth, (req: AuthenticatedRequest, res) => {
+app.post('/api/user/workspace', requireAuth, async (req: AuthenticatedRequest, res) => {
   const userId = req.userId!;
   const payload = req.body || {};
-  saveUserWorkspaceData(userId, payload);
+  await saveUserWorkspaceData(userId, payload);
   return res.json({ success: true, message: 'Workspace data saved successfully' });
 });
 
 // Per-User Language Preference Endpoints
-app.get('/api/settings/language', extractOptionalAuth, (req: AuthenticatedRequest, res) => {
+app.get('/api/settings/language', extractOptionalAuth, async (req: AuthenticatedRequest, res) => {
   const userId = req.userId || 'usr_admin_default';
-  const language = getUserLanguage(userId);
+  const language = await getUserLanguage(userId);
   return res.json({ success: true, language });
 });
 
-app.post('/api/settings/language', extractOptionalAuth, (req: AuthenticatedRequest, res) => {
+app.post('/api/settings/language', extractOptionalAuth, async (req: AuthenticatedRequest, res) => {
   const userId = req.userId || 'usr_admin_default';
   const { language } = req.body || {};
   if (language === 'en' || language === 'bn') {
-    setUserLanguage(userId, language);
+    await setUserLanguage(userId, language);
     return res.json({ success: true, message: 'Language preference saved for account', language });
   }
   return res.status(400).json({ success: false, message: 'Invalid language code. Must be "en" or "bn".' });
@@ -1342,8 +1336,9 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  app.listen(PORT, '0.0.0.0', async () => {
     console.log(`Vistoosa Male Fashion PWA Server running on port ${PORT}`);
+    await testFirestoreConnection();
   });
 }
 

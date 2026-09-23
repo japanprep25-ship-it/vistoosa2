@@ -1,8 +1,8 @@
+import { Resend } from 'resend';
 import nodemailer from 'nodemailer';
-import fs from 'fs';
-import path from 'path';
+import { db } from './firebaseAdmin';
 
-const OTP_FILE_PATH = path.join(process.cwd(), 'otp-records.json');
+const OTP_COLLECTION = 'otps';
 
 export interface OtpRecord {
   email: string;
@@ -13,34 +13,13 @@ export interface OtpRecord {
   createdAt: string;
 }
 
-type OtpMap = Record<string, OtpRecord>;
-
-function loadOtps(): OtpMap {
-  try {
-    if (!fs.existsSync(OTP_FILE_PATH)) return {};
-    const data = fs.readFileSync(OTP_FILE_PATH, 'utf-8');
-    return JSON.parse(data) as OtpMap;
-  } catch (err) {
-    return {};
-  }
-}
-
-function saveOtps(otps: OtpMap): void {
-  try {
-    fs.writeFileSync(OTP_FILE_PATH, JSON.stringify(otps, null, 2), 'utf-8');
-  } catch (err) {
-    console.error('Failed to save OTP records:', err);
-  }
-}
-
 // Generate 6-digit random numeric string
 export function generateRandom6DigitOtp(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
 /**
- * Send OTP via Nodemailer using Gmail SMTP if credentials exist.
- * Fallback to logging in server console and returning preview code.
+ * Send OTP via Resend HTTP API (preferred) or Gmail SMTP (fallback) if credentials exist.
  */
 export async function sendOtpEmail(
   toEmail: string,
@@ -48,8 +27,13 @@ export async function sendOtpEmail(
   type: 'login' | 'signup' | 'forgot_password'
 ): Promise<{ sentViaEmail: boolean; message: string; debugOtp?: string }> {
   const cleanEmail = toEmail.trim().toLowerCase();
-  const gmailSender = process.env.GMAIL_SENDER_ADDRESS;
-  const gmailAppPass = process.env.GMAIL_APP_PASSWORD;
+  const resendApiKey = process.env.RESEND_API_KEY ? process.env.RESEND_API_KEY.trim() : '';
+  const senderAddress = process.env.RESEND_SENDER_ADDRESS
+    ? process.env.RESEND_SENDER_ADDRESS.trim()
+    : 'Vistoosa Security <onboarding@resend.dev>';
+
+  const gmailSender = process.env.GMAIL_SENDER_ADDRESS ? process.env.GMAIL_SENDER_ADDRESS.trim() : '';
+  const gmailAppPass = process.env.GMAIL_APP_PASSWORD ? process.env.GMAIL_APP_PASSWORD.trim().replace(/\s+/g, '') : '';
 
   const subjectMap = {
     login: 'Your Vistoosa OS Login Verification Code',
@@ -57,7 +41,7 @@ export async function sendOtpEmail(
     forgot_password: 'Reset Password Verification Code - Vistoosa OS',
   };
 
-  const subject = `${subjectMap[type]}: ${otpCode}`;
+  const subject = `${subjectMap[type] || 'Verification Code'}: ${otpCode}`;
 
   const htmlBody = `
     <div style="font-family: 'Plus Jakarta Sans', Arial, sans-serif; background-color: #09090b; color: #f4f4f5; padding: 32px; border-radius: 16px; max-width: 520px; margin: 0 auto; border: 1px solid #27272a;">
@@ -76,49 +60,95 @@ export async function sendOtpEmail(
     </div>
   `;
 
-  if (gmailSender && gmailAppPass && gmailSender.includes('@') && gmailAppPass.trim().length >= 8) {
+  // 1. Prefer Resend HTTP API
+  if (resendApiKey) {
+    console.log(`Attempting to send OTP email to ${cleanEmail} via Resend HTTP API`);
     try {
-      const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-          user: gmailSender.trim(),
-          pass: gmailAppPass.trim().replace(/\s+/g, ''),
-        },
-      });
-
-      await transporter.sendMail({
-        from: `"Vistoosa OS Security" <${gmailSender.trim()}>`,
+      const resend = new Resend(resendApiKey);
+      const { data, error } = await resend.emails.send({
+        from: senderAddress,
         to: cleanEmail,
         subject,
         html: htmlBody,
       });
 
-      console.log(`[SMTP Mail Success]: OTP ${otpCode} sent to ${cleanEmail}`);
+      if (error) {
+        console.error(`Failed to send OTP email to ${cleanEmail} via Resend API. Error:`, error);
+        return {
+          sentViaEmail: false,
+          message: `Failed to send email via Resend API: ${error.message || JSON.stringify(error)}. (Code generated: ${otpCode})`,
+          debugOtp: otpCode,
+        };
+      }
+
+      console.log(`Email sent successfully to ${cleanEmail} via Resend API (Message ID: ${data?.id || 'N/A'})`);
       return {
         sentViaEmail: true,
         message: `OTP verification code sent to ${cleanEmail}`,
       };
     } catch (err: any) {
-      console.warn(`[SMTP Mail Warning]: Failed to send email via Gmail SMTP:`, err?.message || err);
-      // Fallback to console debug
+      console.error(`Failed to send OTP email to ${cleanEmail} via Resend API. Error code: ${err?.code || 'UNKNOWN'}, Message: ${err?.message || err}`);
+      console.error(`[Resend API Error Stack]:`, err);
+
+      return {
+        sentViaEmail: false,
+        message: `Failed to send email via Resend API: ${err?.message || 'API Error'}. (Code generated: ${otpCode})`,
+        debugOtp: otpCode,
+      };
     }
   }
 
-  // Fallback for dev / preview mode when SMTP credentials are not set
-  console.log(`\n==============================================`);
+  // 2. Fallback to Gmail SMTP if Nodemailer credentials provided
+  if (gmailSender && gmailAppPass) {
+    console.log(`Attempting to send OTP email to ${cleanEmail} via Gmail SMTP`);
+    try {
+      const transporter = nodemailer.createTransport({
+        host: 'smtp.gmail.com',
+        port: 465,
+        secure: true,
+        auth: {
+          user: gmailSender,
+          pass: gmailAppPass,
+        },
+      });
+
+      const info = await transporter.sendMail({
+        from: `"Vistoosa OS Security" <${gmailSender}>`,
+        to: cleanEmail,
+        subject,
+        html: htmlBody,
+      });
+
+      console.log(`Email sent successfully to ${cleanEmail} (Message ID: ${info?.messageId || 'N/A'})`);
+      return {
+        sentViaEmail: true,
+        message: `OTP verification code sent to ${cleanEmail}`,
+      };
+    } catch (err: any) {
+      console.error(`Failed to send OTP email to ${cleanEmail} via Gmail SMTP. Error code: ${err?.code || 'UNKNOWN'}, Message: ${err?.message || err}`);
+      console.error(`[Gmail SMTP Error Stack]:`, err);
+
+      return {
+        sentViaEmail: false,
+        message: `Failed to send email via Gmail SMTP: ${err?.message || 'SMTP Error'}. (Code generated: ${otpCode})`,
+        debugOtp: otpCode,
+      };
+    }
+  }
+
+  // 3. No email credentials configured on environment
+  console.warn(`No RESEND_API_KEY or Gmail SMTP credentials found in environment variables. Cannot send email to ${cleanEmail}.`);
   console.log(`[OTP GENERATED for ${cleanEmail}]: ${otpCode}`);
-  console.log(`Type: ${type} | Valid for 10 minutes`);
-  console.log(`==============================================\n`);
 
   return {
     sentViaEmail: false,
-    message: `OTP generated for ${cleanEmail}. (Check server log or preview fallback code: ${otpCode})`,
+    message: `Email credentials missing in environment variables. OTP generated: ${otpCode}`,
     debugOtp: otpCode,
   };
 }
 
 /**
- * Generate, save, and dispatch OTP to user email
+ * Generate, save to Firestore, and dispatch OTP to user email
  */
 export async function createAndSendOtp(
   email: string,
@@ -128,8 +158,7 @@ export async function createAndSendOtp(
   const otpCode = generateRandom6DigitOtp();
   const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes from now
 
-  const otps = loadOtps();
-  otps[cleanEmail] = {
+  const record: OtpRecord = {
     email: cleanEmail,
     otpCode,
     expiresAt,
@@ -137,7 +166,13 @@ export async function createAndSendOtp(
     attempts: 0,
     createdAt: new Date().toISOString(),
   };
-  saveOtps(otps);
+
+  try {
+    const docRef = db.collection(OTP_COLLECTION).doc(cleanEmail);
+    await docRef.set(record);
+  } catch (err: any) {
+    console.error(`[OtpService]: Error saving OTP to Firestore for ${cleanEmail}:`, err?.message || err, err);
+  }
 
   const mailResult = await sendOtpEmail(cleanEmail, otpCode, type);
 
@@ -145,56 +180,63 @@ export async function createAndSendOtp(
     success: true,
     message: mailResult.sentViaEmail
       ? `A 6-digit OTP verification code has been sent to ${cleanEmail}.`
-      : `OTP verification code dispatched.`,
+      : `OTP verification code generated. ${mailResult.message}`,
     expiresAt,
     debugOtp: mailResult.debugOtp,
   };
 }
 
 /**
- * Verify OTP submitted by user
+ * Verify OTP submitted by user against Firestore
  */
-export function verifyOtpCode(
+export async function verifyOtpCode(
   email: string,
   code: string
-): { success: boolean; message: string } {
+): Promise<{ success: boolean; message: string }> {
   const cleanEmail = email.trim().toLowerCase();
   const cleanCode = code.trim();
 
-  const otps = loadOtps();
-  const record = otps[cleanEmail];
+  try {
+    const docRef = db.collection(OTP_COLLECTION).doc(cleanEmail);
+    const doc = await docRef.get();
 
-  if (!record) {
+    if (!doc.exists) {
+      return {
+        success: false,
+        message: 'No OTP code found for this email. Please click "Resend OTP".',
+      };
+    }
+
+    const record = doc.data() as OtpRecord;
+
+    if (Date.now() > record.expiresAt) {
+      await docRef.delete();
+      return {
+        success: false,
+        message: 'OTP verification code has expired. Please click "Resend OTP".',
+      };
+    }
+
+    if (record.otpCode !== cleanCode) {
+      await docRef.update({ attempts: (record.attempts || 0) + 1 });
+      return {
+        success: false,
+        message: 'Invalid OTP code. Please check your email and try again.',
+      };
+    }
+
+    // Clear OTP on successful verification
+    await docRef.delete();
+
+    return {
+      success: true,
+      message: 'OTP verified successfully.',
+    };
+  } catch (err: any) {
+    console.error(`[OtpService]: verifyOtpCode error for ${cleanEmail}:`, err?.message || err, err);
     return {
       success: false,
-      message: 'No OTP code found for this email. Please click "Resend OTP".',
+      message: 'Error verifying OTP code.',
     };
   }
-
-  if (Date.now() > record.expiresAt) {
-    delete otps[cleanEmail];
-    saveOtps(otps);
-    return {
-      success: false,
-      message: 'OTP verification code has expired. Please click "Resend OTP".',
-    };
-  }
-
-  if (record.otpCode !== cleanCode) {
-    record.attempts += 1;
-    saveOtps(otps);
-    return {
-      success: false,
-      message: 'Invalid OTP code. Please check your email and try again.',
-    };
-  }
-
-  // Clear OTP on successful verification
-  delete otps[cleanEmail];
-  saveOtps(otps);
-
-  return {
-    success: true,
-    message: 'OTP verified successfully.',
-  };
 }

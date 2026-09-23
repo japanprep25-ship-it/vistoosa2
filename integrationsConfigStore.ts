@@ -1,9 +1,8 @@
-import fs from 'fs';
-import path from 'path';
 import type { Express, Response } from 'express';
 import { requireAuth, AuthenticatedRequest } from './authMiddleware';
+import { db } from './firebaseAdmin';
 
-const CONFIG_PATH = path.join(process.cwd(), 'integrations-config.json');
+const INTEGRATIONS_COLLECTION = 'integrationsConfig';
 
 export interface FullIntegrationsConfig {
   website?: {
@@ -47,65 +46,75 @@ export interface FullIntegrationsConfig {
   };
 }
 
-type PerUserIntegrationsConfigs = Record<string, FullIntegrationsConfig>;
+export async function loadIntegrationsConfig(userId: string): Promise<FullIntegrationsConfig> {
+  if (!userId) return {};
 
-function loadAllIntegrationsConfigs(): PerUserIntegrationsConfigs {
   try {
-    if (!fs.existsSync(CONFIG_PATH)) return {};
-    const data = fs.readFileSync(CONFIG_PATH, 'utf-8');
-    const parsed = JSON.parse(data);
+    const docRef = db.collection(INTEGRATIONS_COLLECTION).doc(userId);
+    const doc = await docRef.get();
 
-    if (parsed && typeof parsed === 'object' && ('website' in parsed || 'meta' in parsed || 'gas' in parsed) && !('usr_' in parsed)) {
-      return { usr_admin_default: parsed as FullIntegrationsConfig };
-    }
-    return (parsed as PerUserIntegrationsConfigs) || {};
-  } catch {
+    if (!doc.exists) return {};
+    return doc.data() as FullIntegrationsConfig;
+  } catch (err: any) {
+    console.error(`[IntegrationsConfigStore]: Error loading integrations config for user ${userId}:`, err?.message || err);
     return {};
   }
 }
 
-export function loadIntegrationsConfig(userId: string): FullIntegrationsConfig {
+export async function saveIntegrationsConfig(
+  userId: string,
+  newConfig: Partial<FullIntegrationsConfig>
+): Promise<FullIntegrationsConfig> {
   if (!userId) return {};
-  const all = loadAllIntegrationsConfigs();
-  return all[userId] || {};
-}
 
-export function saveIntegrationsConfig(userId: string, newConfig: Partial<FullIntegrationsConfig>) {
-  if (!userId) return {};
-  const all = loadAllIntegrationsConfigs();
-  const current = all[userId] || {};
-  const merged = {
-    ...current,
-    ...newConfig,
-    website: newConfig.website ? { ...current.website, ...newConfig.website } : current.website,
-    meta: newConfig.meta ? { ...current.meta, ...newConfig.meta } : current.meta,
-    gas: newConfig.gas ? { ...current.gas, ...newConfig.gas } : current.gas,
-  };
-  all[userId] = merged;
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(all, null, 2), 'utf-8');
-  return merged;
+  try {
+    const current = await loadIntegrationsConfig(userId);
+    const merged: FullIntegrationsConfig = {
+      ...current,
+      ...newConfig,
+      website: newConfig.website ? { ...current.website, ...newConfig.website } : current.website,
+      meta: newConfig.meta ? { ...current.meta, ...newConfig.meta } : current.meta,
+      gas: newConfig.gas ? { ...current.gas, ...newConfig.gas } : current.gas,
+    };
+
+    const docRef = db.collection(INTEGRATIONS_COLLECTION).doc(userId);
+    await docRef.set({ ...merged, updatedAt: new Date().toISOString() }, { merge: true });
+
+    return merged;
+  } catch (err: any) {
+    console.error(`[IntegrationsConfigStore]: Error saving integrations config for user ${userId}:`, err?.message || err);
+    return {};
+  }
 }
 
 export function mountIntegrationsConfigRoutes(app: Express) {
   // GET /api/settings/integrations - Load all persistent integration settings for user
-  app.get('/api/settings/integrations', requireAuth, (req: AuthenticatedRequest, res: Response) => {
-    const userId = req.userId!;
-    const config = loadIntegrationsConfig(userId);
-    return res.json({
-      success: true,
-      config,
-    });
+  app.get('/api/settings/integrations', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const userId = req.userId!;
+      const config = await loadIntegrationsConfig(userId);
+      return res.json({
+        success: true,
+        config,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err?.message || 'Failed to load integration settings.' });
+    }
   });
 
   // POST /api/settings/integrations - Save persistent integration settings for user
-  app.post('/api/settings/integrations', requireAuth, (req: AuthenticatedRequest, res: Response) => {
-    const userId = req.userId!;
-    const payload = req.body || {};
-    const updated = saveIntegrationsConfig(userId, payload);
-    return res.json({
-      success: true,
-      message: 'Integration settings saved permanently for your account.',
-      config: updated,
-    });
+  app.post('/api/settings/integrations', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const userId = req.userId!;
+      const payload = req.body || {};
+      const updated = await saveIntegrationsConfig(userId, payload);
+      return res.json({
+        success: true,
+        message: 'Integration settings saved permanently in Firestore.',
+        config: updated,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err?.message || 'Failed to save integration settings.' });
+    }
   });
 }

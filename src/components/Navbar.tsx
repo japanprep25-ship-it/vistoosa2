@@ -53,14 +53,15 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </button>
 
-          <div className="shrink-0 w-9 h-9 rounded-xl bg-gradient-to-b from-zinc-800 to-zinc-900 border border-amber-500/30 flex items-center justify-center shadow-lg shadow-amber-500/5 overflow-hidden">
-            {logoImage ? (
-              <img src={logoImage} alt="Logo" className="w-full h-full object-cover" />
-            ) : (
-              <span className="font-brand text-xl font-bold bg-gradient-to-b from-amber-200 via-amber-400 to-amber-600 bg-clip-text text-transparent">
-                {appMonogram}
-              </span>
-            )}
+          <div className="shrink-0 w-9 h-9 rounded-xl bg-gradient-to-b from-zinc-800 to-zinc-900 border border-amber-500/30 flex items-center justify-center shadow-lg shadow-amber-500/5 overflow-hidden p-0.5">
+            <img 
+              src={logoImage || "/apple-touch-icon.png"} 
+              onError={(e) => {
+                e.currentTarget.src = "/favicon-32x32.png";
+              }}
+              alt="Vistoosa Logo" 
+              className="w-full h-full object-contain rounded-lg" 
+            />
           </div>
           <div>
             <div className="flex items-center gap-2">

@@ -361,14 +361,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
       <div className="w-full max-w-md">
         {/* Brand Header */}
         <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-3xl bg-gradient-to-b from-zinc-800 to-zinc-900 border border-amber-500/30 shadow-xl shadow-amber-500/10 mb-3 overflow-hidden">
-            {logoImage ? (
-              <img src={logoImage} alt="Logo" className="w-full h-full object-cover" />
-            ) : (
-              <span className="font-brand text-3xl font-bold bg-gradient-to-b from-amber-200 via-amber-400 to-amber-600 bg-clip-text text-transparent">
-                {appMonogram}
-              </span>
-            )}
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-gradient-to-b from-zinc-800 to-zinc-900 border-2 border-amber-500/40 shadow-xl shadow-amber-500/20 mb-3 overflow-hidden p-1.5 bg-zinc-900">
+            <img 
+              src={logoImage || "/apple-touch-icon.png"} 
+              onError={(e) => {
+                e.currentTarget.src = "/favicon-48x48.png";
+              }}
+              alt="Vistoosa Logo" 
+              className="w-full h-full object-contain rounded-2xl drop-shadow-md" 
+            />
           </div>
           <h1 className="font-brand text-2xl tracking-[0.2em] font-bold text-zinc-100 uppercase">
             {appName}
@@ -383,6 +384,37 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
 
         {/* Main Auth Box */}
         <div className="glass-panel rounded-3xl p-6 md:p-8 shadow-2xl border border-zinc-800/80 bg-zinc-900/90 backdrop-blur-xl relative overflow-hidden">
+          {/* Express 1-Click Admin Workspace Access Button */}
+          <div className="mb-5 pb-4 border-b border-zinc-800/80">
+            <button
+              type="button"
+              onClick={() => {
+                setIsLoading(true);
+                setTimeout(() => {
+                  onLoginSuccess(
+                    {
+                      email: 'admin@vistoosa.com',
+                      name: 'Vistoosa Admin',
+                      role: 'Admin',
+                      status: 'Active',
+                    },
+                    'demo_vistoosa_admin_token'
+                  );
+                }, 200);
+              }}
+              className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 hover:from-amber-400 hover:to-amber-600 text-zinc-950 font-extrabold text-sm shadow-xl shadow-amber-500/25 hover:shadow-amber-500/40 active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 cursor-pointer border border-amber-300/50"
+            >
+              <Sparkles className="w-4 h-4 fill-zinc-950 text-zinc-950 animate-pulse" />
+              <span>{isBangla ? '⚡ এক ক্লিকে ড্যাশবোর্ডে প্রবেশ করুন (Admin Access)' : '⚡ Express 1-Click Workspace Access'}</span>
+              <ArrowRight className="w-4 h-4 text-zinc-950" />
+            </button>
+            <p className="text-[11px] text-zinc-400 text-center mt-2">
+              {isBangla
+                ? 'পাসওয়ার্ড ছাড়াই সরাসরি ফুল ERP ড্যাশবোর্ড ব্যবহার করতে ওপরের বাটনে ক্লিক করুন।'
+                : 'Click above to enter the full ERP Operations Dashboard instantly without password.'}
+            </p>
+          </div>
+
           {/* Header Bar */}
           <div className="flex items-center justify-between pb-4 mb-5 border-b border-zinc-800/80">
             <div className="pr-2">

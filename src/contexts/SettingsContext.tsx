@@ -26,7 +26,7 @@ const defaultSettings: SettingsData = {
   appTagline: '',
   themePreset: 'amber',
   fontPreset: 'default',
-  logoImage: '/vistoosa-logo.png',
+  logoImage: '/logo_white.png',
   isDarkMode: true,
 };
 
@@ -83,7 +83,7 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
           appName: 'Vistoosa Management System',
           appSubtitle: 'Management System',
           appTagline: '',
-          logoImage: '/vistoosa-logo.png',
+          logoImage: parsed.logoImage || defaultSettings.logoImage,
         };
       } catch (e) {
         return defaultSettings;

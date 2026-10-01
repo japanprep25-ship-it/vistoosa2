@@ -362,7 +362,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
       <div className="w-full max-w-md">
         {/* Brand Header */}
         <div className="text-center mb-6">
-          <BrandLogo size="xl" className="mb-3 mx-auto p-1.5" />
+          <BrandLogo heightPx={64} className="mb-3 mx-auto" />
           <h1 className="font-brand text-2xl tracking-[0.2em] font-bold text-zinc-100 uppercase">
             Vistoosa
           </h1>

@@ -4,10 +4,16 @@
   "description": "Vistoosa Management System - Male Fashion & Operations Intelligence Platform",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#000000",
-  "theme_color": "#000000",
+  "background_color": "#0f0f14",
+  "theme_color": "#0f0f14",
   "orientation": "portrait",
   "icons": [
+    {
+      "src": "/logo_white.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
     {
       "src": "/favicon-16x16.png",
       "sizes": "16x16",

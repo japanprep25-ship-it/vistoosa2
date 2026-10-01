@@ -54,7 +54,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </button>
 
-          <BrandLogo size="sm" className="w-9 h-9" />
+          <BrandLogo heightPx={40} className="shrink-0 cursor-pointer" />
           <div>
             <div className="flex items-center gap-2">
               <span className="font-brand text-sm font-bold tracking-[0.2em] text-zinc-100 uppercase">

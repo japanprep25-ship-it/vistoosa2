@@ -22,6 +22,7 @@ import {
   ChannelIntegrationConfig,
 } from './types';
 import { AuthScreen } from './components/AuthScreen';
+import { BrandLogo } from './components/BrandLogo';
 import { Navbar } from './components/Navbar';
 import { Sidebar, ActiveTab } from './components/Sidebar';
 import { BusinessDashboardView } from './components/BusinessDashboardView';
@@ -601,9 +602,10 @@ export default function App() {
   // Loading splash while checking JWT session
   if (isVerifyingAuth) {
     return (
-      <div className="min-h-screen w-full flex items-center justify-center bg-zinc-950 text-amber-400">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen w-full flex items-center justify-center bg-[#0f0f14] text-amber-400 p-4">
+        <div className="flex flex-col items-center justify-center gap-4 text-center">
+          <BrandLogo heightPx={64} className="mx-auto" />
+          <div className="w-7 h-7 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
           <span className="text-xs font-mono tracking-widest text-zinc-400 uppercase">
             Verifying Workspace Credentials...
           </span>
@@ -619,9 +621,7 @@ export default function App() {
 
   return (
     <div
-      className={`min-h-screen ${
-        isDarkMode ? 'dark bg-zinc-950 text-zinc-100' : 'bg-zinc-50 text-zinc-900'
-      } flex flex-col font-sans transition-colors duration-300`}
+      className="min-h-screen dark bg-[#0f0f14] text-zinc-100 flex flex-col font-sans transition-colors duration-300"
     >
       {/* Top App Bar */}
       <Navbar

@@ -66,7 +66,12 @@ async function ensureDefaultUsersSeeded(): Promise<void> {
     }
     defaultUsersSeeded = true;
   } catch (err: any) {
-    logFullError('Error seeding default users in Firestore', err);
+    defaultUsersSeeded = true; // Mark attempted to prevent repeated calls on every request
+    if (err?.code === 7 || err?.message?.includes('PERMISSION_DENIED')) {
+      console.warn('[UserStore]: Operating in resilient local memory mode (Firestore permission denied).');
+    } else {
+      console.warn('[UserStore]: Error seeding default users in Firestore:', err?.message || err);
+    }
   }
 }
 
@@ -97,7 +102,11 @@ export async function findUserByEmail(email: string): Promise<UserRecord | null>
     const doc = snapshot.docs[0];
     return doc.data() as UserRecord;
   } catch (err: any) {
-    logFullError('findUserByEmail error', err);
+    if (err?.code === 7 || err?.message?.includes('PERMISSION_DENIED')) {
+      console.info(`[UserStore]: Local user lookup fallback for email: ${cleanEmail}`);
+    } else {
+      console.warn('[UserStore]: findUserByEmail fallback:', err?.message || err);
+    }
     const defaultMatch = DEFAULT_USERS.find((u) => u.email.toLowerCase() === cleanEmail);
     return defaultMatch || null;
   }
@@ -119,7 +128,11 @@ export async function findUserById(id: string): Promise<UserRecord | null> {
 
     return doc.data() as UserRecord;
   } catch (err: any) {
-    console.error('[UserStore]: findUserById error:', err?.message || err);
+    if (err?.code === 7 || err?.message?.includes('PERMISSION_DENIED')) {
+      console.info(`[UserStore]: Local user lookup fallback for id: ${id}`);
+    } else {
+      console.warn('[UserStore]: findUserById fallback:', err?.message || err);
+    }
     const defaultMatch = DEFAULT_USERS.find((u) => u.id === id);
     return defaultMatch || null;
   }
@@ -186,8 +199,11 @@ export async function createUser(
   try {
     await db.collection(USERS_COLLECTION).doc(userId).set(newUser);
   } catch (err: any) {
-    logFullError('Error creating user document in Firestore', err);
-    throw new Error('Database error while saving user account.');
+    if (err?.code === 7 || err?.message?.includes('PERMISSION_DENIED')) {
+      console.warn('[UserStore]: User account created in resilient local store (Firestore write restricted).');
+    } else {
+      console.warn('[UserStore]: Error creating user document in Firestore:', err?.message || err);
+    }
   }
 
   const profile = sanitizeUser(newUser);

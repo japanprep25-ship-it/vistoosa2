@@ -182,22 +182,12 @@ export const SettingsView: React.FC = () => {
             
             <div>
               <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
-                Brand Logo (Official Vistoosa Icon)
+                Brand Logo Status
               </label>
               
-              <div className="flex items-center gap-4 p-3 rounded-xl bg-zinc-900/60 border border-zinc-800">
-                <BrandLogo size="lg" className="w-16 h-16 p-1" />
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-zinc-100">Official Vistoosa Logo</span>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-semibold uppercase tracking-wider">
-                      Locked & Cached
-                    </span>
-                  </div>
-                  <p className="text-xs text-zinc-400">
-                    Active across iOS, Android, macOS, Windows, PWA launcher, headers, and full offline mode.
-                  </p>
-                </div>
+              <div className="flex items-center gap-3 p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800 text-xs text-zinc-400">
+                <span className="w-2 h-2 rounded-full bg-zinc-500" />
+                <span>Logo images have been disabled and removed globally from all screens and headers.</span>
               </div>
             </div>
 

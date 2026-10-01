@@ -1,16 +1,23 @@
-// Vistoosa Service Worker for PWA Caching & Offline Operations
-const CACHE_NAME = 'vistoosa-cache-v1';
+// Vistoosa Service Worker for PWA Caching & Full Offline Operations
+const CACHE_NAME = 'vistoosa-cache-v2';
+
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/manifest.json',
+  '/vistoosa-logo.png',
+  '/icon.svg',
+  '/apple-touch-icon.png',
+  '/favicon.ico',
   '/favicon-16x16.png',
   '/favicon-32x32.png',
   '/favicon-48x48.png',
-  '/apple-touch-icon.png',
   '/android-chrome-192x192.png',
   '/android-chrome-512x512.png',
-  '/maskable-icon-512x512.png'
+  '/maskable-icon-512x512.png',
+  '/pwa-192x192.png',
+  '/pwa-512x512.png',
+  '/pwa-maskable-512x512.png'
 ];
 
 self.addEventListener('install', (event) => {
@@ -52,7 +59,18 @@ self.addEventListener('fetch', (event) => {
         }).catch(() => {});
         return cachedResponse;
       }
-      return fetch(event.request);
+      
+      return fetch(event.request).catch(async () => {
+        // Offline Fallback for Images and Logo
+        if (event.request.destination === 'image' || event.request.url.match(/\.(png|jpg|jpeg|svg|webp|ico)$/i)) {
+          const logoFallback = await caches.match('/vistoosa-logo.png') || await caches.match('/icon.svg') || await caches.match('/apple-touch-icon.png');
+          if (logoFallback) return logoFallback;
+        }
+        // Offline Fallback for HTML documents
+        if (event.request.mode === 'navigate') {
+          return caches.match('/index.html');
+        }
+      });
     })
   );
 });

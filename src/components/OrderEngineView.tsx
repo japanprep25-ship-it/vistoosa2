@@ -1842,7 +1842,7 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                         {/* Direct WhatsApp Call / Message */}
                         <a
                           href={`https://wa.me/880${order.phone.replace(/^0/, '')}?text=${encodeURIComponent(
-                            `Assalamu Alaikum ${order.customerName}, this is Vistoosa Haute Couture regarding your order #${order.id}.`
+                            `Assalamu Alaikum ${order.customerName}, this is Vistoosa Management System regarding your order #${order.id}.`
                           )}`}
                           target="_blank"
                           rel="noreferrer"

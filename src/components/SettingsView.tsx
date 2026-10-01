@@ -1,4 +1,5 @@
 import React, { useRef } from 'react';
+import { BrandLogo } from './BrandLogo';
 import { useSettings, ThemePreset, FontPreset } from '../contexts/SettingsContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { Save, Sparkles, Moon, Sun, Type, Palette, Image as ImageIcon, Upload, X, Globe, CheckCircle2 } from 'lucide-react';
@@ -181,57 +182,21 @@ export const SettingsView: React.FC = () => {
             
             <div>
               <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
-                Brand Logo
+                Brand Logo (Official Vistoosa Icon)
               </label>
               
-              <div className="flex items-start gap-4">
-                <div className="shrink-0 w-16 h-16 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center overflow-hidden">
-                  {formData.logoImage ? (
-                    <img src={formData.logoImage} alt="Brand Logo" className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="font-brand text-2xl bg-gradient-to-b from-amber-200 to-amber-600 bg-clip-text text-transparent">
-                      {formData.appMonogram || 'V'}
+              <div className="flex items-center gap-4 p-3 rounded-xl bg-zinc-900/60 border border-zinc-800">
+                <BrandLogo size="lg" className="w-16 h-16 p-1" />
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-zinc-100">Official Vistoosa Logo</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-semibold uppercase tracking-wider">
+                      Locked & Cached
                     </span>
-                  )}
-                </div>
-                <div className="flex-1 space-y-3">
-                  <div className="flex gap-2">
-                    <input 
-                      type="file" 
-                      ref={fileInputRef} 
-                      onChange={handleImageUpload}
-                      accept="image/*" 
-                      className="hidden" 
-                    />
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm font-medium rounded-lg transition-colors border border-zinc-700"
-                    >
-                      <Upload className="w-4 h-4" /> Upload Custom Logo
-                    </button>
-                    {formData.logoImage && (
-                      <button
-                        onClick={() => setFormData(prev => ({ ...prev, logoImage: null }))}
-                        className="px-3 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-sm font-medium rounded-lg transition-colors border border-rose-500/20"
-                        title="Remove Logo"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
                   </div>
-                  
-                  <div className="flex gap-2 items-center">
-                    <span className="text-xs text-zinc-500 font-medium">OR</span>
-                    <input
-                      type="text"
-                      maxLength={2}
-                      value={formData.appMonogram}
-                      onChange={(e) => setFormData(prev => ({ ...prev, appMonogram: e.target.value }))}
-                      className="w-[120px] bg-zinc-900/80 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm text-zinc-200 focus:outline-none focus:border-amber-500/50 transition-colors font-brand"
-                      placeholder="Monogram"
-                      disabled={!!formData.logoImage}
-                    />
-                  </div>
+                  <p className="text-xs text-zinc-400">
+                    Active across iOS, Android, macOS, Windows, PWA launcher, headers, and full offline mode.
+                  </p>
                 </div>
               </div>
             </div>
@@ -245,20 +210,7 @@ export const SettingsView: React.FC = () => {
                 value={formData.appSubtitle}
                 onChange={(e) => setFormData(prev => ({ ...prev, appSubtitle: e.target.value }))}
                 className="w-full bg-zinc-900/80 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-zinc-200 focus:outline-none focus:border-amber-500/50 transition-colors"
-                placeholder="e.g. Haute Couture"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
-                Tagline / Description
-              </label>
-              <input
-                type="text"
-                value={formData.appTagline}
-                onChange={(e) => setFormData(prev => ({ ...prev, appTagline: e.target.value }))}
-                className="w-full bg-zinc-900/80 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-zinc-200 focus:outline-none focus:border-amber-500/50 transition-colors"
-                placeholder="e.g. Dhaka Fulfillment Hub"
+                placeholder="e.g. Management System"
               />
             </div>
           </div>

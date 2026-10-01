@@ -439,7 +439,7 @@ export const FinancialAnalyticsEngine: React.FC<FinancialAnalyticsEngineProps> =
           <div className="mt-4 p-3 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2 animate-in fade-in">
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
             <span>
-              <strong>Success:</strong> Vistoosa Haute Couture Executive P&L PDF Report generated and downloaded to your device.
+              <strong>Success:</strong> Vistoosa Management System Executive P&L PDF Report generated and downloaded to your device.
             </span>
           </div>
         )}

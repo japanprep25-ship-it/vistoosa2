@@ -20,13 +20,13 @@ interface SettingsContextType extends SettingsData {
 }
 
 const defaultSettings: SettingsData = {
-  appName: 'Vistoosa',
+  appName: 'Vistoosa Management System',
   appMonogram: 'V',
-  appSubtitle: 'Haute Couture',
-  appTagline: 'Dhaka Fulfillment Hub • 100% Free Tier Cloud',
+  appSubtitle: 'Management System',
+  appTagline: '',
   themePreset: 'amber',
   fontPreset: 'default',
-  logoImage: null,
+  logoImage: '/vistoosa-logo.png',
   isDarkMode: true,
 };
 
@@ -76,7 +76,15 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
     const saved = localStorage.getItem('vistoosa-settings');
     if (saved) {
       try {
-        return { ...defaultSettings, ...JSON.parse(saved) };
+        const parsed = JSON.parse(saved);
+        return {
+          ...defaultSettings,
+          ...parsed,
+          appName: 'Vistoosa Management System',
+          appSubtitle: 'Management System',
+          appTagline: '',
+          logoImage: '/vistoosa-logo.png',
+        };
       } catch (e) {
         return defaultSettings;
       }

@@ -1,7 +1,7 @@
 {
-  "name": "Vistoosa",
-  "short_name": "Vistoosa",
-  "description": "Vistoosa Male Fashion & Operations Intelligence Platform",
+  "name": "Vistoosa Management System",
+  "short_name": "Vistoosa MS",
+  "description": "Vistoosa Management System - Male Fashion & Operations Intelligence Platform",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#000000",

@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { BrandLogo } from './BrandLogo';
 import {
   LayoutDashboard,
   ShoppingBag,
@@ -183,21 +184,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Drawer Header */}
         <div className="flex items-center justify-between pb-3 mb-2 border-b border-zinc-800/80 shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-b from-zinc-800 to-zinc-900 border border-amber-500/30 flex items-center justify-center shadow-md shadow-amber-500/5 overflow-hidden p-0.5">
-              <img 
-                src={logoImage || "/apple-touch-icon.png"} 
-                onError={(e) => {
-                  e.currentTarget.src = "/favicon-32x32.png";
-                }}
-                alt="Vistoosa Logo" 
-                className="w-full h-full object-contain rounded-lg" 
-              />
-            </div>
+            <BrandLogo size="xs" className="w-8 h-8" />
             <div>
               <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-100 font-brand">
-                {appName}
+                Vistoosa
               </h2>
-              <p className="text-[10px] text-amber-400/80 font-medium">Operations Menu</p>
+              <p className="text-[10px] text-amber-400 font-semibold tracking-wider uppercase">Management System</p>
             </div>
           </div>
           {handleClose && (

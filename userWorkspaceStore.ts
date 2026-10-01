@@ -65,8 +65,27 @@ const DEFAULT_SEED_ORDERS = [
   },
 ];
 
+// In-memory fallback stores for high resilience when Firestore permissions/network are limited
+const inMemoryOrdersMap = new Map<string, Map<string, any>>();
+const inMemoryWorkspacesMap = new Map<string, UserWorkspaceData>();
+
+// Preseed in-memory store for default admin and guest workspaces
+function seedInMemoryStore(userId: string) {
+  if (!inMemoryOrdersMap.has(userId)) {
+    const userMap = new Map<string, any>();
+    DEFAULT_SEED_ORDERS.forEach((o) => {
+      userMap.set(o.id, { ...o, userId });
+    });
+    inMemoryOrdersMap.set(userId, userMap);
+  }
+}
+
+seedInMemoryStore('usr_admin_default');
+seedInMemoryStore('usr_guest');
+
 export async function getUserOrders(userId: string): Promise<any[]> {
   if (!userId) return [];
+  seedInMemoryStore(userId);
 
   try {
     const promises = [
@@ -89,33 +108,42 @@ export async function getUserOrders(userId: string): Promise<any[]> {
     }
 
     if (orderMap.size === 0) {
-      // Seed default sample orders for user's fresh workspace in Firestore
-      const seedOrders = DEFAULT_SEED_ORDERS.map((o) => ({
-        ...o,
-        userId,
-      }));
-
-      const batch = db.batch();
-      for (const order of seedOrders) {
-        const docRef = db.collection(ORDERS_COLLECTION).doc(order.id);
-        batch.set(docRef, order);
-      }
-      await batch.commit();
-
-      return seedOrders;
+      // Use in-memory default orders if empty
+      const localUserMap = inMemoryOrdersMap.get(userId) || new Map();
+      const localOrders = Array.from(localUserMap.values());
+      return localOrders.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
     }
 
     const orders = Array.from(orderMap.values());
-    // Sort orders descending by createdAt timestamp
+    // Sync to local memory map
+    const userMap = inMemoryOrdersMap.get(userId) || new Map<string, any>();
+    orders.forEach((o) => userMap.set(o.id, o));
+    inMemoryOrdersMap.set(userId, userMap);
+
     return orders.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
   } catch (err: any) {
-    console.error(`[UserWorkspaceStore]: getUserOrders error for user ${userId}:`, err?.message || err);
-    return DEFAULT_SEED_ORDERS.map((o) => ({ ...o, userId }));
+    console.warn(`[UserWorkspaceStore]: Firestore query fallback for user ${userId}:`, err?.message || err);
+    // Return merged local in-memory orders
+    const userMap = inMemoryOrdersMap.get(userId) || new Map<string, any>();
+    const adminMap = inMemoryOrdersMap.get('usr_admin_default') || new Map<string, any>();
+    const merged = new Map<string, any>([...adminMap, ...userMap]);
+    const orders = Array.from(merged.values());
+    return orders.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
   }
 }
 
 export async function saveUserOrders(userId: string, orders: any[]): Promise<void> {
   if (!userId || !Array.isArray(orders)) return;
+  seedInMemoryStore(userId);
+
+  // Update in-memory store immediately
+  const userMap = inMemoryOrdersMap.get(userId) || new Map<string, any>();
+  for (const order of orders) {
+    if (order && order.id) {
+      userMap.set(String(order.id), { ...order, userId });
+    }
+  }
+  inMemoryOrdersMap.set(userId, userMap);
 
   try {
     const batch = db.batch();
@@ -126,44 +154,45 @@ export async function saveUserOrders(userId: string, orders: any[]): Promise<voi
     }
     await batch.commit();
   } catch (err: any) {
-    console.error(`[UserWorkspaceStore]: saveUserOrders error for user ${userId}:`, err?.message || err);
+    console.warn(`[UserWorkspaceStore]: saveUserOrders Firestore sync warning for user ${userId}:`, err?.message || err);
   }
 }
 
 export async function addOrUpdateUserOrder(userId: string, order: any): Promise<void> {
   if (!userId || !order || !order.id) return;
+  seedInMemoryStore(userId);
+
+  // Update in-memory store
+  const userMap = inMemoryOrdersMap.get(userId) || new Map<string, any>();
+  const updatedOrder = { ...order, userId, updatedAt: new Date().toISOString() };
+  userMap.set(String(order.id), updatedOrder);
+  inMemoryOrdersMap.set(userId, userMap);
 
   try {
     const docRef = db.collection(ORDERS_COLLECTION).doc(String(order.id));
-    await docRef.set(
-      {
-        ...order,
-        userId,
-        updatedAt: new Date().toISOString(),
-      },
-      { merge: true }
-    );
+    await docRef.set(updatedOrder, { merge: true });
   } catch (err: any) {
-    console.error(`[UserWorkspaceStore]: addOrUpdateUserOrder error for user ${userId}:`, err?.message || err);
+    console.warn(`[UserWorkspaceStore]: addOrUpdateUserOrder Firestore sync warning for user ${userId}:`, err?.message || err);
   }
 }
 
 export async function getUserWorkspaceData(userId: string): Promise<UserWorkspaceData> {
   if (!userId) return {};
 
-  try {
-    const orders = await getUserOrders(userId);
+  const orders = await getUserOrders(userId);
+  const localWorkspace = inMemoryWorkspacesMap.get(userId) || {};
 
+  try {
     const docRef = db.collection(WORKSPACES_COLLECTION).doc(userId);
     const doc = await docRef.get();
 
     if (!doc.exists) {
       return {
         orders,
-        cashEntries: [],
-        expenses: [],
-        products: [],
-        settings: {},
+        cashEntries: localWorkspace.cashEntries || [],
+        expenses: localWorkspace.expenses || [],
+        products: localWorkspace.products || [],
+        settings: localWorkspace.settings || {},
       };
     }
 
@@ -173,19 +202,25 @@ export async function getUserWorkspaceData(userId: string): Promise<UserWorkspac
       orders,
     };
   } catch (err: any) {
-    console.error(`[UserWorkspaceStore]: getUserWorkspaceData error for user ${userId}:`, err?.message || err);
+    console.warn(`[UserWorkspaceStore]: getUserWorkspaceData Firestore fallback for user ${userId}:`, err?.message || err);
     return {
-      orders: [],
-      cashEntries: [],
-      expenses: [],
-      products: [],
-      settings: {},
+      orders,
+      cashEntries: localWorkspace.cashEntries || [],
+      expenses: localWorkspace.expenses || [],
+      products: localWorkspace.products || [],
+      settings: localWorkspace.settings || {},
     };
   }
 }
 
 export async function saveUserWorkspaceData(userId: string, data: Partial<UserWorkspaceData>): Promise<void> {
   if (!userId) return;
+
+  const currentLocal = inMemoryWorkspacesMap.get(userId) || {};
+  inMemoryWorkspacesMap.set(userId, {
+    ...currentLocal,
+    ...data,
+  });
 
   try {
     if (data.orders && Array.isArray(data.orders)) {
@@ -198,7 +233,7 @@ export async function saveUserWorkspaceData(userId: string, data: Partial<UserWo
       await docRef.set(nonOrderData, { merge: true });
     }
   } catch (err: any) {
-    console.error(`[UserWorkspaceStore]: saveUserWorkspaceData error for user ${userId}:`, err?.message || err);
+    console.warn(`[UserWorkspaceStore]: saveUserWorkspaceData Firestore sync warning for user ${userId}:`, err?.message || err);
   }
 }
 
@@ -224,12 +259,24 @@ export async function setUserLanguage(userId: string, language: 'en' | 'bn'): Pr
       },
     });
   } catch (err: any) {
-    console.error(`[UserWorkspaceStore]: setUserLanguage error for user ${userId}:`, err?.message || err);
+    console.warn(`[UserWorkspaceStore]: setUserLanguage warning for user ${userId}:`, err?.message || err);
   }
 }
 
 export async function softDeleteUserOrders(userId: string, orderIds: string[]): Promise<void> {
   if (!userId || !Array.isArray(orderIds) || orderIds.length === 0) return;
+
+  const userMap = inMemoryOrdersMap.get(userId);
+  if (userMap) {
+    const deletedAt = new Date().toISOString();
+    orderIds.forEach((id) => {
+      const item = userMap.get(String(id));
+      if (item) {
+        userMap.set(String(id), { ...item, isDeleted: true, deletedAt, updatedAt: deletedAt });
+      }
+    });
+  }
+
   try {
     const batch = db.batch();
     const deletedAt = new Date().toISOString();
@@ -239,14 +286,25 @@ export async function softDeleteUserOrders(userId: string, orderIds: string[]): 
       batch.update(docRef, { isDeleted: true, deletedAt, updatedAt: deletedAt });
     }
     await batch.commit();
-    console.log(`[UserWorkspaceStore]: Soft deleted ${orderIds.length} orders for user ${userId}`);
   } catch (err: any) {
-    console.error(`[UserWorkspaceStore]: softDeleteUserOrders error for user ${userId}:`, err?.message || err);
+    console.warn(`[UserWorkspaceStore]: softDeleteUserOrders Firestore warning for user ${userId}:`, err?.message || err);
   }
 }
 
 export async function restoreUserOrders(userId: string, orderIds: string[]): Promise<void> {
   if (!userId || !Array.isArray(orderIds) || orderIds.length === 0) return;
+
+  const userMap = inMemoryOrdersMap.get(userId);
+  if (userMap) {
+    const updatedAt = new Date().toISOString();
+    orderIds.forEach((id) => {
+      const item = userMap.get(String(id));
+      if (item) {
+        userMap.set(String(id), { ...item, isDeleted: false, deletedAt: null, updatedAt });
+      }
+    });
+  }
+
   try {
     const batch = db.batch();
     const updatedAt = new Date().toISOString();
@@ -256,14 +314,19 @@ export async function restoreUserOrders(userId: string, orderIds: string[]): Pro
       batch.update(docRef, { isDeleted: false, deletedAt: null, updatedAt });
     }
     await batch.commit();
-    console.log(`[UserWorkspaceStore]: Restored ${orderIds.length} orders for user ${userId}`);
   } catch (err: any) {
-    console.error(`[UserWorkspaceStore]: restoreUserOrders error for user ${userId}:`, err?.message || err);
+    console.warn(`[UserWorkspaceStore]: restoreUserOrders Firestore warning for user ${userId}:`, err?.message || err);
   }
 }
 
 export async function deleteUserOrdersPermanently(userId: string, orderIds: string[]): Promise<void> {
   if (!userId || !Array.isArray(orderIds) || orderIds.length === 0) return;
+
+  const userMap = inMemoryOrdersMap.get(userId);
+  if (userMap) {
+    orderIds.forEach((id) => userMap.delete(String(id)));
+  }
+
   try {
     const batch = db.batch();
     for (const id of orderIds) {
@@ -272,8 +335,7 @@ export async function deleteUserOrdersPermanently(userId: string, orderIds: stri
       batch.delete(docRef);
     }
     await batch.commit();
-    console.log(`[UserWorkspaceStore]: Permanently deleted ${orderIds.length} orders for user ${userId}`);
   } catch (err: any) {
-    console.error(`[UserWorkspaceStore]: deleteUserOrdersPermanently error for user ${userId}:`, err?.message || err);
+    console.warn(`[UserWorkspaceStore]: deleteUserOrdersPermanently Firestore warning for user ${userId}:`, err?.message || err);
   }
 }

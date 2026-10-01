@@ -57,14 +57,10 @@ export async function testFirestoreConnection(): Promise<boolean> {
     console.log(`Firebase Firestore connected successfully to database "(default)" in project "${TARGET_PROJECT_ID}"`);
     return true;
   } catch (err: any) {
-    console.error('[Firestore DETAILED CONNECTION ERROR]:', {
+    console.warn('[Firestore Connection Warning]: Operating in resilient local mode:', {
       message: err?.message,
       code: err?.code,
-      details: err?.details,
-      status: err?.status,
-      name: err?.name,
       projectIdUsed: TARGET_PROJECT_ID,
-      stack: err?.stack,
     });
     return false;
   }

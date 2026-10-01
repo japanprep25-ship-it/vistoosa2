@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { BrandLogo } from './BrandLogo';
 import {
   Lock,
   Mail,
@@ -361,25 +362,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
       <div className="w-full max-w-md">
         {/* Brand Header */}
         <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-gradient-to-b from-zinc-800 to-zinc-900 border-2 border-amber-500/40 shadow-xl shadow-amber-500/20 mb-3 overflow-hidden p-1.5 bg-zinc-900">
-            <img 
-              src={logoImage || "/apple-touch-icon.png"} 
-              onError={(e) => {
-                e.currentTarget.src = "/favicon-48x48.png";
-              }}
-              alt="Vistoosa Logo" 
-              className="w-full h-full object-contain rounded-2xl drop-shadow-md" 
-            />
-          </div>
+          <BrandLogo size="xl" className="mb-3 mx-auto p-1.5" />
           <h1 className="font-brand text-2xl tracking-[0.2em] font-bold text-zinc-100 uppercase">
-            {appName}
+            Vistoosa
           </h1>
-          {appSubtitle && (
-            <p className="text-xs tracking-widest text-amber-400/90 font-medium uppercase mt-1">
-              {appSubtitle}
-            </p>
-          )}
-          {appTagline && <p className="text-xs text-zinc-400 mt-1.5">{appTagline}</p>}
+          <p className="text-xs tracking-widest text-amber-400 font-semibold uppercase mt-1">
+            Management System
+          </p>
         </div>
 
         {/* Main Auth Box */}

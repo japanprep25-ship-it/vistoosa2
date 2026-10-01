@@ -1,4 +1,5 @@
 import React from 'react';
+import { BrandLogo } from './BrandLogo';
 import { LogOut, Database, Sparkles, Moon, Sun, Menu, X } from 'lucide-react';
 import { AuthUser } from '../types';
 import { PWAInstallButton } from './PWAInstallButton';
@@ -53,32 +54,16 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </button>
 
-          <div className="shrink-0 w-9 h-9 rounded-xl bg-gradient-to-b from-zinc-800 to-zinc-900 border border-amber-500/30 flex items-center justify-center shadow-lg shadow-amber-500/5 overflow-hidden p-0.5">
-            <img 
-              src={logoImage || "/apple-touch-icon.png"} 
-              onError={(e) => {
-                e.currentTarget.src = "/favicon-32x32.png";
-              }}
-              alt="Vistoosa Logo" 
-              className="w-full h-full object-contain rounded-lg" 
-            />
-          </div>
+          <BrandLogo size="sm" className="w-9 h-9" />
           <div>
             <div className="flex items-center gap-2">
               <span className="font-brand text-sm font-bold tracking-[0.2em] text-zinc-100 uppercase">
-                {appName}
+                Vistoosa
               </span>
-              {appSubtitle && (
-                <span className="hidden sm:inline-block text-[10px] px-1.5 py-0.2 rounded bg-amber-500/10 border border-amber-500/30 text-amber-400 font-semibold tracking-wider uppercase">
-                  {appSubtitle}
-                </span>
-              )}
+              <span className="hidden sm:inline-block text-[10px] px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-400 font-semibold tracking-wider uppercase">
+                Management System
+              </span>
             </div>
-            {appTagline && (
-              <p className="text-[10px] text-zinc-400 font-medium">
-                {appTagline}
-              </p>
-            )}
           </div>
         </div>
 

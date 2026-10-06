@@ -1,10 +1,9 @@
 // Vistoosa Service Worker for PWA Caching & Full Offline Operations
-const CACHE_NAME = 'vistoosa-cache-v5';
+const CACHE_NAME = 'vistoosa-cache-v7';
 
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
-  '/manifest.json',
   '/logo_white.png',
   '/logo_transparent.png',
   '/vistoosa-logo.png',

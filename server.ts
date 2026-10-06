@@ -8,6 +8,7 @@ import { mountPathaoConfigRoutes } from './pathaoConfigStore';
 import { mountWhatsappRoutes, sendTrackingWhatsapp } from './whatsappService';
 import { mountIntegrationsConfigRoutes } from './integrationsConfigStore';
 import { mountMetaIntegrationRoutes, registerOrderCreationHook } from './metaIntegrationService';
+import { mountBrandRoutes } from './brandStore';
 import { testFirestoreConnection } from './firebaseAdmin';
 import {
   createUser,
@@ -74,6 +75,7 @@ mountPathaoConfigRoutes(app);
 mountWhatsappRoutes(app);
 mountIntegrationsConfigRoutes(app);
 mountMetaIntegrationRoutes(app);
+mountBrandRoutes(app);
 
 registerOrderCreationHook((newOrder) => {
   addOrUpdateUserOrder('usr_admin_default', newOrder).catch((err) => {

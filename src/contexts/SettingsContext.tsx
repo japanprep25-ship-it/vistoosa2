@@ -83,7 +83,7 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
           appName: 'Vistoosa Management System',
           appSubtitle: 'Management System',
           appTagline: '',
-          logoImage: parsed.logoImage || defaultSettings.logoImage,
+          logoImage: defaultSettings.logoImage,
         };
       } catch (e) {
         return defaultSettings;

@@ -1,8 +1,9 @@
 import React, { useRef } from 'react';
 import { BrandLogo } from './BrandLogo';
+import { BrandLogoManager } from './BrandLogoManager';
 import { useSettings, ThemePreset, FontPreset } from '../contexts/SettingsContext';
 import { useLanguage } from '../contexts/LanguageContext';
-import { Save, Sparkles, Moon, Sun, Type, Palette, Image as ImageIcon, Upload, X, Globe, CheckCircle2 } from 'lucide-react';
+import { Save, Sparkles, Moon, Sun, Type, Palette, Globe, CheckCircle2 } from 'lucide-react';
 
 export const SettingsView: React.FC = () => {
   const settings = useSettings();
@@ -158,6 +159,9 @@ export const SettingsView: React.FC = () => {
         </div>
       </div>
 
+      {/* Brand Logo & App Icons Manager (Firestore & Cross-Device Synced) */}
+      <BrandLogoManager />
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Branding Settings */}
         <div className="p-6 rounded-2xl glass-panel space-y-6">
@@ -182,12 +186,22 @@ export const SettingsView: React.FC = () => {
             
             <div>
               <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
-                Brand Logo Status
+                Brand Logo (Official Vistoosa Icon)
               </label>
               
-              <div className="flex items-center gap-3 p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800 text-xs text-zinc-400">
-                <span className="w-2 h-2 rounded-full bg-zinc-500" />
-                <span>Logo images have been disabled and removed globally from all screens and headers.</span>
+              <div className="flex items-center gap-4 p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800">
+                <BrandLogo size="lg" className="w-16 h-16 p-1 shrink-0 bg-zinc-950/80 rounded-xl border border-zinc-800" />
+                <div className="space-y-1 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-zinc-100">Official Vistoosa Logo</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-semibold uppercase tracking-wider">
+                      Active
+                    </span>
+                  </div>
+                  <p className="text-zinc-400">
+                    Official white & dark logo assets active across headers, sidebars, favicons, app launcher, and offline PWA mode.
+                  </p>
+                </div>
               </div>
             </div>
 

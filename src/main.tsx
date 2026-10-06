@@ -4,13 +4,16 @@ import App from './App.tsx';
 import './index.css';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { LanguageProvider } from './contexts/LanguageContext';
+import { BrandProvider } from './contexts/BrandContext';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <SettingsProvider>
-      <LanguageProvider>
-        <App />
-      </LanguageProvider>
-    </SettingsProvider>
+    <BrandProvider>
+      <SettingsProvider>
+        <LanguageProvider>
+          <App />
+        </LanguageProvider>
+      </SettingsProvider>
+    </BrandProvider>
   </StrictMode>,
 );

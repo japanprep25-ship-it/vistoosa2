@@ -125,7 +125,8 @@ export const BrandLogoManager: React.FC = () => {
 
     setIsSaving(true);
     try {
-      const token = localStorage.getItem('vistoosa_auth_token') || '';
+      const rawToken = localStorage.getItem('vistoosa_auth_token') || '';
+      const token = rawToken.replace(/^"|"$/g, '');
 
       const payload = {
         variants: stagedVariants,
@@ -148,7 +149,7 @@ export const BrandLogoManager: React.FC = () => {
       } catch {
         data = {
           success: false,
-          message: `Server response (HTTP ${res.status}): ${resText.slice(0, 120)}`,
+          message: `HTTP ${res.status}: ${resText.slice(0, 150) || 'Non-JSON server response'}`,
         };
       }
 
@@ -192,7 +193,8 @@ export const BrandLogoManager: React.FC = () => {
 
     setIsResetting(true);
     try {
-      const token = localStorage.getItem('vistoosa_auth_token') || '';
+      const rawToken = localStorage.getItem('vistoosa_auth_token') || '';
+      const token = rawToken.replace(/^"|"$/g, '');
 
       const res = await fetch('/api/brand/logo', {
         method: 'DELETE',
@@ -208,7 +210,7 @@ export const BrandLogoManager: React.FC = () => {
       } catch {
         data = {
           success: false,
-          message: `Server response (HTTP ${res.status}): ${resText.slice(0, 120)}`,
+          message: `HTTP ${res.status}: ${resText.slice(0, 150) || 'Non-JSON server response'}`,
         };
       }
 

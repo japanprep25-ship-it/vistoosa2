@@ -77,36 +77,45 @@ export const BrandProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const fetchMeta = useCallback(async () => {
     try {
-      const res = await fetch('/api/brand/meta', { cache: 'no-store' });
-      if (res.ok) {
-        const text = await res.text();
-        let data: any = null;
-        try {
-          data = JSON.parse(text);
-        } catch {
-          data = null;
-        }
+      const rawToken = typeof window !== 'undefined' ? localStorage.getItem('vistoosa_auth_token') || '' : '';
+      const token = rawToken.replace(/^"|"$/g, '');
+      const res = await fetch('/api/brand/meta', {
+        cache: 'no-store',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
 
-        if (data && data.success && typeof data.version === 'number') {
-          const newMeta: BrandMeta = {
-            version: data.version,
-            hasCustomLogo: Boolean(data.hasCustomLogo),
-            hasDarkLogo: Boolean(data.hasDarkLogo),
-          };
+      const text = await res.text();
+      let data: any = null;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = {
+          success: false,
+          message: `Server returned non-JSON response (HTTP ${res.status}): ${text.slice(0, 120)}`,
+        };
+      }
 
-          setMeta((prev) => {
-            if (
-              prev.version !== newMeta.version ||
-              prev.hasCustomLogo !== newMeta.hasCustomLogo ||
-              prev.hasDarkLogo !== newMeta.hasDarkLogo
-            ) {
-              localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(newMeta));
-              syncDomHeadTags(newMeta);
-              return newMeta;
-            }
-            return prev;
-          });
-        }
+      if (res.ok && data && data.success && typeof data.version === 'number') {
+        const newMeta: BrandMeta = {
+          version: data.version,
+          hasCustomLogo: Boolean(data.hasCustomLogo),
+          hasDarkLogo: Boolean(data.hasDarkLogo),
+        };
+
+        setMeta((prev) => {
+          if (
+            prev.version !== newMeta.version ||
+            prev.hasCustomLogo !== newMeta.hasCustomLogo ||
+            prev.hasDarkLogo !== newMeta.hasDarkLogo
+          ) {
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(newMeta));
+            syncDomHeadTags(newMeta);
+            return newMeta;
+          }
+          return prev;
+        });
       }
     } catch (err) {
       console.warn('[BrandContext]: Unable to poll brand metadata:', err);

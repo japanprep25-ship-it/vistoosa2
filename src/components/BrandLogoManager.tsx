@@ -125,8 +125,7 @@ export const BrandLogoManager: React.FC = () => {
 
     setIsSaving(true);
     try {
-      const authStorage = localStorage.getItem('vistoosa_auth_token');
-      const token = authStorage ? JSON.parse(authStorage) : '';
+      const token = localStorage.getItem('vistoosa_auth_token') || '';
 
       const payload = {
         variants: stagedVariants,
@@ -142,10 +141,19 @@ export const BrandLogoManager: React.FC = () => {
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
+      const resText = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(resText);
+      } catch {
+        data = {
+          success: false,
+          message: `Server response (HTTP ${res.status}): ${resText.slice(0, 120)}`,
+        };
+      }
 
       if (!res.ok || !data.success) {
-        throw new Error(data.message || 'Failed to save brand logo to server.');
+        throw new Error(data.message || `HTTP ${res.status}: Failed to save brand logo.`);
       }
 
       // Refresh global brand context
@@ -184,8 +192,7 @@ export const BrandLogoManager: React.FC = () => {
 
     setIsResetting(true);
     try {
-      const authStorage = localStorage.getItem('vistoosa_auth_token');
-      const token = authStorage ? JSON.parse(authStorage) : '';
+      const token = localStorage.getItem('vistoosa_auth_token') || '';
 
       const res = await fetch('/api/brand/logo', {
         method: 'DELETE',
@@ -194,10 +201,19 @@ export const BrandLogoManager: React.FC = () => {
         },
       });
 
-      const data = await res.json();
+      const resText = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(resText);
+      } catch {
+        data = {
+          success: false,
+          message: `Server response (HTTP ${res.status}): ${resText.slice(0, 120)}`,
+        };
+      }
 
       if (!res.ok || !data.success) {
-        throw new Error(data.message || 'Failed to reset brand logo.');
+        throw new Error(data.message || `HTTP ${res.status}: Failed to reset brand logo.`);
       }
 
       await refetchBrandMeta();

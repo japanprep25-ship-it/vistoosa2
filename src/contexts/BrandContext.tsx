@@ -79,7 +79,14 @@ export const BrandProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     try {
       const res = await fetch('/api/brand/meta', { cache: 'no-store' });
       if (res.ok) {
-        const data = await res.json();
+        const text = await res.text();
+        let data: any = null;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = null;
+        }
+
         if (data && data.success && typeof data.version === 'number') {
           const newMeta: BrandMeta = {
             version: data.version,

@@ -151,8 +151,14 @@ export const FinancialAnalyticsEngine: React.FC<FinancialAnalyticsEngineProps> =
           endDate: customEndDate,
         }),
       });
-      const data = await res.json();
-      if (data.campaigns) {
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { success: false, message: `Server response (HTTP ${res.status}): ${text.slice(0, 100)}` };
+      }
+      if (res.ok && data.campaigns) {
         setMetaCampaigns(data.campaigns);
       }
       setMetaLastSynced(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));

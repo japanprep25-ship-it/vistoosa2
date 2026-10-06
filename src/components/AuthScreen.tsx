@@ -97,10 +97,16 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { success: false, message: `Server error (HTTP ${res.status}): ${text.slice(0, 100)}` };
+      }
 
       if (!res.ok || !data.success) {
-        throw new Error(data.message || 'Invalid email or password');
+        throw new Error(data.message || `HTTP ${res.status}: Invalid email or password`);
       }
 
       if (mode === 'signup') {
@@ -158,10 +164,16 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
         body: JSON.stringify({ email: email.trim().toLowerCase(), otpCode: cleanOtp }),
       });
 
-      const data = await res.json();
+      const resText = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(resText);
+      } catch {
+        data = { success: false, message: `Server error (HTTP ${res.status}): ${resText.slice(0, 100)}` };
+      }
 
       if (!res.ok || !data.success) {
-        throw new Error(data.message || 'Invalid or expired OTP');
+        throw new Error(data.message || `HTTP ${res.status}: Invalid or expired OTP`);
       }
 
       setSuccessMessage(t('auth.otpVerifiedMsg'));

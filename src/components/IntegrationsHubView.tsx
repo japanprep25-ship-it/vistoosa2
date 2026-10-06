@@ -262,7 +262,13 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { success: false, message: `Server error (HTTP ${res.status}): ${text.slice(0, 100)}` };
+      }
 
       if (data.success) {
         onUpdateConfig({
@@ -345,7 +351,13 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
         headers: getAuthHeaders(),
         body: JSON.stringify(metaConfig),
       });
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { success: false, message: `Server response (HTTP ${res.status}): ${text.slice(0, 100)}` };
+      }
       if (data && data.results) {
         const pageMsg = data.results.pageAccess?.ok
           ? `Page "${data.results.pageAccess.pageName || 'Vistoosa'}" verified (ID: ${data.results.pageAccess.pageId || metaConfig.pageId})`
@@ -391,7 +403,13 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
           attachmentUrl: simAttachmentUrl,
         }),
       });
-      const data = await res.json();
+      const resText = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(resText);
+      } catch {
+        data = { success: false, message: `Server error (HTTP ${res.status}): ${resText.slice(0, 100)}` };
+      }
       setSimResponse(data);
       if (data.createdOrder) {
         if (onAddSimulatedOrder) {
@@ -456,7 +474,13 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
         body: JSON.stringify(samplePayload),
       });
 
-      const data = await res.json();
+      const resText = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(resText);
+      } catch {
+        data = { success: false, message: `Server error (HTTP ${res.status}): ${resText.slice(0, 100)}` };
+      }
 
       if (data.success) {
         if (onAddSimulatedOrder) {
@@ -528,7 +552,13 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
         }),
       });
 
-      const data = await res.json();
+      const resText = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(resText);
+      } catch {
+        data = { success: false, message: `Server error (HTTP ${res.status}): ${resText.slice(0, 100)}` };
+      }
 
       if (data.success) {
         setWhatsappConfig((prev) => ({ ...prev, status: 'connected' }));

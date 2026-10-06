@@ -37,6 +37,7 @@ import { AIAssistantWidget } from './components/AIAssistantWidget';
 import { GoogleSheetsIntegrationModal } from './components/GoogleSheetsIntegrationModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { SettingsView } from './components/SettingsView';
+import { PageTransitionWrapper } from './components/PageTransitionWrapper';
 import { useSettings } from './contexts/SettingsContext';
 
 export default function App() {
@@ -73,7 +74,13 @@ export default function App() {
         const res = await fetch('/api/auth/me', {
           headers: { Authorization: `Bearer ${token}` },
         });
-        const data = await res.json();
+        const text = await res.text();
+        let data: any = {};
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = { success: false };
+        }
         if (res.ok && data.success && data.user) {
           setCurrentUser(data.user);
           setAuthToken(token);
@@ -154,9 +161,14 @@ export default function App() {
         if (token) headers['Authorization'] = `Bearer ${token}`;
 
         const res = await fetch('/api/orders/inbound', { headers });
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data.success && Array.isArray(data.orders) && data.orders.length > 0) {
+        const text = await res.text();
+        let data: any = {};
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = { success: false };
+        }
+        if (res.ok && data.success && Array.isArray(data.orders) && data.orders.length > 0) {
           setOrders((prevOrders) => {
             let updated = false;
             const newOrdersList = [...prevOrders];
@@ -241,7 +253,13 @@ export default function App() {
           }),
         });
 
-        const data = await res.json();
+        const resText = await res.text();
+        let data: any = {};
+        try {
+          data = JSON.parse(resText);
+        } catch {
+          data = { success: false, message: `Server error (HTTP ${res.status}): ${resText.slice(0, 100)}` };
+        }
         if (data.trackingId) trackingId = data.trackingId;
         if (data.consignmentId) consignmentId = data.consignmentId;
       } catch (e) {
@@ -655,144 +673,146 @@ export default function App() {
 
         {/* Center Dynamic Content Stage */}
         <main className="flex-1 p-3 sm:p-4 md:p-6 lg:p-8 max-w-full overflow-x-hidden">
-          {activeTab === 'dashboard' && (
-            <BusinessDashboardView
-              orders={orders}
-              products={products}
-              cashEntries={cashEntries}
-              expenses={expenses}
-              payouts={payouts}
-              integrationConfig={integrationConfig}
-              onNavigate={(tab) => setActiveTab(tab)}
-              onNavigateTab={(tab) => setActiveTab(tab)}
-              onOpenCashModal={() => {
-                setActiveTab('cogs');
-                setIsCashModalOpenFromDashboard(true);
-              }}
-              onOpenNewCashModal={() => {
-                setActiveTab('cogs');
-                setIsCashModalOpenFromDashboard(true);
-              }}
-            />
-          )}
+          <PageTransitionWrapper key={activeTab} activeTab={activeTab}>
+            {activeTab === 'dashboard' && (
+              <BusinessDashboardView
+                orders={orders}
+                products={products}
+                cashEntries={cashEntries}
+                expenses={expenses}
+                payouts={payouts}
+                integrationConfig={integrationConfig}
+                onNavigate={(tab) => setActiveTab(tab)}
+                onNavigateTab={(tab) => setActiveTab(tab)}
+                onOpenCashModal={() => {
+                  setActiveTab('cogs');
+                  setIsCashModalOpenFromDashboard(true);
+                }}
+                onOpenNewCashModal={() => {
+                  setActiveTab('cogs');
+                  setIsCashModalOpenFromDashboard(true);
+                }}
+              />
+            )}
 
-          {activeTab === 'orders' && (
-            <OrderEngineView
-              orders={orders}
-              products={products}
-              onApproveOrder={handleApproveOrder}
-              onCancelOrder={handleCancelOrder}
-              onGoToDispatch={(orderId) => {
-                setActiveTab('dispatch');
-              }}
-              onCreateOrder={handleCreateOrder}
-              onUpdateOrder={handleUpdateOrder}
-              onSoftDeleteOrders={handleSoftDeleteOrders}
-              onRestoreOrders={handleRestoreOrders}
-              onPermanentDeleteOrders={handlePermanentDeleteOrders}
-            />
-          )}
+            {activeTab === 'orders' && (
+              <OrderEngineView
+                orders={orders}
+                products={products}
+                onApproveOrder={handleApproveOrder}
+                onCancelOrder={handleCancelOrder}
+                onGoToDispatch={(orderId) => {
+                  setActiveTab('dispatch');
+                }}
+                onCreateOrder={handleCreateOrder}
+                onUpdateOrder={handleUpdateOrder}
+                onSoftDeleteOrders={handleSoftDeleteOrders}
+                onRestoreOrders={handleRestoreOrders}
+                onPermanentDeleteOrders={handlePermanentDeleteOrders}
+              />
+            )}
 
-          {activeTab === 'integrations' && (
-            <IntegrationsHubView
-              config={integrationConfig}
-              onUpdateConfig={handleUpdateIntegrationConfig}
-              onSimulatedOrderReceived={(order) => {
-                setOrders((prev) => [order, ...prev]);
-                // If it's a prepaid order (bKash or Nagad), record cash entry
-                if (order.paymentMethod === 'bKash' || order.paymentMethod === 'Nagad' || order.paymentMethod === 'Prepaid') {
-                  const newCash: CashEntry = {
-                    id: `cash-auto-${Date.now()}`,
-                    date: new Date().toISOString().split('T')[0],
-                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                    type: 'inflow',
-                    account: order.paymentMethod === 'bKash' ? 'bKash Merchant' : 'Petty Cash Drawer',
-                    category: 'Customer Advance',
-                    amount: order.totalAmount,
-                    description: `Advance received for order #${order.id} (${order.customerName})`,
-                    referenceId: order.id,
-                    performedBy: 'Automated Webhook',
-                  };
-                  setCashEntries((prev) => [newCash, ...prev]);
-                }
-              }}
-            />
-          )}
+            {activeTab === 'integrations' && (
+              <IntegrationsHubView
+                config={integrationConfig}
+                onUpdateConfig={handleUpdateIntegrationConfig}
+                onSimulatedOrderReceived={(order) => {
+                  setOrders((prev) => [order, ...prev]);
+                  // If it's a prepaid order (bKash or Nagad), record cash entry
+                  if (order.paymentMethod === 'bKash' || order.paymentMethod === 'Nagad' || order.paymentMethod === 'Prepaid') {
+                    const newCash: CashEntry = {
+                      id: `cash-auto-${Date.now()}`,
+                      date: new Date().toISOString().split('T')[0],
+                      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                      type: 'inflow',
+                      account: order.paymentMethod === 'bKash' ? 'bKash Merchant' : 'Petty Cash Drawer',
+                      category: 'Customer Advance',
+                      amount: order.totalAmount,
+                      description: `Advance received for order #${order.id} (${order.customerName})`,
+                      referenceId: order.id,
+                      performedBy: 'Automated Webhook',
+                    };
+                    setCashEntries((prev) => [newCash, ...prev]);
+                  }
+                }}
+              />
+            )}
 
-          {activeTab === 'dispatch' && (
-            <DispatchScannerView
-              orders={orders}
-              products={products}
-              onDispatchSuccess={handleDispatchSuccess}
-            />
-          )}
+            {activeTab === 'dispatch' && (
+              <DispatchScannerView
+                orders={orders}
+                products={products}
+                onDispatchSuccess={handleDispatchSuccess}
+              />
+            )}
 
-          {activeTab === 'inventory' && (
-            <InventoryView products={products} onUpdateStock={handleUpdateStock} />
-          )}
+            {activeTab === 'inventory' && (
+              <InventoryView products={products} onUpdateStock={handleUpdateStock} />
+            )}
 
-          {activeTab === 'reconciliation' && (
-            <ReconciliationView payouts={payouts} onAddPayout={handleAddPayout} />
-          )}
+            {activeTab === 'reconciliation' && (
+              <ReconciliationView payouts={payouts} onAddPayout={handleAddPayout} />
+            )}
 
-          {activeTab === 'crm' && <CRMView orders={orders} />}
+            {activeTab === 'crm' && <CRMView orders={orders} />}
 
-          {activeTab === 'cogs' && (
-            <CashRegisterView
-              cashEntries={cashEntries}
-              expenses={expenses}
-              shipments={shipments}
-              onAddCashEntry={handleAddCashEntry}
-              onAddExpense={handleAddExpense}
-              onAddShipment={handleAddShipment}
-              isEntryModalOpenExternal={isCashModalOpenFromDashboard}
-              onCloseEntryModalExternal={() => setIsCashModalOpenFromDashboard(false)}
-            />
-          )}
+            {activeTab === 'cogs' && (
+              <CashRegisterView
+                cashEntries={cashEntries}
+                expenses={expenses}
+                shipments={shipments}
+                onAddCashEntry={handleAddCashEntry}
+                onAddExpense={handleAddExpense}
+                onAddShipment={handleAddShipment}
+                isEntryModalOpenExternal={isCashModalOpenFromDashboard}
+                onCloseEntryModalExternal={() => setIsCashModalOpenFromDashboard(false)}
+              />
+            )}
 
-          {activeTab === 'ai' && (
-            <AIAssistantWidget
-              knowledgeBase={knowledgeBase}
-              onAddKnowledgeItem={handleAddKnowledgeItem}
-              onDeleteKnowledgeItem={handleDeleteKnowledgeItem}
-              onOrderParsed={handleCreateOrder}
-            />
-          )}
+            {activeTab === 'ai' && (
+              <AIAssistantWidget
+                knowledgeBase={knowledgeBase}
+                onAddKnowledgeItem={handleAddKnowledgeItem}
+                onDeleteKnowledgeItem={handleDeleteKnowledgeItem}
+                onOrderParsed={handleCreateOrder}
+              />
+            )}
 
-          {activeTab === 'gas' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-bold text-white">Google Apps Script & Database</h2>
-                  <p className="text-xs text-zinc-400">
-                    Connect Google Sheets database with 100% Free Tier Web App endpoints
-                  </p>
+            {activeTab === 'gas' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xl font-bold text-white">Google Apps Script & Database</h2>
+                    <p className="text-xs text-zinc-400">
+                      Connect Google Sheets database with 100% Free Tier Web App endpoints
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setIsGasModalOpen(true)}
+                    className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs transition"
+                  >
+                    View Full Code.gs & Schema
+                  </button>
                 </div>
-                <button
-                  onClick={() => setIsGasModalOpen(true)}
-                  className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs transition"
-                >
-                  View Full Code.gs & Schema
-                </button>
+                <div className="p-6 rounded-3xl glass-panel border border-emerald-500/30 text-center">
+                  <p className="text-sm font-semibold text-zinc-200 mb-2">
+                    Google Sheets Database Schema & Code Ready
+                  </p>
+                  <p className="text-xs text-zinc-400 max-w-md mx-auto mb-4">
+                    Open the modal to copy the complete `Code.gs` script or explore the 9 relational table definitions.
+                  </p>
+                  <button
+                    onClick={() => setIsGasModalOpen(true)}
+                    className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-zinc-950 font-bold text-xs shadow-lg transition"
+                  >
+                    Open Integration Panel
+                  </button>
+                </div>
               </div>
-              <div className="p-6 rounded-3xl glass-panel border border-emerald-500/30 text-center">
-                <p className="text-sm font-semibold text-zinc-200 mb-2">
-                  Google Sheets Database Schema & Code Ready
-                </p>
-                <p className="text-xs text-zinc-400 max-w-md mx-auto mb-4">
-                  Open the modal to copy the complete `Code.gs` script or explore the 9 relational table definitions.
-                </p>
-                <button
-                  onClick={() => setIsGasModalOpen(true)}
-                  className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-zinc-950 font-bold text-xs shadow-lg transition"
-                >
-                  Open Integration Panel
-                </button>
-              </div>
-            </div>
-          )}
+            )}
 
-          {activeTab === 'settings' && <SettingsView />}
+            {activeTab === 'settings' && <SettingsView />}
+          </PageTransitionWrapper>
         </main>
       </div>
 

@@ -258,9 +258,15 @@ Delivery koto din lagbe?"`
         }),
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { error: `Server error (HTTP ${res.status}): ${text.slice(0, 100)}` };
+      }
       if (!res.ok) {
-        throw new Error(data.error || 'Server connection failed');
+        throw new Error(data.error || `HTTP ${res.status}: Server connection failed`);
       }
 
       const reply =
@@ -301,7 +307,13 @@ Delivery koto din lagbe?"`
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: rawChatText }),
       });
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { success: false, error: `Server error (HTTP ${res.status}): ${text.slice(0, 100)}` };
+      }
       setParseResult(data);
     } catch (err) {
       // Fallback robust parser

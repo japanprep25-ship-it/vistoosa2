@@ -9,6 +9,7 @@ import { mountWhatsappRoutes, sendTrackingWhatsapp } from './whatsappService';
 import { mountIntegrationsConfigRoutes } from './integrationsConfigStore';
 import { mountMetaIntegrationRoutes, registerOrderCreationHook } from './metaIntegrationService';
 import { mountBrandRoutes } from './brandStore';
+import { mountGlobalSettingsRoutes } from './globalSettingsStore';
 import { testFirestoreConnection } from './firebaseAdmin';
 import {
   createUser,
@@ -76,6 +77,7 @@ mountWhatsappRoutes(app);
 mountIntegrationsConfigRoutes(app);
 mountMetaIntegrationRoutes(app);
 mountBrandRoutes(app);
+mountGlobalSettingsRoutes(app);
 
 registerOrderCreationHook((newOrder) => {
   addOrUpdateUserOrder('usr_admin_default', newOrder).catch((err) => {

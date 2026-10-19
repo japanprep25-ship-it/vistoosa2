@@ -85,7 +85,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, token, 
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserName, setNewUserName] = useState('');
-  const [newUserRole, setNewUserRole] = useState<'Owner' | 'Staff'>('Staff');
+  const [newUserDesignation, setNewUserDesignation] = useState('');
+  const [newUserRole, setNewUserRole] = useState<'Owner' | 'Admin' | 'Staff'>('Staff');
   const [newUserPermissions, setNewUserPermissions] = useState<Record<string, boolean>>({
     dashboard: true,
     orders: true,
@@ -93,7 +94,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, token, 
 
   // Edit User Permissions Form
   const [editPermissions, setEditPermissions] = useState<Record<string, boolean>>({});
-  const [editRole, setEditRole] = useState<'Owner' | 'Staff'>('Staff');
+  const [editRole, setEditRole] = useState<'Owner' | 'Admin' | 'Staff'>('Staff');
+  const [editDesignation, setEditDesignation] = useState('');
   const [editStatus, setEditStatus] = useState<'Active' | 'Disabled'>('Active');
 
   // Reset Password Form
@@ -140,8 +142,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, token, 
 
   const handleCreateUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newUserPassword.length < 8) {
-      setErrorMsg('Password must be at least 8 characters long.');
+    if (newUserPassword.length < 6) {
+      setErrorMsg('Password must be at least 6 characters long.');
       return;
     }
     try {
@@ -158,6 +160,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, token, 
           name: newUserName,
           role: newUserRole,
           permissions: newUserPermissions,
+          designation: newUserDesignation,
         }),
       });
       const data = await res.json();
@@ -169,6 +172,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, token, 
       setNewUserEmail('');
       setNewUserPassword('');
       setNewUserName('');
+      setNewUserDesignation('');
       setNewUserRole('Staff');
       fetchTeamUsers();
       setTimeout(() => setSaveToast(null), 3000);
@@ -191,6 +195,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, token, 
         body: JSON.stringify({
           name: editingUser.name,
           role: editRole,
+          designation: editDesignation,
           permissions: editPermissions,
           status: editStatus,
         }),
@@ -199,7 +204,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, token, 
       if (!res.ok || !data.success) {
         throw new Error(data.message || 'Failed to update user');
       }
-      setSaveToast('User permissions updated successfully.');
+      setSaveToast('User updated successfully.');
       setEditingUser(null);
       fetchTeamUsers();
       setTimeout(() => setSaveToast(null), 3000);
@@ -650,6 +655,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, token, 
                       <tr key={u.id} className="hover:bg-zinc-800/40 transition">
                         <td className="py-3.5 px-4">
                           <p className="font-bold text-zinc-100">{u.name}</p>
+                          {u.designation && <p className="text-[11px] text-amber-400 font-medium">💼 {u.designation}</p>}
                           <p className="text-[11px] text-zinc-400 font-mono">{u.email}</p>
                         </td>
                         <td className="py-3.5 px-4">
@@ -680,6 +686,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, token, 
                             onClick={() => {
                               setEditingUser(u);
                               setEditRole(u.role);
+                              setEditDesignation(u.designation || '');
                               setEditStatus(u.status);
                               setEditPermissions({ ...(u.permissions || {}) });
                             }}
@@ -765,14 +772,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, token, 
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1">Role</label>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">Designation / পদবী</label>
+                <input
+                  type="text"
+                  value={newUserDesignation}
+                  onChange={(e) => setNewUserDesignation(e.target.value)}
+                  placeholder="e.g. Operations Specialist / Executive Admin"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">Role / Access Level</label>
                 <select
                   value={newUserRole}
                   onChange={(e) => setNewUserRole(e.target.value as any)}
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
                 >
-                  <option value="Staff">Staff (Restricted Permissions)</option>
-                  <option value="Owner">Owner (Full Administrator Access)</option>
+                  <option value="Staff">Staff (Operations - Manual Page Access)</option>
+                  {currentUser?.role === 'Owner' && <option value="Admin">Admin (Executive Administrator - Mother Approved)</option>}
+                  {currentUser?.role === 'Owner' && <option value="Owner">Owner (System Root Owner)</option>}
                 </select>
               </div>
 
@@ -857,28 +875,41 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, token, 
               </button>
             </div>
             <form onSubmit={handleUpdateUserSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-3">
                 <div>
-                  <label className="block text-xs font-semibold text-zinc-300 mb-1">Role</label>
-                  <select
-                    value={editRole}
-                    onChange={(e) => setEditRole(e.target.value as any)}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
-                  >
-                    <option value="Staff">Staff</option>
-                    <option value="Owner">Owner</option>
-                  </select>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">Designation / পদবী</label>
+                  <input
+                    type="text"
+                    value={editDesignation}
+                    onChange={(e) => setEditDesignation(e.target.value)}
+                    placeholder="e.g. Operations Manager"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                  />
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-300 mb-1">Account Status</label>
-                  <select
-                    value={editStatus}
-                    onChange={(e) => setEditStatus(e.target.value as any)}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
-                  >
-                    <option value="Active">Active</option>
-                    <option value="Disabled">Disabled (Blocked)</option>
-                  </select>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-300 mb-1">Role</label>
+                    <select
+                      value={editRole}
+                      onChange={(e) => setEditRole(e.target.value as any)}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+                    >
+                      <option value="Staff">Staff</option>
+                      {currentUser?.role === 'Owner' && <option value="Admin">Admin</option>}
+                      {currentUser?.role === 'Owner' && <option value="Owner">Owner</option>}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-300 mb-1">Account Status</label>
+                    <select
+                      value={editStatus}
+                      onChange={(e) => setEditStatus(e.target.value as any)}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+                    >
+                      <option value="Active">Active</option>
+                      <option value="Disabled">Disabled (Blocked)</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 

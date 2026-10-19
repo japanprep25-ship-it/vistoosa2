@@ -73,7 +73,7 @@ export const LoginWelcomeModal: React.FC<LoginWelcomeModalProps> = ({
     }
   };
 
-  // Progress countdown to smoothly enter the app
+  // Progress countdown to smoothly enter the app (stay for 3 seconds)
   useEffect(() => {
     const timer = setInterval(() => {
       setProgress((prev) => {
@@ -81,19 +81,19 @@ export const LoginWelcomeModal: React.FC<LoginWelcomeModalProps> = ({
           clearInterval(timer);
           return 100;
         }
-        return prev + 2.5;
+        return prev + (100 / (3000 / 50));
       });
     }, 50);
 
     return () => clearInterval(timer);
   }, []);
 
-  // When progress reaches 100% and user has answered or 3.5 seconds elapsed, transition
+  // When progress reaches 100%, transition
   useEffect(() => {
     if (progress >= 100) {
       const exitTimer = setTimeout(() => {
         onComplete();
-      }, 300);
+      }, 200);
       return () => clearTimeout(exitTimer);
     }
   }, [progress, onComplete]);
@@ -116,15 +116,17 @@ export const LoginWelcomeModal: React.FC<LoginWelcomeModalProps> = ({
         <div className="space-y-2">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-semibold uppercase tracking-wider mx-auto bg-amber-500/10 border-amber-500/30 text-amber-300">
             <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-            <span>{isBangla ? 'লগইন সফল • স্বাগতম' : 'Authentication Successful'}</span>
+            <span>{isBangla ? 'লগইন সফল • ৩ সেকেন্ড ওয়েলকাম' : 'Authentication Successful • 3s Welcome'}</span>
           </div>
 
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            {isBangla ? 'স্বাগতম, ' : 'Welcome back, '}
+          <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+            {isBangla ? 'স্বাগতম, ' : 'Welcome, '}
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-amber-400 to-amber-500">
               {user.name || cleanUserEmail.split('@')[0]}
             </span>
-            !
+            <span className="text-zinc-300 font-medium text-base block mt-1">
+              ({user.designation || designationTitle})
+            </span>
           </h1>
 
           {/* Designation & Role Badge */}

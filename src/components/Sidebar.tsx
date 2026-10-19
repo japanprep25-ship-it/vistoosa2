@@ -177,7 +177,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       return false;
     }
     if (!currentUser) return true;
-    if (currentUser.role === 'Owner' || currentUser.role === 'Admin') return true;
+    if (currentUser.role === 'Owner') return true;
     if (currentUser.permissions && currentUser.permissions[item.id] === true) return true;
     return false;
   });

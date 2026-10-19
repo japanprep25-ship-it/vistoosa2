@@ -21,7 +21,7 @@ export interface GlobalSettings {
   updatedAt: string;
 }
 
-export const DEFAULT_MOTHER_GMAIL = 'riyadbinmazid@gmail.com';
+export const DEFAULT_MOTHER_GMAIL = 'vistoosa@gmail.com';
 
 const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   appName: 'Vistoosa Management System',

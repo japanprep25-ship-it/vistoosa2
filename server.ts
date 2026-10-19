@@ -392,8 +392,14 @@ app.get('/api/users', requireAuth, requireAdmin, async (_req: AuthenticatedReque
 
 app.post('/api/users', requireAuth, requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
-    const { email, password, name, role, permissions } = req.body || {};
-    const newUser = await adminCreateUser(email, password, name, role || 'Staff', permissions);
+    const { email, password, name, role, permissions, designation } = req.body || {};
+    const targetRole = role || 'Staff';
+
+    if ((targetRole === 'Admin' || targetRole === 'Owner') && req.user?.role !== 'Owner') {
+      return res.status(403).json({ success: false, message: 'Only Mother Owner account can approve or create Admin access.' });
+    }
+
+    const newUser = await adminCreateUser(email, password, name, targetRole, permissions, designation);
     return res.json({ success: true, user: sanitizeUser(newUser), message: 'Team user created successfully.' });
   } catch (err: any) {
     return res.status(400).json({ success: false, message: err?.message || 'Failed to create team user.' });
@@ -403,8 +409,13 @@ app.post('/api/users', requireAuth, requireAdmin, async (req: AuthenticatedReque
 app.put('/api/users/:id', requireAuth, requireAdmin, async (req: AuthenticatedRequest, res) => {
   try {
     const { id } = req.params;
-    const { name, email, role, permissions, status } = req.body || {};
-    const updated = await updateUser(id, { name, email, role, permissions, status });
+    const { name, email, role, permissions, status, designation } = req.body || {};
+
+    if ((role === 'Admin' || role === 'Owner') && req.user?.role !== 'Owner') {
+      return res.status(403).json({ success: false, message: 'Only Mother Owner account can approve or promote Admin access.' });
+    }
+
+    const updated = await updateUser(id, { name, email, role, permissions, status, designation });
     return res.json({ success: true, user: sanitizeUser(updated), message: 'User updated successfully.' });
   } catch (err: any) {
     return res.status(400).json({ success: false, message: err?.message || 'Failed to update user.' });

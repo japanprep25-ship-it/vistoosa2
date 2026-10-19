@@ -344,9 +344,13 @@ export default function App() {
     );
 
     // Sync status update to backend server
+    const cancelToken = localStorage.getItem('vistoosa_auth_token') || '';
+    const cancelHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (cancelToken) cancelHeaders['Authorization'] = `Bearer ${cancelToken}`;
+
     fetch('/api/orders/status', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: cancelHeaders,
       body: JSON.stringify({
         orderId,
         status: 'Cancelled',
@@ -404,9 +408,13 @@ export default function App() {
     );
 
     // Persist full updated order to backend server
+    const updateToken = localStorage.getItem('vistoosa_auth_token') || '';
+    const updateHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (updateToken) updateHeaders['Authorization'] = `Bearer ${updateToken}`;
+
     fetch('/api/orders/update', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: updateHeaders,
       body: JSON.stringify(updatedOrder),
     }).catch((err) => {
       console.warn('Failed to sync updated order to server:', err);

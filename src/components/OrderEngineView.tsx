@@ -488,11 +488,21 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
 
-      await fetch('/api/orders/import', {
+      const res = await fetch('/api/orders/import', {
         method: 'POST',
         headers,
         body: JSON.stringify({ orders: importedOrders }),
       });
+      const resText = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(resText);
+      } catch {
+        data = { success: false, message: `Server response (HTTP ${res.status}): ${resText.slice(0, 100)}` };
+      }
+      if (!res.ok) {
+        console.warn(`Orders import server warning (HTTP ${res.status}):`, data.message);
+      }
     } catch (err) {
       console.warn('Backend CSV import API sync fallback:', err);
     }

@@ -133,7 +133,17 @@ export const AIAssistantWidget: React.FC<AIAssistantWidgetProps> = ({
         }),
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { error: `Server error (HTTP ${res.status}): ${text.slice(0, 100)}` };
+      }
+
+      if (!res.ok) {
+        throw new Error(data.error || `HTTP ${res.status}: Multi-agent memo processing failed`);
+      }
 
       if (data.status === 'rejected_duplicate' || data.rejected) {
         setDuplicateWarning(data.reason || 'Duplicate entry blocked within 4-hour window.');

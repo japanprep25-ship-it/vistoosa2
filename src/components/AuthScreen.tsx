@@ -218,10 +218,16 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
         body: JSON.stringify({ email: cleanEmail }),
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { success: false, message: `Server error (HTTP ${res.status}): ${text.slice(0, 100)}` };
+      }
 
       if (!res.ok || !data.success) {
-        throw new Error(data.message || 'No account found with this email address');
+        throw new Error(data.message || `HTTP ${res.status}: No account found with this email address`);
       }
 
       setStep('verify_reset_otp');
@@ -258,10 +264,16 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
         body: JSON.stringify({ email: email.trim().toLowerCase(), otpCode: cleanOtp }),
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { success: false, message: `Server error (HTTP ${res.status}): ${text.slice(0, 100)}` };
+      }
 
       if (!res.ok || !data.success) {
-        throw new Error(data.message || 'Invalid or expired OTP');
+        throw new Error(data.message || `HTTP ${res.status}: Invalid or expired OTP`);
       }
 
       setStep('new_password');
@@ -301,10 +313,16 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
         body: JSON.stringify({ email: email.trim().toLowerCase(), newPassword }),
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { success: false, message: `Server error (HTTP ${res.status}): ${text.slice(0, 100)}` };
+      }
 
       if (!res.ok || !data.success) {
-        throw new Error(data.message || 'Failed to reset password');
+        throw new Error(data.message || `HTTP ${res.status}: Failed to reset password`);
       }
 
       setSuccessMessage(t('auth.passwordResetSuccessMsg'));
@@ -343,10 +361,16 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
         body: JSON.stringify({ email: email.trim().toLowerCase(), type: otpType }),
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { success: false, message: `Server error (HTTP ${res.status}): ${text.slice(0, 100)}` };
+      }
 
       if (!res.ok || !data.success) {
-        throw new Error(data.message || 'Failed to resend OTP');
+        throw new Error(data.message || `HTTP ${res.status}: Failed to resend OTP`);
       }
 
       setDebugOtp(data.debugOtp || null);

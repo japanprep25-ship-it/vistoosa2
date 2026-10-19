@@ -146,11 +146,18 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
   useEffect(() => {
     const headers = getAuthHeaders();
 
-    // 1. Website & Meta settings
-    fetch('/api/settings/integrations', { headers })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data && data.success && data.config) {
+    const loadSettings = async () => {
+      // 1. Website & Meta settings
+      try {
+        const res = await fetch('/api/settings/integrations', { headers });
+        const text = await res.text();
+        let data: any = {};
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = { success: false, message: `Server error (HTTP ${res.status}): ${text.slice(0, 100)}` };
+        }
+        if (res.ok && data && data.success && data.config) {
           if (data.config.website) {
             setWebsiteConfig((prev) => ({ ...prev, ...data.config.website, status: 'connected' }));
           }
@@ -158,14 +165,21 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
             setMetaConfig((prev: any) => ({ ...prev, ...data.config.meta, status: 'connected' }));
           }
         }
-      })
-      .catch((err) => console.error('Error loading integration settings:', err));
+      } catch (err) {
+        console.error('Error loading integration settings:', err);
+      }
 
-    // 1b. Specific Meta Order Integration Settings
-    fetch('/api/settings/meta-order', { headers })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data && data.success && data.config) {
+      // 1b. Specific Meta Order Integration Settings
+      try {
+        const res = await fetch('/api/settings/meta-order', { headers });
+        const text = await res.text();
+        let data: any = {};
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = { success: false };
+        }
+        if (res.ok && data && data.success && data.config) {
           setMetaConfig((prev: any) => {
             const merged = { ...prev, ...data.config };
             if (data.verifyToken && !merged.metaVerifyToken) {
@@ -174,14 +188,21 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
             return merged;
           });
         }
-      })
-      .catch((err) => console.warn('Could not fetch meta-order settings:', err));
+      } catch (err) {
+        console.warn('Could not fetch meta-order settings:', err);
+      }
 
-    // 2. Pathao configuration
-    fetch('/api/settings/pathao', { headers })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data && data.configured) {
+      // 2. Pathao configuration
+      try {
+        const res = await fetch('/api/settings/pathao', { headers });
+        const text = await res.text();
+        let data: any = {};
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = { configured: false };
+        }
+        if (res.ok && data && data.configured) {
           setPathaoConfig((prev) => ({
             ...prev,
             baseUrl: data.baseUrl || prev.baseUrl || 'https://api-hermes.pathao.com',
@@ -193,14 +214,21 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
             status: 'connected',
           }));
         }
-      })
-      .catch((err) => console.error('Error loading Pathao settings:', err));
+      } catch (err) {
+        console.error('Error loading Pathao settings:', err);
+      }
 
-    // 3. WhatsApp configuration
-    fetch('/api/settings/whatsapp', { headers })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data && data.configured) {
+      // 3. WhatsApp configuration
+      try {
+        const res = await fetch('/api/settings/whatsapp', { headers });
+        const text = await res.text();
+        let data: any = {};
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = { configured: false };
+        }
+        if (res.ok && data && data.configured) {
           setWhatsappConfig({
             phoneNumberId: data.phoneNumberId || '',
             accessToken: data.accessToken || '',
@@ -209,8 +237,12 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
             status: 'connected',
           });
         }
-      })
-      .catch((err) => console.error('Error loading WhatsApp settings:', err));
+      } catch (err) {
+        console.error('Error loading WhatsApp settings:', err);
+      }
+    };
+
+    loadSettings();
   }, []);
 
   const handleSaveWebsite = async (e: React.FormEvent) => {
@@ -517,12 +549,18 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
           clientSecret: pathaoConfig.clientSecret,
         }),
       });
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { success: false, message: `Server response (HTTP ${res.status}): ${text.slice(0, 100)}` };
+      }
       setTestResult({
         success: true,
         message: `Pathao Hermes API Connection Validated! Active Store: ${pathaoConfig.storeName} (ID: ${pathaoConfig.storeId}). Pickup SLA: 24h.`,
       });
-    } catch (e) {
+    } catch (e: any) {
       setTestResult({
         success: true,
         message: 'Pathao API simulator online. Verified Banani Hub & automated consignment generation.',
@@ -599,7 +637,13 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
         }),
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { success: false, message: `Server error (HTTP ${res.status}): ${text.slice(0, 100)}` };
+      }
 
       if (data.success) {
         setTestResult({
@@ -609,7 +653,7 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
       } else {
         setTestResult({
           success: false,
-          message: `WhatsApp Test Alert: ${data.message || data.error?.message || 'Check credentials in form.'}`,
+          message: `WhatsApp Test Alert (HTTP ${res.status}): ${data.message || data.error?.message || 'Check credentials in form.'}`,
         });
       }
     } catch (err: any) {

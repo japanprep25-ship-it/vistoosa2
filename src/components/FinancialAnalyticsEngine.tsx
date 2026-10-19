@@ -141,9 +141,14 @@ export const FinancialAnalyticsEngine: React.FC<FinancialAnalyticsEngineProps> =
   const handleSyncMetaSpend = async () => {
     setIsSyncingMeta(true);
     try {
+      const rawToken = typeof window !== 'undefined' ? localStorage.getItem('vistoosa_auth_token') || '' : '';
+      const token = rawToken.replace(/^"|"$/g, '');
       const res = await fetch('/api/meta/sync-spend', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           adAccountId,
           preset: datePreset,

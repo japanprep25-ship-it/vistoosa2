@@ -26,8 +26,14 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
         const res = await fetch('/api/settings/language', {
           headers: { Authorization: `Bearer ${token}` },
         });
+        const text = await res.text();
+        let data: any = {};
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = { success: false, message: `Server error (HTTP ${res.status}): ${text.slice(0, 100)}` };
+        }
         if (!res.ok) return;
-        const data = await res.json();
         if (data.success && (data.language === 'en' || data.language === 'bn')) {
           setLanguageState(data.language);
           localStorage.setItem('vistoosa_language', data.language);

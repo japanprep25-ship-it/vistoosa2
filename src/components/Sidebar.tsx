@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 import { useLanguage } from '../contexts/LanguageContext';
+import { AuthUser } from '../types';
 
 export type ActiveTab =
   | 'dashboard'
@@ -41,6 +42,7 @@ interface SidebarProps {
   onClose?: () => void;
   isOpenMobile?: boolean;
   onCloseMobile?: () => void;
+  currentUser?: AuthUser | null;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -53,6 +55,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onClose,
   isOpenMobile,
   onCloseMobile,
+  currentUser,
 }) => {
   const isDrawerOpen = isOpen !== undefined ? isOpen : (isOpenMobile || false);
   const handleClose = onClose || onCloseMobile;
@@ -163,6 +166,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
   ];
 
+  // Filter items based on user permissions
+  const filteredNavItems = navItems.filter((item) => {
+    if (!currentUser) return true;
+    if (currentUser.role === 'Owner' || currentUser.role === 'Admin') return true;
+    if (currentUser.permissions && currentUser.permissions[item.id] === true) return true;
+    return false;
+  });
+
   return (
     <>
       {/* 1. Backdrop Overlay (Universal) */}
@@ -173,7 +184,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         onClick={handleClose}
         aria-hidden="true"
       />
-
       {/* 2. Slide-in Navigation Drawer (Universal) */}
       <aside
         className={`fixed inset-y-0 left-0 z-50 w-72 sm:w-80 max-w-[85vw] bg-zinc-950 border-r border-zinc-800/90 backdrop-blur-2xl flex flex-col p-4 shadow-2xl transition-transform duration-300 ease-in-out h-full overflow-hidden ${
@@ -203,10 +213,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
           )}
         </div>
-
         {/* Drawer Nav Items */}
         <nav className="space-y-1.5 flex-1 overflow-y-auto pr-1">
-          {navItems.map((item) => {
+          {filteredNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
             return (
@@ -238,7 +247,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <p className="text-[10px] text-zinc-500 leading-tight">{item.description}</p>
                   </div>
                 </div>
-
                 {item.badge && (
                   <span
                     className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${item.badgeColor}`}
@@ -250,7 +258,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             );
           })}
         </nav>
-
         {/* Drawer Footer Footnote */}
         <div className="p-3 mt-auto rounded-2xl bg-zinc-900/60 border border-zinc-800/80 text-[11px] shrink-0">
           <div className="flex items-center gap-2 text-emerald-400 mb-1">

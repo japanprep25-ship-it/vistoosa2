@@ -11,6 +11,7 @@ interface NavbarProps {
   onLogout: () => void;
   onOpenGasModal: () => void;
   onOpenAiDrawer: () => void;
+  onGoHome?: () => void;
   pendingOrdersCount: number;
   approvedDispatchCount: number;
   isDarkMode?: boolean;
@@ -24,6 +25,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLogout,
   onOpenGasModal,
   onOpenAiDrawer,
+  onGoHome,
   pendingOrdersCount,
   approvedDispatchCount,
   isDarkMode = true,
@@ -54,15 +56,21 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </button>
 
-          <BrandLogo heightPx={40} className="shrink-0 cursor-pointer" />
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-brand text-sm font-bold tracking-[0.2em] text-zinc-100 uppercase">
-                Vistoosa
-              </span>
-              <span className="hidden sm:inline-block text-[10px] px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-400 font-semibold tracking-wider uppercase">
-                Management System
-              </span>
+          <div
+            onClick={onGoHome}
+            className="flex items-center gap-2 sm:gap-3 cursor-pointer group"
+            title="Go to Business Dashboard"
+          >
+            <BrandLogo heightPx={40} className="shrink-0 group-hover:scale-105 transition-transform" />
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-brand text-sm font-bold tracking-[0.2em] text-zinc-100 uppercase group-hover:text-amber-400 transition-colors">
+                  Vistoosa
+                </span>
+                <span className="hidden sm:inline-block text-[10px] px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-400 font-semibold tracking-wider uppercase">
+                  Management System
+                </span>
+              </div>
             </div>
           </div>
         </div>

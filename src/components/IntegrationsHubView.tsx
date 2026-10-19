@@ -64,7 +64,10 @@ interface IntegrationsHubViewProps {
   config: ChannelIntegrationConfig;
   onUpdateConfig: (newConfig: ChannelIntegrationConfig) => void;
   onAddSimulatedOrder?: (order: Order) => void;
-  onOpenGasModal: () => void;
+  onOpenGasModal?: () => void;
+  onSimulatedOrderReceived?: (order: Order) => void;
+  activeSubTab?: 'website' | 'pathao' | 'meta' | 'gas' | 'whatsapp';
+  onSubTabChange?: (tab: 'website' | 'pathao' | 'meta' | 'gas' | 'whatsapp') => void;
 }
 
 export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
@@ -72,8 +75,26 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
   onUpdateConfig,
   onAddSimulatedOrder,
   onOpenGasModal,
+  activeSubTab,
+  onSubTabChange,
 }) => {
-  const [activeTab, setActiveTab] = useState<'website' | 'pathao' | 'meta' | 'gas' | 'whatsapp'>('website');
+  const [activeTab, setActiveTab] = useState<'website' | 'pathao' | 'meta' | 'gas' | 'whatsapp'>(
+    activeSubTab || 'website'
+  );
+
+  React.useEffect(() => {
+    if (activeSubTab && activeSubTab !== activeTab) {
+      setActiveTab(activeSubTab);
+    }
+  }, [activeSubTab]);
+
+  const handleSelectTab = (tab: 'website' | 'pathao' | 'meta' | 'gas' | 'whatsapp') => {
+    setActiveTab(tab);
+    if (onSubTabChange) {
+      onSubTabChange(tab);
+    }
+  };
+
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -716,7 +737,7 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
       {/* Channel Tabs */}
       <div className="flex flex-wrap items-center gap-2 border-b border-zinc-800 pb-3">
         <button
-          onClick={() => setActiveTab('website')}
+          onClick={() => handleSelectTab('website')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition ${
             activeTab === 'website'
               ? 'bg-emerald-500 text-zinc-950 shadow-md shadow-emerald-500/20'
@@ -729,7 +750,7 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
         </button>
 
         <button
-          onClick={() => setActiveTab('pathao')}
+          onClick={() => handleSelectTab('pathao')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition ${
             activeTab === 'pathao'
               ? 'bg-emerald-500 text-zinc-950 shadow-md shadow-emerald-500/20'
@@ -742,7 +763,7 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
         </button>
 
         <button
-          onClick={() => setActiveTab('meta')}
+          onClick={() => handleSelectTab('meta')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition ${
             activeTab === 'meta'
               ? 'bg-emerald-500 text-zinc-950 shadow-md shadow-emerald-500/20'
@@ -755,7 +776,7 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
         </button>
 
         <button
-          onClick={() => setActiveTab('gas')}
+          onClick={() => handleSelectTab('gas')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition ${
             activeTab === 'gas'
               ? 'bg-emerald-500 text-zinc-950 shadow-md shadow-emerald-500/20'
@@ -767,7 +788,7 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
         </button>
 
         <button
-          onClick={() => setActiveTab('whatsapp')}
+          onClick={() => handleSelectTab('whatsapp')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition ${
             activeTab === 'whatsapp'
               ? 'bg-emerald-500 text-zinc-950 shadow-md shadow-emerald-500/20'

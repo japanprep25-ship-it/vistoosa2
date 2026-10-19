@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
 import { GoogleGenAI } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
@@ -18,6 +18,11 @@ import {
   updateUserPassword,
   sanitizeUser,
   generateJwtToken,
+  getAllUsers,
+  adminCreateUser,
+  updateUser,
+  adminResetPassword,
+  deleteUser,
 } from './userStore';
 import { createAndSendOtp, verifyOtpCode } from './otpService';
 import { requireAuth, extractOptionalAuth, AuthenticatedRequest } from './authMiddleware';
@@ -247,6 +252,68 @@ app.get('/api/auth/me', requireAuth, (req: AuthenticatedRequest, res) => {
     success: true,
     user: req.user,
   });
+});
+
+// Admin Middleware & Team Users API Endpoints
+function requireAdmin(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  if (!req.user || (req.user.role !== 'Owner' && req.user.role !== 'Admin')) {
+    return res.status(403).json({ success: false, message: 'Access denied. Owner or Admin privileges required.' });
+  }
+  next();
+}
+
+app.get('/api/users', requireAuth, requireAdmin, async (_req: AuthenticatedRequest, res) => {
+  try {
+    const users = await getAllUsers();
+    return res.json({ success: true, users: users.map(sanitizeUser) });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err?.message || 'Failed to fetch users.' });
+  }
+});
+
+app.post('/api/users', requireAuth, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  try {
+    const { email, password, name, role, permissions } = req.body || {};
+    const newUser = await adminCreateUser(email, password, name, role || 'Staff', permissions);
+    return res.json({ success: true, user: sanitizeUser(newUser), message: 'Team user created successfully.' });
+  } catch (err: any) {
+    return res.status(400).json({ success: false, message: err?.message || 'Failed to create team user.' });
+  }
+});
+
+app.put('/api/users/:id', requireAuth, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { name, email, role, permissions, status } = req.body || {};
+    const updated = await updateUser(id, { name, email, role, permissions, status });
+    return res.json({ success: true, user: sanitizeUser(updated), message: 'User updated successfully.' });
+  } catch (err: any) {
+    return res.status(400).json({ success: false, message: err?.message || 'Failed to update user.' });
+  }
+});
+
+app.post('/api/users/:id/reset-password', requireAuth, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { newPassword } = req.body || {};
+    await adminResetPassword(id, newPassword);
+    return res.json({ success: true, message: 'Password reset successfully.' });
+  } catch (err: any) {
+    return res.status(400).json({ success: false, message: err?.message || 'Failed to reset password.' });
+  }
+});
+
+app.delete('/api/users/:id', requireAuth, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  try {
+    const { id } = req.params;
+    if (req.user?.id === id) {
+      return res.status(400).json({ success: false, message: 'You cannot delete your own currently logged-in account.' });
+    }
+    await deleteUser(id);
+    return res.json({ success: true, message: 'User deleted successfully.' });
+  } catch (err: any) {
+    return res.status(400).json({ success: false, message: err?.message || 'Failed to delete user.' });
+  }
 });
 
 // Lazy initialize Gemini client

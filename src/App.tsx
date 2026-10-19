@@ -39,6 +39,13 @@ import { OfflineIndicator } from './components/OfflineIndicator';
 import { SettingsView } from './components/SettingsView';
 import { PageTransitionWrapper } from './components/PageTransitionWrapper';
 import { useSettings } from './contexts/SettingsContext';
+import {
+  getInitialNavigationState,
+  persistNavigationState,
+  subscribeToHashChanges,
+  IntegrationsSubTab,
+  CashRegisterSubTab,
+} from './utils/navigationRouter';
 
 export default function App() {
   // Authentication state
@@ -145,12 +152,97 @@ export default function App() {
     }
   };
 
-  // Navigation State
-  const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
+  // Navigation State with URL Hash & localStorage persistence
+  const [activeTab, setActiveTab] = useState<ActiveTab>(() => {
+    return getInitialNavigationState().tab;
+  });
+  const [integrationsSubTab, setIntegrationsSubTab] = useState<IntegrationsSubTab | undefined>(() => {
+    const init = getInitialNavigationState();
+    return init.tab === 'integrations' ? (init.subTab as IntegrationsSubTab) : undefined;
+  });
+  const [cashSubTab, setCashSubTab] = useState<CashRegisterSubTab | undefined>(() => {
+    const init = getInitialNavigationState();
+    return init.tab === 'cogs' ? (init.subTab as CashRegisterSubTab) : undefined;
+  });
+
   const [isGasModalOpen, setIsGasModalOpen] = useState(false);
   const [isCashModalOpenFromDashboard, setIsCashModalOpenFromDashboard] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const { isDarkMode, toggleDarkMode } = useSettings();
+
+  // Synchronize document class with isDarkMode state from SettingsContext
+  React.useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      document.body.classList.add('dark');
+      document.body.style.backgroundColor = '#0f0f14';
+      document.body.style.color = '#f4f4f5';
+    } else {
+      document.documentElement.classList.remove('dark');
+      document.body.classList.remove('dark');
+      document.body.style.backgroundColor = '#f8fafc';
+      document.body.style.color = '#09090b';
+    }
+  }, [isDarkMode]);
+
+  // Navigation dispatcher
+  const navigateTo = (tab: ActiveTab, subTab?: string) => {
+    setActiveTab(tab);
+    if (tab === 'integrations') {
+      if (subTab) setIntegrationsSubTab(subTab as IntegrationsSubTab);
+    } else if (tab === 'cogs') {
+      if (subTab) setCashSubTab(subTab as CashRegisterSubTab);
+    }
+    const currentSub = tab === 'integrations' ? (subTab || integrationsSubTab) : (tab === 'cogs' ? (subTab || cashSubTab) : undefined);
+    persistNavigationState(tab, currentSub, true);
+  };
+
+  const handleSelectTab = (tab: ActiveTab) => {
+    navigateTo(tab);
+    setIsMobileSidebarOpen(false);
+  };
+
+  const handleIntegrationsSubTabChange = (sub: IntegrationsSubTab) => {
+    setIntegrationsSubTab(sub);
+    persistNavigationState('integrations', sub, true);
+  };
+
+  const handleCashSubTabChange = (sub: CashRegisterSubTab) => {
+    setCashSubTab(sub);
+    persistNavigationState('cogs', sub, true);
+  };
+
+  // Sync initial navigation state and subscribe to browser back/forward buttons
+  React.useEffect(() => {
+    const currentSub = activeTab === 'integrations' ? integrationsSubTab : (activeTab === 'cogs' ? cashSubTab : undefined);
+    persistNavigationState(activeTab, currentSub, false);
+
+    const unsubscribe = subscribeToHashChanges((nav) => {
+      setActiveTab(nav.tab);
+      if (nav.tab === 'integrations') {
+        if (nav.subTab) setIntegrationsSubTab(nav.subTab as IntegrationsSubTab);
+      } else if (nav.tab === 'cogs') {
+        if (nav.subTab) setCashSubTab(nav.subTab as CashRegisterSubTab);
+      }
+      persistNavigationState(nav.tab, nav.subTab, false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Enforce per-page permissions: redirect if user tries to access unpermitted page
+  React.useEffect(() => {
+    if (!currentUser) return;
+    if (currentUser.role === 'Owner' || currentUser.role === 'Admin') return;
+    const perms = currentUser.permissions || {};
+    if (!perms[activeTab]) {
+      const allTabs: ActiveTab[] = ['dashboard', 'orders', 'cogs', 'integrations', 'dispatch', 'inventory', 'reconciliation', 'crm', 'ai', 'gas', 'settings'];
+      const firstAllowed = allTabs.find((t) => perms[t]) || 'dashboard';
+      if (firstAllowed !== activeTab) {
+        navigateTo(firstAllowed);
+      }
+    }
+  }, [currentUser, activeTab]);
 
   // Periodically poll for live inbound website orders received via WooCommerce / Shopify webhooks
   React.useEffect(() => {
@@ -647,14 +739,15 @@ export default function App() {
 
   return (
     <div
-      className="min-h-screen dark bg-[#0f0f14] text-zinc-100 flex flex-col font-sans transition-colors duration-300"
+      className={`min-h-screen ${isDarkMode ? 'dark bg-[#0f0f14] text-zinc-100' : 'bg-[#f8fafc] text-zinc-900'} flex flex-col font-sans transition-colors duration-300`}
     >
       {/* Top App Bar */}
       <Navbar
         user={currentUser}
         onLogout={handleLogout}
         onOpenGasModal={() => setIsGasModalOpen(true)}
-        onOpenAiDrawer={() => setActiveTab('ai')}
+        onOpenAiDrawer={() => navigateTo('ai')}
+        onGoHome={() => navigateTo('dashboard')}
         pendingOrdersCount={pendingOrdersCount}
         approvedDispatchCount={approvedDispatchCount}
         isDarkMode={isDarkMode}
@@ -668,15 +761,13 @@ export default function App() {
         {/* Slide-in Navigation Drawer */}
         <Sidebar
           activeTab={activeTab}
-          onSelectTab={(tab) => {
-            setActiveTab(tab);
-            setIsMobileSidebarOpen(false);
-          }}
+          onSelectTab={handleSelectTab}
           pendingOrdersCount={pendingOrdersCount}
           approvedDispatchCount={approvedDispatchCount}
           discrepancyCount={discrepancyCount}
           isOpen={isMobileSidebarOpen}
           onClose={() => setIsMobileSidebarOpen(false)}
+          currentUser={currentUser}
         />
 
         {/* Center Dynamic Content Stage */}
@@ -690,14 +781,14 @@ export default function App() {
                 expenses={expenses}
                 payouts={payouts}
                 integrationConfig={integrationConfig}
-                onNavigate={(tab) => setActiveTab(tab)}
-                onNavigateTab={(tab) => setActiveTab(tab)}
+                onNavigate={(tab) => navigateTo(tab)}
+                onNavigateTab={(tab) => navigateTo(tab)}
                 onOpenCashModal={() => {
-                  setActiveTab('cogs');
+                  navigateTo('cogs', 'register');
                   setIsCashModalOpenFromDashboard(true);
                 }}
                 onOpenNewCashModal={() => {
-                  setActiveTab('cogs');
+                  navigateTo('cogs', 'register');
                   setIsCashModalOpenFromDashboard(true);
                 }}
               />
@@ -710,7 +801,7 @@ export default function App() {
                 onApproveOrder={handleApproveOrder}
                 onCancelOrder={handleCancelOrder}
                 onGoToDispatch={(orderId) => {
-                  setActiveTab('dispatch');
+                  navigateTo('dispatch');
                 }}
                 onCreateOrder={handleCreateOrder}
                 onUpdateOrder={handleUpdateOrder}
@@ -724,6 +815,8 @@ export default function App() {
               <IntegrationsHubView
                 config={integrationConfig}
                 onUpdateConfig={handleUpdateIntegrationConfig}
+                activeSubTab={integrationsSubTab}
+                onSubTabChange={handleIntegrationsSubTabChange}
                 onSimulatedOrderReceived={(order) => {
                   setOrders((prev) => [order, ...prev]);
                   // If it's a prepaid order (bKash or Nagad), record cash entry
@@ -769,6 +862,8 @@ export default function App() {
                 cashEntries={cashEntries}
                 expenses={expenses}
                 shipments={shipments}
+                activeSubTab={cashSubTab}
+                onSubTabChange={handleCashSubTabChange}
                 onAddCashEntry={handleAddCashEntry}
                 onAddExpense={handleAddExpense}
                 onAddShipment={handleAddShipment}
@@ -819,7 +914,7 @@ export default function App() {
               </div>
             )}
 
-            {activeTab === 'settings' && <SettingsView />}
+            {activeTab === 'settings' && <SettingsView currentUser={currentUser} token={authToken} />}
           </PageTransitionWrapper>
         </main>
       </div>

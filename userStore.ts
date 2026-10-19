@@ -16,25 +16,63 @@ export interface UserRecord {
   email: string;
   passwordHash: string;
   name: string;
-  role: string;
+  role: 'Owner' | 'Admin' | 'Staff';
+  permissions: Record<string, boolean>;
+  status: 'Active' | 'Disabled';
   createdAt: string;
+  lastLogin?: string;
+  failedLoginAttempts?: number;
+  lockUntil?: number;
 }
 
 export interface UserProfile {
   id: string;
   email: string;
   name: string;
-  role: string;
+  role: 'Owner' | 'Admin' | 'Staff';
+  permissions: Record<string, boolean>;
+  status: 'Active' | 'Disabled';
   createdAt: string;
+  lastLogin?: string;
 }
+
+export const ALL_PAGES = [
+  { key: 'dashboard', label: 'Business Dashboard' },
+  { key: 'orders', label: 'Order Engine' },
+  { key: 'cogs', label: 'Cash & Balance' },
+  { key: 'integrations', label: 'Connect Channels' },
+  { key: 'dispatch', label: 'Barcode Dispatch' },
+  { key: 'inventory', label: 'Dual Inventory' },
+  { key: 'reconciliation', label: 'Pathao Courier' },
+  { key: 'crm', label: 'CRM & WhatsApp' },
+  { key: 'ai', label: 'Veer (AI)' },
+  { key: 'gas', label: 'GAS & DB Schema' },
+  { key: 'settings', label: 'Settings' },
+];
+
+const DEFAULT_PERMISSIONS: Record<string, boolean> = {
+  dashboard: true,
+  orders: true,
+  cogs: true,
+  integrations: true,
+  dispatch: true,
+  inventory: true,
+  reconciliation: true,
+  crm: true,
+  ai: true,
+  gas: true,
+  settings: true,
+};
 
 const DEFAULT_USERS: UserRecord[] = [
   {
     id: 'usr_admin_default',
     email: 'japanprep25@gmail.com',
     passwordHash: bcrypt.hashSync('password123', 10),
-    name: 'System Admin (You)',
-    role: 'Admin',
+    name: 'System Admin (Owner)',
+    role: 'Owner',
+    permissions: { ...DEFAULT_PERMISSIONS },
+    status: 'Active',
     createdAt: new Date().toISOString(),
   },
   {
@@ -42,15 +80,16 @@ const DEFAULT_USERS: UserRecord[] = [
     email: 'admin@vistoosa.com',
     passwordHash: bcrypt.hashSync('admin123', 10),
     name: 'Vistoosa Admin',
-    role: 'Super Admin',
+    role: 'Owner',
+    permissions: { ...DEFAULT_PERMISSIONS },
+    status: 'Active',
     createdAt: new Date().toISOString(),
   },
 ];
 
-// Resilient in-memory user registry ensuring uninterrupted operation during cloud quota restrictions
+// Resilient in-memory user registry
 const inMemoryUsers = new Map<string, UserRecord>();
 DEFAULT_USERS.forEach((u) => inMemoryUsers.set(u.id, { ...u }));
-
 let defaultUsersSeeded = false;
 
 async function ensureDefaultUsersSeeded(): Promise<void> {
@@ -58,7 +97,6 @@ async function ensureDefaultUsersSeeded(): Promise<void> {
     defaultUsersSeeded = true;
     return;
   }
-
   try {
     for (const user of DEFAULT_USERS) {
       const docRef = db.collection(USERS_COLLECTION).doc(user.id);
@@ -72,40 +110,34 @@ async function ensureDefaultUsersSeeded(): Promise<void> {
     defaultUsersSeeded = true;
     if (isQuotaExceededError(err)) {
       markFirestoreQuotaExceeded();
-      console.info('[UserStore]: Firestore quota limit reached. Default administrative users active in local memory.');
-    } else if (isPermissionDeniedError(err)) {
-      console.info('[UserStore]: Operating in resilient local memory mode (Firestore permission restricted).');
-    } else {
-      console.info('[UserStore]: Using resilient local memory mode:', err?.message || err);
     }
   }
 }
 
 export function sanitizeUser(user: UserRecord): UserProfile {
-  const { passwordHash, ...sanitized } = user;
-  return sanitized;
+  const { passwordHash, failedLoginAttempts, lockUntil, ...sanitized } = user;
+  return {
+    ...sanitized,
+    permissions: user.role === 'Owner' || user.role === 'Admin' ? { ...DEFAULT_PERMISSIONS } : (user.permissions || {}),
+  };
 }
 
 export async function findUserByEmail(email: string): Promise<UserRecord | null> {
   const cleanEmail = email.trim().toLowerCase();
   if (!cleanEmail) return null;
-
   await ensureDefaultUsersSeeded();
-
   if (isFirestoreQuotaExceeded()) {
     for (const u of inMemoryUsers.values()) {
       if (u.email.toLowerCase() === cleanEmail) return u;
     }
     return null;
   }
-
   try {
     const snapshot = await db
       .collection(USERS_COLLECTION)
       .where('email', '==', cleanEmail)
       .limit(1)
       .get();
-
     if (!snapshot.empty) {
       const doc = snapshot.docs[0];
       const user = doc.data() as UserRecord;
@@ -117,7 +149,6 @@ export async function findUserByEmail(email: string): Promise<UserRecord | null>
       markFirestoreQuotaExceeded();
     }
   }
-
   for (const u of inMemoryUsers.values()) {
     if (u.email.toLowerCase() === cleanEmail) return u;
   }
@@ -126,17 +157,13 @@ export async function findUserByEmail(email: string): Promise<UserRecord | null>
 
 export async function findUserById(id: string): Promise<UserRecord | null> {
   if (!id) return null;
-
   await ensureDefaultUsersSeeded();
-
   if (isFirestoreQuotaExceeded()) {
     return inMemoryUsers.get(id) || null;
   }
-
   try {
     const docRef = db.collection(USERS_COLLECTION).doc(id);
     const doc = await docRef.get();
-
     if (doc.exists) {
       const user = doc.data() as UserRecord;
       inMemoryUsers.set(id, user);
@@ -147,8 +174,29 @@ export async function findUserById(id: string): Promise<UserRecord | null> {
       markFirestoreQuotaExceeded();
     }
   }
-
   return inMemoryUsers.get(id) || null;
+}
+
+export async function getAllUsers(): Promise<UserRecord[]> {
+  await ensureDefaultUsersSeeded();
+  if (isFirestoreQuotaExceeded()) {
+    return Array.from(inMemoryUsers.values());
+  }
+  try {
+    const snapshot = await db.collection(USERS_COLLECTION).get();
+    const users: UserRecord[] = [];
+    snapshot.forEach((doc) => {
+      const u = doc.data() as UserRecord;
+      inMemoryUsers.set(u.id, u);
+      users.push(u);
+    });
+    return users.length > 0 ? users : Array.from(inMemoryUsers.values());
+  } catch (err: any) {
+    if (isQuotaExceededError(err)) {
+      markFirestoreQuotaExceeded();
+    }
+    return Array.from(inMemoryUsers.values());
+  }
 }
 
 export function generateJwtToken(user: UserProfile): string {
@@ -158,6 +206,7 @@ export function generateJwtToken(user: UserProfile): string {
       email: user.email,
       name: user.name,
       role: user.role,
+      permissions: user.permissions,
     },
     JWT_SECRET,
     { expiresIn: '30d' }
@@ -169,67 +218,149 @@ export async function verifyJwtToken(token: string): Promise<UserProfile | null>
     const decoded = jwt.verify(token, JWT_SECRET) as UserProfile;
     if (!decoded || !decoded.id) return null;
     const user = await findUserById(decoded.id);
-    if (!user) return null;
+    if (!user || user.status === 'Disabled') return null;
     return sanitizeUser(user);
   } catch (err) {
     return null;
   }
 }
 
-export async function createUser(
+async function saveUserRecord(user: UserRecord): Promise<void> {
+  inMemoryUsers.set(user.id, user);
+  if (!isFirestoreQuotaExceeded()) {
+    try {
+      await db.collection(USERS_COLLECTION).doc(user.id).set(user);
+    } catch (err: any) {
+      if (isQuotaExceededError(err)) {
+        markFirestoreQuotaExceeded();
+      }
+    }
+  }
+}
+
+export async function adminCreateUser(
   email: string,
   password: string,
-  name?: string
-): Promise<{ user: UserProfile; token: string }> {
+  name?: string,
+  role: 'Owner' | 'Admin' | 'Staff' = 'Staff',
+  permissions?: Record<string, boolean>
+): Promise<UserRecord> {
   const cleanEmail = email.trim().toLowerCase();
-
   if (!cleanEmail || !cleanEmail.includes('@')) {
     throw new Error('Please enter a valid email address.');
   }
-
-  if (!password || password.length < 4) {
-    throw new Error('Password must be at least 4 characters long.');
+  if (!password || password.length < 8) {
+    throw new Error('Password must be at least 8 characters long.');
   }
-
   const existing = await findUserByEmail(cleanEmail);
   if (existing) {
-    throw new Error('An account with this email already exists. Please log in instead.');
+    throw new Error('An account with this email already exists.');
   }
-
   const passwordHash = bcrypt.hashSync(password, 10);
-  const displayName = (name && name.trim()) || cleanEmail.split('@')[0] || 'User';
+  const displayName = (name && name.trim()) || cleanEmail.split('@')[0] || 'Team User';
   const userId = `usr_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
+
+  const finalPermissions =
+    role === 'Owner' || role === 'Admin'
+      ? { ...DEFAULT_PERMISSIONS }
+      : permissions || { dashboard: true, orders: true };
 
   const newUser: UserRecord = {
     id: userId,
     email: cleanEmail,
     passwordHash,
     name: displayName,
-    role: 'Owner',
+    role,
+    permissions: finalPermissions,
+    status: 'Active',
     createdAt: new Date().toISOString(),
   };
 
-  // Register in local in-memory store immediately
-  inMemoryUsers.set(userId, newUser);
+  await saveUserRecord(newUser);
+  return newUser;
+}
 
-  if (!isFirestoreQuotaExceeded()) {
-    try {
-      await db.collection(USERS_COLLECTION).doc(userId).set(newUser);
-    } catch (err: any) {
-      if (isQuotaExceededError(err)) {
-        markFirestoreQuotaExceeded();
-      } else if (isPermissionDeniedError(err)) {
-        console.info('[UserStore]: User account created in resilient local store (Firestore write restricted).');
-      } else {
-        console.info('[UserStore]: User account synced to local store:', err?.message || err);
-      }
+export async function updateUser(
+  id: string,
+  updates: {
+    name?: string;
+    email?: string;
+    role?: 'Owner' | 'Admin' | 'Staff';
+    permissions?: Record<string, boolean>;
+    status?: 'Active' | 'Disabled';
+  }
+): Promise<UserRecord> {
+  const user = await findUserById(id);
+  if (!user) {
+    throw new Error('User account not found.');
+  }
+
+  // Prevent disabling or demoting the last Owner
+  if (user.role === 'Owner' && (updates.status === 'Disabled' || (updates.role && updates.role !== 'Owner'))) {
+    const all = await getAllUsers();
+    const activeOwners = all.filter((u) => u.role === 'Owner' && u.status === 'Active' && u.id !== id);
+    if (activeOwners.length === 0) {
+      throw new Error('Cannot disable or change role of the last active Owner.');
     }
   }
 
-  const profile = sanitizeUser(newUser);
-  const token = generateJwtToken(profile);
+  const updated: UserRecord = {
+    ...user,
+    name: updates.name !== undefined ? updates.name.trim() : user.name,
+    email: updates.email !== undefined ? updates.email.trim().toLowerCase() : user.email,
+    role: updates.role !== undefined ? updates.role : user.role,
+    permissions:
+      updates.role === 'Owner' || updates.role === 'Admin'
+        ? { ...DEFAULT_PERMISSIONS }
+        : updates.permissions !== undefined
+        ? updates.permissions
+        : user.permissions,
+    status: updates.status !== undefined ? updates.status : user.status,
+  };
 
-  return { user: profile, token };
+  await saveUserRecord(updated);
+  return updated;
+}
+
+export async function adminResetPassword(id: string, newPassword: string): Promise<void> {
+  if (!newPassword || newPassword.length < 8) {
+    throw new Error('Password must be at least 8 characters long.');
+  }
+  const user = await findUserById(id);
+  if (!user) {
+    throw new Error('User account not found.');
+  }
+  const passwordHash = bcrypt.hashSync(newPassword, 10);
+  const updated: UserRecord = {
+    ...user,
+    passwordHash,
+  };
+  await saveUserRecord(updated);
+}
+
+export async function deleteUser(id: string): Promise<void> {
+  const user = await findUserById(id);
+  if (!user) {
+    throw new Error('User account not found.');
+  }
+  if (user.role === 'Owner') {
+    const all = await getAllUsers();
+    const activeOwners = all.filter((u) => u.role === 'Owner' && u.status === 'Active' && u.id !== id);
+    if (activeOwners.length === 0) {
+      throw new Error('Cannot delete the last active Owner account.');
+    }
+  }
+
+  inMemoryUsers.delete(id);
+  if (!isFirestoreQuotaExceeded()) {
+    try {
+      await db.collection(USERS_COLLECTION).doc(id).delete();
+    } catch (err: any) {
+      if (isQuotaExceededError(err)) {
+        markFirestoreQuotaExceeded();
+      }
+    }
+  }
 }
 
 export async function authenticateUserCredentials(
@@ -238,19 +369,62 @@ export async function authenticateUserCredentials(
 ): Promise<{ user: UserProfile; token: string }> {
   const cleanEmail = email.trim().toLowerCase();
   const user = await findUserByEmail(cleanEmail);
-
   if (!user) {
-    throw new Error('Invalid email or password');
+    throw new Error('Invalid email or password.');
+  }
+
+  const now = Date.now();
+  if (user.lockUntil && user.lockUntil > now) {
+    const minsLeft = Math.ceil((user.lockUntil - now) / 60000);
+    throw new Error(`Account temporarily locked due to multiple failed login attempts. Try again in ${minsLeft} minutes.`);
+  }
+
+  if (user.status === 'Disabled') {
+    throw new Error('This account has been disabled by administrator.');
   }
 
   const isPasswordValid = bcrypt.compareSync(password, user.passwordHash);
   if (!isPasswordValid) {
-    throw new Error('Invalid email or password');
+    const attempts = (user.failedLoginAttempts || 0) + 1;
+    let lockUntil = user.lockUntil;
+    if (attempts >= 5) {
+      lockUntil = now + 10 * 60 * 1000; // lock for 10 minutes
+    }
+    const updated: UserRecord = {
+      ...user,
+      failedLoginAttempts: attempts,
+      lockUntil,
+    };
+    await saveUserRecord(updated);
+    if (attempts >= 5) {
+      throw new Error('Too many failed login attempts. Account locked for 10 minutes.');
+    }
+    throw new Error('Invalid email or password.');
   }
 
+  // Reset failed attempts and update lastLogin
+  const updatedUser: UserRecord = {
+    ...user,
+    failedLoginAttempts: 0,
+    lockUntil: undefined,
+    lastLogin: new Date().toISOString(),
+  };
+  await saveUserRecord(updatedUser);
+
+  const profile = sanitizeUser(updatedUser);
+  const token = generateJwtToken(profile);
+  return { user: profile, token };
+}
+
+// Backward compatibility helper
+export async function createUser(
+  email: string,
+  password: string,
+  name?: string
+): Promise<{ user: UserProfile; token: string }> {
+  const user = await adminCreateUser(email, password, name, 'Owner', DEFAULT_PERMISSIONS);
   const profile = sanitizeUser(user);
   const token = generateJwtToken(profile);
-
   return { user: profile, token };
 }
 
@@ -258,39 +432,13 @@ export async function updateUserPassword(
   email: string,
   newPassword: string
 ): Promise<{ user: UserProfile; token: string }> {
-  const cleanEmail = email.trim().toLowerCase();
-  if (!newPassword || newPassword.length < 4) {
-    throw new Error('New password must be at least 4 characters long.');
-  }
-
-  const user = await findUserByEmail(cleanEmail);
+  const user = await findUserByEmail(email);
   if (!user) {
     throw new Error('User account not found.');
   }
-
-  const passwordHash = bcrypt.hashSync(newPassword, 10);
-  const updatedUser: UserRecord = {
-    ...user,
-    passwordHash,
-  };
-
-  // Update in-memory registry immediately
-  inMemoryUsers.set(user.id, updatedUser);
-
-  if (!isFirestoreQuotaExceeded()) {
-    try {
-      await db.collection(USERS_COLLECTION).doc(user.id).set(updatedUser, { merge: true });
-    } catch (err: any) {
-      if (isQuotaExceededError(err)) {
-        markFirestoreQuotaExceeded();
-      } else {
-        console.info('[UserStore]: Password updated in resilient local memory mode.');
-      }
-    }
-  }
-
-  const profile = sanitizeUser(updatedUser);
+  await adminResetPassword(user.id, newPassword);
+  const updated = await findUserById(user.id);
+  const profile = sanitizeUser(updated!);
   const token = generateJwtToken(profile);
-
   return { user: profile, token };
 }

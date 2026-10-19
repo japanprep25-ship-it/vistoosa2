@@ -33,6 +33,8 @@ interface CashRegisterViewProps {
   onAddShipment: (shipment: ShipmentCosting) => void;
   isEntryModalOpenExternal?: boolean;
   onCloseEntryModalExternal?: () => void;
+  activeSubTab?: 'register' | 'shipments' | 'expenses';
+  onSubTabChange?: (tab: 'register' | 'shipments' | 'expenses') => void;
 }
 
 export const CashRegisterView: React.FC<CashRegisterViewProps> = ({
@@ -44,8 +46,26 @@ export const CashRegisterView: React.FC<CashRegisterViewProps> = ({
   onAddShipment,
   isEntryModalOpenExternal,
   onCloseEntryModalExternal,
+  activeSubTab,
+  onSubTabChange,
 }) => {
-  const [activeTab, setActiveTab] = useState<'register' | 'shipments' | 'expenses'>('register');
+  const [activeTab, setActiveTab] = useState<'register' | 'shipments' | 'expenses'>(
+    activeSubTab || 'register'
+  );
+
+  React.useEffect(() => {
+    if (activeSubTab && activeSubTab !== activeTab) {
+      setActiveTab(activeSubTab);
+    }
+  }, [activeSubTab]);
+
+  const handleSelectTab = (tab: 'register' | 'shipments' | 'expenses') => {
+    setActiveTab(tab);
+    if (onSubTabChange) {
+      onSubTabChange(tab);
+    }
+  };
+
   const [isCashEntryModalOpen, setIsCashEntryModalOpen] = useState(false);
   const [isShipmentModalOpen, setIsShipmentModalOpen] = useState(false);
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
@@ -359,7 +379,7 @@ export const CashRegisterView: React.FC<CashRegisterViewProps> = ({
       {/* 2. Sub-Tabs */}
       <div className="flex items-center gap-2 border-b border-zinc-800 pb-3">
         <button
-          onClick={() => setActiveTab('register')}
+          onClick={() => handleSelectTab('register')}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
             activeTab === 'register'
               ? 'bg-amber-500 text-zinc-950 shadow-md shadow-amber-500/20'
@@ -371,7 +391,7 @@ export const CashRegisterView: React.FC<CashRegisterViewProps> = ({
         </button>
 
         <button
-          onClick={() => setActiveTab('shipments')}
+          onClick={() => handleSelectTab('shipments')}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
             activeTab === 'shipments'
               ? 'bg-amber-500 text-zinc-950 shadow-md shadow-amber-500/20'
@@ -383,7 +403,7 @@ export const CashRegisterView: React.FC<CashRegisterViewProps> = ({
         </button>
 
         <button
-          onClick={() => setActiveTab('expenses')}
+          onClick={() => handleSelectTab('expenses')}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
             activeTab === 'expenses'
               ? 'bg-amber-500 text-zinc-950 shadow-md shadow-amber-500/20'

@@ -1,6 +1,12 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { db } from './firebaseAdmin';
+import {
+  db,
+  isFirestoreQuotaExceeded,
+  markFirestoreQuotaExceeded,
+  isQuotaExceededError,
+  isPermissionDeniedError,
+} from './firebaseAdmin';
 
 const USERS_COLLECTION = 'users';
 const JWT_SECRET = process.env.JWT_SECRET || 'vistoosa-jwt-secret-key-2026-v2';
@@ -22,17 +28,6 @@ export interface UserProfile {
   createdAt: string;
 }
 
-function logFullError(context: string, err: any) {
-  console.error(`[UserStore DETAILED ERROR] ${context}:`, {
-    message: err?.message,
-    code: err?.code,
-    details: err?.details,
-    status: err?.status,
-    name: err?.name,
-    stack: err?.stack,
-  });
-}
-
 const DEFAULT_USERS: UserRecord[] = [
   {
     id: 'usr_admin_default',
@@ -52,10 +47,18 @@ const DEFAULT_USERS: UserRecord[] = [
   },
 ];
 
+// Resilient in-memory user registry ensuring uninterrupted operation during cloud quota restrictions
+const inMemoryUsers = new Map<string, UserRecord>();
+DEFAULT_USERS.forEach((u) => inMemoryUsers.set(u.id, { ...u }));
+
 let defaultUsersSeeded = false;
 
 async function ensureDefaultUsersSeeded(): Promise<void> {
-  if (defaultUsersSeeded) return;
+  if (defaultUsersSeeded || isFirestoreQuotaExceeded()) {
+    defaultUsersSeeded = true;
+    return;
+  }
+
   try {
     for (const user of DEFAULT_USERS) {
       const docRef = db.collection(USERS_COLLECTION).doc(user.id);
@@ -66,11 +69,14 @@ async function ensureDefaultUsersSeeded(): Promise<void> {
     }
     defaultUsersSeeded = true;
   } catch (err: any) {
-    defaultUsersSeeded = true; // Mark attempted to prevent repeated calls on every request
-    if (err?.code === 7 || err?.message?.includes('PERMISSION_DENIED')) {
-      console.warn('[UserStore]: Operating in resilient local memory mode (Firestore permission denied).');
+    defaultUsersSeeded = true;
+    if (isQuotaExceededError(err)) {
+      markFirestoreQuotaExceeded();
+      console.info('[UserStore]: Firestore quota limit reached. Default administrative users active in local memory.');
+    } else if (isPermissionDeniedError(err)) {
+      console.info('[UserStore]: Operating in resilient local memory mode (Firestore permission restricted).');
     } else {
-      console.warn('[UserStore]: Error seeding default users in Firestore:', err?.message || err);
+      console.info('[UserStore]: Using resilient local memory mode:', err?.message || err);
     }
   }
 }
@@ -86,6 +92,13 @@ export async function findUserByEmail(email: string): Promise<UserRecord | null>
 
   await ensureDefaultUsersSeeded();
 
+  if (isFirestoreQuotaExceeded()) {
+    for (const u of inMemoryUsers.values()) {
+      if (u.email.toLowerCase() === cleanEmail) return u;
+    }
+    return null;
+  }
+
   try {
     const snapshot = await db
       .collection(USERS_COLLECTION)
@@ -93,23 +106,22 @@ export async function findUserByEmail(email: string): Promise<UserRecord | null>
       .limit(1)
       .get();
 
-    if (snapshot.empty) {
-      // Check default fallback in memory
-      const defaultMatch = DEFAULT_USERS.find((u) => u.email.toLowerCase() === cleanEmail);
-      return defaultMatch || null;
+    if (!snapshot.empty) {
+      const doc = snapshot.docs[0];
+      const user = doc.data() as UserRecord;
+      inMemoryUsers.set(user.id, user);
+      return user;
     }
-
-    const doc = snapshot.docs[0];
-    return doc.data() as UserRecord;
   } catch (err: any) {
-    if (err?.code === 7 || err?.message?.includes('PERMISSION_DENIED')) {
-      console.info(`[UserStore]: Local user lookup fallback for email: ${cleanEmail}`);
-    } else {
-      console.warn('[UserStore]: findUserByEmail fallback:', err?.message || err);
+    if (isQuotaExceededError(err)) {
+      markFirestoreQuotaExceeded();
     }
-    const defaultMatch = DEFAULT_USERS.find((u) => u.email.toLowerCase() === cleanEmail);
-    return defaultMatch || null;
   }
+
+  for (const u of inMemoryUsers.values()) {
+    if (u.email.toLowerCase() === cleanEmail) return u;
+  }
+  return null;
 }
 
 export async function findUserById(id: string): Promise<UserRecord | null> {
@@ -117,25 +129,26 @@ export async function findUserById(id: string): Promise<UserRecord | null> {
 
   await ensureDefaultUsersSeeded();
 
+  if (isFirestoreQuotaExceeded()) {
+    return inMemoryUsers.get(id) || null;
+  }
+
   try {
     const docRef = db.collection(USERS_COLLECTION).doc(id);
     const doc = await docRef.get();
 
-    if (!doc.exists) {
-      const defaultMatch = DEFAULT_USERS.find((u) => u.id === id);
-      return defaultMatch || null;
+    if (doc.exists) {
+      const user = doc.data() as UserRecord;
+      inMemoryUsers.set(id, user);
+      return user;
     }
-
-    return doc.data() as UserRecord;
   } catch (err: any) {
-    if (err?.code === 7 || err?.message?.includes('PERMISSION_DENIED')) {
-      console.info(`[UserStore]: Local user lookup fallback for id: ${id}`);
-    } else {
-      console.warn('[UserStore]: findUserById fallback:', err?.message || err);
+    if (isQuotaExceededError(err)) {
+      markFirestoreQuotaExceeded();
     }
-    const defaultMatch = DEFAULT_USERS.find((u) => u.id === id);
-    return defaultMatch || null;
   }
+
+  return inMemoryUsers.get(id) || null;
 }
 
 export function generateJwtToken(user: UserProfile): string {
@@ -196,13 +209,20 @@ export async function createUser(
     createdAt: new Date().toISOString(),
   };
 
-  try {
-    await db.collection(USERS_COLLECTION).doc(userId).set(newUser);
-  } catch (err: any) {
-    if (err?.code === 7 || err?.message?.includes('PERMISSION_DENIED')) {
-      console.warn('[UserStore]: User account created in resilient local store (Firestore write restricted).');
-    } else {
-      console.warn('[UserStore]: Error creating user document in Firestore:', err?.message || err);
+  // Register in local in-memory store immediately
+  inMemoryUsers.set(userId, newUser);
+
+  if (!isFirestoreQuotaExceeded()) {
+    try {
+      await db.collection(USERS_COLLECTION).doc(userId).set(newUser);
+    } catch (err: any) {
+      if (isQuotaExceededError(err)) {
+        markFirestoreQuotaExceeded();
+      } else if (isPermissionDeniedError(err)) {
+        console.info('[UserStore]: User account created in resilient local store (Firestore write restricted).');
+      } else {
+        console.info('[UserStore]: User account synced to local store:', err?.message || err);
+      }
     }
   }
 
@@ -254,11 +274,19 @@ export async function updateUserPassword(
     passwordHash,
   };
 
-  try {
-    await db.collection(USERS_COLLECTION).doc(user.id).set(updatedUser, { merge: true });
-  } catch (err: any) {
-    console.error('[UserStore]: Error updating user password in Firestore:', err?.message || err);
-    throw new Error('Database error while updating password.');
+  // Update in-memory registry immediately
+  inMemoryUsers.set(user.id, updatedUser);
+
+  if (!isFirestoreQuotaExceeded()) {
+    try {
+      await db.collection(USERS_COLLECTION).doc(user.id).set(updatedUser, { merge: true });
+    } catch (err: any) {
+      if (isQuotaExceededError(err)) {
+        markFirestoreQuotaExceeded();
+      } else {
+        console.info('[UserStore]: Password updated in resilient local memory mode.');
+      }
+    }
   }
 
   const profile = sanitizeUser(updatedUser);

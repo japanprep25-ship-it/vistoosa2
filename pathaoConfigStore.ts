@@ -5,9 +5,17 @@
 
 import type { Express, Response } from 'express';
 import { requireAuth, AuthenticatedRequest } from './authMiddleware';
-import { db } from './firebaseAdmin';
+import {
+  db,
+  isFirestoreQuotaExceeded,
+  markFirestoreQuotaExceeded,
+  isQuotaExceededError,
+} from './firebaseAdmin';
 
 const PATHAO_COLLECTION = 'pathaoConfig';
+
+// In-memory cache for high resilience during cloud quota limits
+const inMemoryPathao = new Map<string, PathaoConfig>();
 
 export interface PathaoConfig {
   baseUrl: string;
@@ -21,20 +29,37 @@ export interface PathaoConfig {
 export async function loadPathaoConfig(userId: string): Promise<PathaoConfig | null> {
   if (!userId) return null;
 
+  const local = inMemoryPathao.get(userId);
+  if (local) return local;
+
+  if (isFirestoreQuotaExceeded()) {
+    return local || null;
+  }
+
   try {
     const docRef = db.collection(PATHAO_COLLECTION).doc(userId);
     const doc = await docRef.get();
 
     if (!doc.exists) return null;
-    return doc.data() as PathaoConfig;
+    const data = doc.data() as PathaoConfig;
+    inMemoryPathao.set(userId, data);
+    return data;
   } catch (err: any) {
-    console.error(`[PathaoConfigStore]: Error loading Pathao config for user ${userId}:`, err?.message || err);
-    return null;
+    if (isQuotaExceededError(err)) {
+      markFirestoreQuotaExceeded();
+    }
+    return inMemoryPathao.get(userId) || null;
   }
 }
 
 export async function savePathaoConfig(userId: string, config: PathaoConfig): Promise<void> {
   if (!userId) return;
+
+  inMemoryPathao.set(userId, config);
+
+  if (isFirestoreQuotaExceeded()) {
+    return;
+  }
 
   try {
     const docRef = db.collection(PATHAO_COLLECTION).doc(userId);
@@ -46,7 +71,9 @@ export async function savePathaoConfig(userId: string, config: PathaoConfig): Pr
       { merge: true }
     );
   } catch (err: any) {
-    console.error(`[PathaoConfigStore]: Error saving Pathao config for user ${userId}:`, err?.message || err);
+    if (isQuotaExceededError(err)) {
+      markFirestoreQuotaExceeded();
+    }
   }
 }
 

@@ -1,5 +1,10 @@
 import type { Express } from 'express';
-import { db } from './firebaseAdmin';
+import {
+  db,
+  isFirestoreQuotaExceeded,
+  markFirestoreQuotaExceeded,
+  isQuotaExceededError,
+} from './firebaseAdmin';
 import { extractOptionalAuth, AuthenticatedRequest } from './authMiddleware';
 
 export interface GlobalSettings {
@@ -27,6 +32,10 @@ const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
 let cachedSettings: GlobalSettings = { ...DEFAULT_GLOBAL_SETTINGS };
 
 export async function getGlobalSettingsFromDb(): Promise<GlobalSettings> {
+  if (isFirestoreQuotaExceeded()) {
+    return cachedSettings;
+  }
+
   try {
     const docRef = db.collection('appSettings').doc('global');
     const snapshot = await docRef.get();
@@ -39,7 +48,9 @@ export async function getGlobalSettingsFromDb(): Promise<GlobalSettings> {
       };
     }
   } catch (err: any) {
-    console.warn('[GlobalSettingsStore]: Fallback to memory/cached global settings:', err?.message || err);
+    if (isQuotaExceededError(err)) {
+      markFirestoreQuotaExceeded();
+    }
   }
   return cachedSettings;
 }
@@ -53,11 +64,17 @@ export async function saveGlobalSettingsToDb(newSettings: Partial<GlobalSettings
 
   cachedSettings = updated;
 
+  if (isFirestoreQuotaExceeded()) {
+    return updated;
+  }
+
   try {
     const docRef = db.collection('appSettings').doc('global');
     await docRef.set(updated, { merge: true });
   } catch (err: any) {
-    console.warn('[GlobalSettingsStore]: Saved in memory cache (Firestore write restricted):', err?.message || err);
+    if (isQuotaExceededError(err)) {
+      markFirestoreQuotaExceeded();
+    }
   }
 
   return updated;

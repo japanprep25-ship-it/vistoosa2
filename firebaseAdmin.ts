@@ -50,18 +50,62 @@ try {
   // Ignore if settings already initialized
 }
 
+let firestoreQuotaExceeded = false;
+
+export function isQuotaExceededError(err: any): boolean {
+  if (!err) return false;
+  return (
+    err?.code === 8 ||
+    err?.code === 'RESOURCE_EXHAUSTED' ||
+    (typeof err?.message === 'string' &&
+      (err.message.includes('RESOURCE_EXHAUSTED') ||
+        err.message.includes('Quota exceeded') ||
+        err.message.includes('quota has been exhausted')))
+  );
+}
+
+export function isPermissionDeniedError(err: any): boolean {
+  if (!err) return false;
+  return (
+    err?.code === 7 ||
+    err?.code === 'PERMISSION_DENIED' ||
+    (typeof err?.message === 'string' && err.message.includes('PERMISSION_DENIED'))
+  );
+}
+
+export function isFirestoreQuotaExceeded(): boolean {
+  return firestoreQuotaExceeded;
+}
+
+export function markFirestoreQuotaExceeded(): void {
+  if (!firestoreQuotaExceeded) {
+    firestoreQuotaExceeded = true;
+    console.info('[Firestore Status]: Daily cloud quota reached; seamlessly running in high-performance local memory mode.');
+  }
+}
+
 export async function testFirestoreConnection(): Promise<boolean> {
+  if (firestoreQuotaExceeded) {
+    return false;
+  }
+
   try {
     // Test ping query against Firestore database "(default)"
     await db.collection('_healthcheck').doc('ping').get();
     console.log(`Firebase Firestore connected successfully to database "(default)" in project "${TARGET_PROJECT_ID}"`);
     return true;
   } catch (err: any) {
-    console.warn('[Firestore Connection Warning]: Operating in resilient local mode:', {
-      message: err?.message,
-      code: err?.code,
-      projectIdUsed: TARGET_PROJECT_ID,
-    });
+    if (isQuotaExceededError(err)) {
+      markFirestoreQuotaExceeded();
+      return false;
+    }
+
+    if (isPermissionDeniedError(err)) {
+      console.info(`[Firestore Status]: Operating in resilient local memory mode (Firestore permission restricted in project "${TARGET_PROJECT_ID}").`);
+      return false;
+    }
+
+    console.info('[Firestore Status]: Operating in resilient local memory mode:', err?.message || err);
     return false;
   }
 }

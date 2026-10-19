@@ -1,7 +1,12 @@
 import type { Express, Response } from 'express';
 import path from 'path';
 import fs from 'fs';
-import { db } from './firebaseAdmin';
+import {
+  db,
+  isFirestoreQuotaExceeded,
+  markFirestoreQuotaExceeded,
+  isQuotaExceededError,
+} from './firebaseAdmin';
 import { requireAuth, AuthenticatedRequest } from './authMiddleware';
 
 const BRAND_COLLECTION = 'brandAssets';
@@ -49,6 +54,10 @@ const VALID_VARIANTS = new Set([
 
 // Helper to load meta from Firestore or cache
 export async function getBrandMeta(): Promise<BrandMeta> {
+  if (isFirestoreQuotaExceeded()) {
+    return localMetaCache;
+  }
+
   try {
     const metaDoc = await db.collection(BRAND_COLLECTION).doc('meta').get();
     if (metaDoc.exists) {
@@ -59,8 +68,10 @@ export async function getBrandMeta(): Promise<BrandMeta> {
         hasDarkLogo: Boolean(data.hasDarkLogo),
       };
     }
-  } catch (err) {
-    // If Firestore fails or is offline, keep resilient local fallback
+  } catch (err: any) {
+    if (isQuotaExceededError(err)) {
+      markFirestoreQuotaExceeded();
+    }
   }
   return localMetaCache;
 }
@@ -75,19 +86,23 @@ export async function getBrandImageBuffer(variant: string): Promise<Buffer | nul
       return cached.buffer;
     }
 
-    try {
-      const docRef = await db.collection(BRAND_COLLECTION).doc(normalizedVariant).get();
-      if (docRef.exists) {
-        const rawData = docRef.data()?.data;
-        if (typeof rawData === 'string' && rawData.length > 0) {
-          const cleanBase64 = rawData.replace(/^data:image\/\w+;base64,/, '');
-          const buffer = Buffer.from(cleanBase64, 'base64');
-          imageBufferCache.set(normalizedVariant, { buffer, updatedAt: meta.version });
-          return buffer;
+    if (!isFirestoreQuotaExceeded()) {
+      try {
+        const docRef = await db.collection(BRAND_COLLECTION).doc(normalizedVariant).get();
+        if (docRef.exists) {
+          const rawData = docRef.data()?.data;
+          if (typeof rawData === 'string' && rawData.length > 0) {
+            const cleanBase64 = rawData.replace(/^data:image\/\w+;base64,/, '');
+            const buffer = Buffer.from(cleanBase64, 'base64');
+            imageBufferCache.set(normalizedVariant, { buffer, updatedAt: meta.version });
+            return buffer;
+          }
+        }
+      } catch (err: any) {
+        if (isQuotaExceededError(err)) {
+          markFirestoreQuotaExceeded();
         }
       }
-    } catch (err) {
-      console.warn(`[Brand Assets]: Failed to load custom variant "${normalizedVariant}" from Firestore:`, err);
     }
   }
 
@@ -271,24 +286,27 @@ export function mountBrandRoutes(app: Express) {
         hasDarkLogo,
       };
 
-      // Attempt to persist to Firestore in a batch, but stay resilient if Firestore returns PERMISSION_DENIED or is offline
-      try {
-        const batch = db.batch();
-        for (const [vKey, vVal] of Object.entries(variants)) {
-          const normKey = vKey === 'maskable-512' ? 'icon-maskable-512' : vKey;
-          if (!VALID_VARIANTS.has(normKey) && normKey !== 'logo-dark-512') {
-            continue;
+      if (!isFirestoreQuotaExceeded()) {
+        try {
+          const batch = db.batch();
+          for (const [vKey, vVal] of Object.entries(variants)) {
+            const normKey = vKey === 'maskable-512' ? 'icon-maskable-512' : vKey;
+            if (!VALID_VARIANTS.has(normKey) && normKey !== 'logo-dark-512') {
+              continue;
+            }
+            if (typeof vVal !== 'string') continue;
+            const cleanBase64 = vVal.replace(/^data:image\/\w+;base64,/, '');
+            const docRef = db.collection(BRAND_COLLECTION).doc(normKey);
+            batch.set(docRef, { data: cleanBase64, updatedAt: newVersion });
           }
-          if (typeof vVal !== 'string') continue;
-          const cleanBase64 = vVal.replace(/^data:image\/\w+;base64,/, '');
-          const docRef = db.collection(BRAND_COLLECTION).doc(normKey);
-          batch.set(docRef, { data: cleanBase64, updatedAt: newVersion });
+          const metaRef = db.collection(BRAND_COLLECTION).doc('meta');
+          batch.set(metaRef, activeMeta);
+          await batch.commit();
+        } catch (firestoreErr: any) {
+          if (isQuotaExceededError(firestoreErr)) {
+            markFirestoreQuotaExceeded();
+          }
         }
-        const metaRef = db.collection(BRAND_COLLECTION).doc('meta');
-        batch.set(metaRef, activeMeta);
-        await batch.commit();
-      } catch (firestoreErr: any) {
-        console.warn('[Brand Assets Firestore Notice]: Operating in local server mode (Firestore permission or network offline):', firestoreErr?.message || firestoreErr);
       }
 
       localMetaCache = activeMeta;
@@ -338,15 +356,19 @@ export function mountBrandRoutes(app: Express) {
         hasDarkLogo: false,
       };
 
-      try {
-        const batch = db.batch();
-        for (const variant of VALID_VARIANTS) {
-          batch.delete(db.collection(BRAND_COLLECTION).doc(variant));
+      if (!isFirestoreQuotaExceeded()) {
+        try {
+          const batch = db.batch();
+          for (const variant of VALID_VARIANTS) {
+            batch.delete(db.collection(BRAND_COLLECTION).doc(variant));
+          }
+          batch.set(db.collection(BRAND_COLLECTION).doc('meta'), newMeta);
+          await batch.commit();
+        } catch (firestoreErr: any) {
+          if (isQuotaExceededError(firestoreErr)) {
+            markFirestoreQuotaExceeded();
+          }
         }
-        batch.set(db.collection(BRAND_COLLECTION).doc('meta'), newMeta);
-        await batch.commit();
-      } catch (firestoreErr: any) {
-        console.warn('[Brand Assets Reset Firestore Notice]: Operating in local server mode (Firestore permission or network offline):', firestoreErr?.message || firestoreErr);
       }
 
       localMetaCache = newMeta;

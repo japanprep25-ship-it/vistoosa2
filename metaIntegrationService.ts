@@ -10,9 +10,15 @@ import crypto from 'crypto';
 import type { Express, Request, Response } from 'express';
 import { GoogleGenAI } from '@google/genai';
 import { detectDistrict } from './src/utils/districtDetector';
-import { db } from './firebaseAdmin';
+import {
+  db,
+  isFirestoreQuotaExceeded,
+  markFirestoreQuotaExceeded,
+  isQuotaExceededError,
+} from './firebaseAdmin';
 
 const META_COLLECTION = 'metaConfig';
+const inMemoryMetaConfig = new Map<string, Partial<MetaConfig>>();
 
 export interface MetaConfig {
   metaAppId: string;
@@ -74,15 +80,21 @@ export function registerOrderCreationHook(hook: (order: any) => void) {
 // -----------------------------------------------------------------------
 
 export async function loadMetaConfig(docId: string = 'global'): Promise<MetaConfig> {
-  let dbConfig: Partial<MetaConfig> = {};
-  try {
-    const docRef = db.collection(META_COLLECTION).doc(docId);
-    const doc = await docRef.get();
-    if (doc.exists) {
-      dbConfig = doc.data() as Partial<MetaConfig>;
+  let dbConfig: Partial<MetaConfig> = inMemoryMetaConfig.get(docId) || {};
+
+  if (!isFirestoreQuotaExceeded()) {
+    try {
+      const docRef = db.collection(META_COLLECTION).doc(docId);
+      const doc = await docRef.get();
+      if (doc.exists) {
+        dbConfig = doc.data() as Partial<MetaConfig>;
+        inMemoryMetaConfig.set(docId, dbConfig);
+      }
+    } catch (err: any) {
+      if (isQuotaExceededError(err)) {
+        markFirestoreQuotaExceeded();
+      }
     }
-  } catch (err) {
-    console.warn('[Meta Config]: Failed to read metaConfig from Firestore, using defaults/env', err);
   }
 
   return {
@@ -114,10 +126,16 @@ export async function saveMetaConfig(config: Partial<MetaConfig>, docId: string 
     whatsappAccessToken: config.whatsappAccessToken !== undefined ? String(config.whatsappAccessToken).trim() : current.whatsappAccessToken,
   };
 
-  try {
-    await db.collection(META_COLLECTION).doc(docId).set({ ...merged, updatedAt: new Date().toISOString() }, { merge: true });
-  } catch (err: any) {
-    console.error('[Meta Config]: Failed to save metaConfig to Firestore:', err?.message || err);
+  inMemoryMetaConfig.set(docId, merged);
+
+  if (!isFirestoreQuotaExceeded()) {
+    try {
+      await db.collection(META_COLLECTION).doc(docId).set({ ...merged, updatedAt: new Date().toISOString() }, { merge: true });
+    } catch (err: any) {
+      if (isQuotaExceededError(err)) {
+        markFirestoreQuotaExceeded();
+      }
+    }
   }
 
   return merged;

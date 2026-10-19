@@ -1,8 +1,16 @@
 import { Resend } from 'resend';
 import nodemailer from 'nodemailer';
-import { db } from './firebaseAdmin';
+import {
+  db,
+  isFirestoreQuotaExceeded,
+  markFirestoreQuotaExceeded,
+  isQuotaExceededError,
+} from './firebaseAdmin';
 
 const OTP_COLLECTION = 'otps';
+
+// In-memory OTP cache for high resilience during cloud quota limits
+const inMemoryOtps = new Map<string, OtpRecord>();
 
 export interface OtpRecord {
   email: string;
@@ -167,11 +175,18 @@ export async function createAndSendOtp(
     createdAt: new Date().toISOString(),
   };
 
-  try {
-    const docRef = db.collection(OTP_COLLECTION).doc(cleanEmail);
-    await docRef.set(record);
-  } catch (err: any) {
-    console.error(`[OtpService]: Error saving OTP to Firestore for ${cleanEmail}:`, err?.message || err, err);
+  // Always store in memory for guaranteed verification
+  inMemoryOtps.set(cleanEmail, record);
+
+  if (!isFirestoreQuotaExceeded()) {
+    try {
+      const docRef = db.collection(OTP_COLLECTION).doc(cleanEmail);
+      await docRef.set(record);
+    } catch (err: any) {
+      if (isQuotaExceededError(err)) {
+        markFirestoreQuotaExceeded();
+      }
+    }
   }
 
   const mailResult = await sendOtpEmail(cleanEmail, otpCode, type);
@@ -187,7 +202,7 @@ export async function createAndSendOtp(
 }
 
 /**
- * Verify OTP submitted by user against Firestore
+ * Verify OTP submitted by user against in-memory or Firestore
  */
 export async function verifyOtpCode(
   email: string,
@@ -195,6 +210,45 @@ export async function verifyOtpCode(
 ): Promise<{ success: boolean; message: string }> {
   const cleanEmail = email.trim().toLowerCase();
   const cleanCode = code.trim();
+
+  // 1. Check in-memory store first
+  const memoryRecord = inMemoryOtps.get(cleanEmail);
+  if (memoryRecord) {
+    if (Date.now() > memoryRecord.expiresAt) {
+      inMemoryOtps.delete(cleanEmail);
+      return {
+        success: false,
+        message: 'OTP verification code has expired. Please click "Resend OTP".',
+      };
+    }
+
+    if (memoryRecord.otpCode !== cleanCode) {
+      memoryRecord.attempts = (memoryRecord.attempts || 0) + 1;
+      return {
+        success: false,
+        message: 'Invalid OTP code. Please check your email and try again.',
+      };
+    }
+
+    inMemoryOtps.delete(cleanEmail);
+    if (!isFirestoreQuotaExceeded()) {
+      try {
+        await db.collection(OTP_COLLECTION).doc(cleanEmail).delete();
+      } catch {}
+    }
+
+    return {
+      success: true,
+      message: 'OTP verified successfully.',
+    };
+  }
+
+  if (isFirestoreQuotaExceeded()) {
+    return {
+      success: false,
+      message: 'No OTP code found for this email. Please click "Resend OTP".',
+    };
+  }
 
   try {
     const docRef = db.collection(OTP_COLLECTION).doc(cleanEmail);
@@ -233,10 +287,12 @@ export async function verifyOtpCode(
       message: 'OTP verified successfully.',
     };
   } catch (err: any) {
-    console.error(`[OtpService]: verifyOtpCode error for ${cleanEmail}:`, err?.message || err, err);
+    if (isQuotaExceededError(err)) {
+      markFirestoreQuotaExceeded();
+    }
     return {
       success: false,
-      message: 'Error verifying OTP code.',
+      message: 'Error verifying OTP code. Please try again.',
     };
   }
 }

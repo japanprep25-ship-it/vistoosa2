@@ -1,4 +1,9 @@
-import { db } from './firebaseAdmin';
+import {
+  db,
+  isFirestoreQuotaExceeded,
+  markFirestoreQuotaExceeded,
+  isQuotaExceededError,
+} from './firebaseAdmin';
 
 const ORDERS_COLLECTION = 'orders';
 const WORKSPACES_COLLECTION = 'workspaces';
@@ -87,6 +92,14 @@ export async function getUserOrders(userId: string): Promise<any[]> {
   if (!userId) return [];
   seedInMemoryStore(userId);
 
+  if (isFirestoreQuotaExceeded()) {
+    const userMap = inMemoryOrdersMap.get(userId) || new Map<string, any>();
+    const adminMap = inMemoryOrdersMap.get('usr_admin_default') || new Map<string, any>();
+    const merged = new Map<string, any>([...adminMap, ...userMap]);
+    const orders = Array.from(merged.values());
+    return orders.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+  }
+
   try {
     const promises = [
       db.collection(ORDERS_COLLECTION).where('userId', '==', userId).get(),
@@ -122,7 +135,11 @@ export async function getUserOrders(userId: string): Promise<any[]> {
 
     return orders.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
   } catch (err: any) {
-    console.warn(`[UserWorkspaceStore]: Firestore query fallback for user ${userId}:`, err?.message || err);
+    if (isQuotaExceededError(err)) {
+      markFirestoreQuotaExceeded();
+    } else {
+      console.info(`[UserWorkspaceStore]: Firestore fallback to memory for user ${userId}`);
+    }
     // Return merged local in-memory orders
     const userMap = inMemoryOrdersMap.get(userId) || new Map<string, any>();
     const adminMap = inMemoryOrdersMap.get('usr_admin_default') || new Map<string, any>();
@@ -145,6 +162,8 @@ export async function saveUserOrders(userId: string, orders: any[]): Promise<voi
   }
   inMemoryOrdersMap.set(userId, userMap);
 
+  if (isFirestoreQuotaExceeded()) return;
+
   try {
     const batch = db.batch();
     for (const order of orders) {
@@ -154,7 +173,9 @@ export async function saveUserOrders(userId: string, orders: any[]): Promise<voi
     }
     await batch.commit();
   } catch (err: any) {
-    console.warn(`[UserWorkspaceStore]: saveUserOrders Firestore sync warning for user ${userId}:`, err?.message || err);
+    if (isQuotaExceededError(err)) {
+      markFirestoreQuotaExceeded();
+    }
   }
 }
 
@@ -168,11 +189,15 @@ export async function addOrUpdateUserOrder(userId: string, order: any): Promise<
   userMap.set(String(order.id), updatedOrder);
   inMemoryOrdersMap.set(userId, userMap);
 
+  if (isFirestoreQuotaExceeded()) return;
+
   try {
     const docRef = db.collection(ORDERS_COLLECTION).doc(String(order.id));
     await docRef.set(updatedOrder, { merge: true });
   } catch (err: any) {
-    console.warn(`[UserWorkspaceStore]: addOrUpdateUserOrder Firestore sync warning for user ${userId}:`, err?.message || err);
+    if (isQuotaExceededError(err)) {
+      markFirestoreQuotaExceeded();
+    }
   }
 }
 
@@ -181,6 +206,16 @@ export async function getUserWorkspaceData(userId: string): Promise<UserWorkspac
 
   const orders = await getUserOrders(userId);
   const localWorkspace = inMemoryWorkspacesMap.get(userId) || {};
+
+  if (isFirestoreQuotaExceeded()) {
+    return {
+      orders,
+      cashEntries: localWorkspace.cashEntries || [],
+      expenses: localWorkspace.expenses || [],
+      products: localWorkspace.products || [],
+      settings: localWorkspace.settings || {},
+    };
+  }
 
   try {
     const docRef = db.collection(WORKSPACES_COLLECTION).doc(userId);
@@ -202,7 +237,9 @@ export async function getUserWorkspaceData(userId: string): Promise<UserWorkspac
       orders,
     };
   } catch (err: any) {
-    console.warn(`[UserWorkspaceStore]: getUserWorkspaceData Firestore fallback for user ${userId}:`, err?.message || err);
+    if (isQuotaExceededError(err)) {
+      markFirestoreQuotaExceeded();
+    }
     return {
       orders,
       cashEntries: localWorkspace.cashEntries || [],
@@ -222,6 +259,8 @@ export async function saveUserWorkspaceData(userId: string, data: Partial<UserWo
     ...data,
   });
 
+  if (isFirestoreQuotaExceeded()) return;
+
   try {
     if (data.orders && Array.isArray(data.orders)) {
       await saveUserOrders(userId, data.orders);
@@ -233,7 +272,9 @@ export async function saveUserWorkspaceData(userId: string, data: Partial<UserWo
       await docRef.set(nonOrderData, { merge: true });
     }
   } catch (err: any) {
-    console.warn(`[UserWorkspaceStore]: saveUserWorkspaceData Firestore sync warning for user ${userId}:`, err?.message || err);
+    if (isQuotaExceededError(err)) {
+      markFirestoreQuotaExceeded();
+    }
   }
 }
 
@@ -259,7 +300,9 @@ export async function setUserLanguage(userId: string, language: 'en' | 'bn'): Pr
       },
     });
   } catch (err: any) {
-    console.warn(`[UserWorkspaceStore]: setUserLanguage warning for user ${userId}:`, err?.message || err);
+    if (isQuotaExceededError(err)) {
+      markFirestoreQuotaExceeded();
+    }
   }
 }
 
@@ -277,6 +320,8 @@ export async function softDeleteUserOrders(userId: string, orderIds: string[]): 
     });
   }
 
+  if (isFirestoreQuotaExceeded()) return;
+
   try {
     const batch = db.batch();
     const deletedAt = new Date().toISOString();
@@ -287,7 +332,9 @@ export async function softDeleteUserOrders(userId: string, orderIds: string[]): 
     }
     await batch.commit();
   } catch (err: any) {
-    console.warn(`[UserWorkspaceStore]: softDeleteUserOrders Firestore warning for user ${userId}:`, err?.message || err);
+    if (isQuotaExceededError(err)) {
+      markFirestoreQuotaExceeded();
+    }
   }
 }
 
@@ -305,6 +352,8 @@ export async function restoreUserOrders(userId: string, orderIds: string[]): Pro
     });
   }
 
+  if (isFirestoreQuotaExceeded()) return;
+
   try {
     const batch = db.batch();
     const updatedAt = new Date().toISOString();
@@ -315,7 +364,9 @@ export async function restoreUserOrders(userId: string, orderIds: string[]): Pro
     }
     await batch.commit();
   } catch (err: any) {
-    console.warn(`[UserWorkspaceStore]: restoreUserOrders Firestore warning for user ${userId}:`, err?.message || err);
+    if (isQuotaExceededError(err)) {
+      markFirestoreQuotaExceeded();
+    }
   }
 }
 
@@ -327,6 +378,8 @@ export async function deleteUserOrdersPermanently(userId: string, orderIds: stri
     orderIds.forEach((id) => userMap.delete(String(id)));
   }
 
+  if (isFirestoreQuotaExceeded()) return;
+
   try {
     const batch = db.batch();
     for (const id of orderIds) {
@@ -336,6 +389,8 @@ export async function deleteUserOrdersPermanently(userId: string, orderIds: stri
     }
     await batch.commit();
   } catch (err: any) {
-    console.warn(`[UserWorkspaceStore]: deleteUserOrdersPermanently Firestore warning for user ${userId}:`, err?.message || err);
+    if (isQuotaExceededError(err)) {
+      markFirestoreQuotaExceeded();
+    }
   }
 }

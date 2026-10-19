@@ -1,8 +1,16 @@
 import type { Express, Response } from 'express';
 import { requireAuth, AuthenticatedRequest } from './authMiddleware';
-import { db } from './firebaseAdmin';
+import {
+  db,
+  isFirestoreQuotaExceeded,
+  markFirestoreQuotaExceeded,
+  isQuotaExceededError,
+} from './firebaseAdmin';
 
 const INTEGRATIONS_COLLECTION = 'integrationsConfig';
+
+// In-memory cache for high resilience during cloud quota limits
+const inMemoryIntegrations = new Map<string, FullIntegrationsConfig>();
 
 export interface FullIntegrationsConfig {
   website?: {
@@ -49,15 +57,26 @@ export interface FullIntegrationsConfig {
 export async function loadIntegrationsConfig(userId: string): Promise<FullIntegrationsConfig> {
   if (!userId) return {};
 
+  const local = inMemoryIntegrations.get(userId);
+  if (local) return local;
+
+  if (isFirestoreQuotaExceeded()) {
+    return local || {};
+  }
+
   try {
     const docRef = db.collection(INTEGRATIONS_COLLECTION).doc(userId);
     const doc = await docRef.get();
 
     if (!doc.exists) return {};
-    return doc.data() as FullIntegrationsConfig;
+    const data = doc.data() as FullIntegrationsConfig;
+    inMemoryIntegrations.set(userId, data);
+    return data;
   } catch (err: any) {
-    console.error(`[IntegrationsConfigStore]: Error loading integrations config for user ${userId}:`, err?.message || err);
-    return {};
+    if (isQuotaExceededError(err)) {
+      markFirestoreQuotaExceeded();
+    }
+    return inMemoryIntegrations.get(userId) || {};
   }
 }
 
@@ -67,23 +86,30 @@ export async function saveIntegrationsConfig(
 ): Promise<FullIntegrationsConfig> {
   if (!userId) return {};
 
-  try {
-    const current = await loadIntegrationsConfig(userId);
-    const merged: FullIntegrationsConfig = {
-      ...current,
-      ...newConfig,
-      website: newConfig.website ? { ...current.website, ...newConfig.website } : current.website,
-      meta: newConfig.meta ? { ...current.meta, ...newConfig.meta } : current.meta,
-      gas: newConfig.gas ? { ...current.gas, ...newConfig.gas } : current.gas,
-    };
+  const current = (await loadIntegrationsConfig(userId)) || inMemoryIntegrations.get(userId) || {};
+  const merged: FullIntegrationsConfig = {
+    ...current,
+    ...newConfig,
+    website: newConfig.website ? { ...current.website, ...newConfig.website } : current.website,
+    meta: newConfig.meta ? { ...current.meta, ...newConfig.meta } : current.meta,
+    gas: newConfig.gas ? { ...current.gas, ...newConfig.gas } : current.gas,
+  };
 
+  inMemoryIntegrations.set(userId, merged);
+
+  if (isFirestoreQuotaExceeded()) {
+    return merged;
+  }
+
+  try {
     const docRef = db.collection(INTEGRATIONS_COLLECTION).doc(userId);
     await docRef.set({ ...merged, updatedAt: new Date().toISOString() }, { merge: true });
-
     return merged;
   } catch (err: any) {
-    console.error(`[IntegrationsConfigStore]: Error saving integrations config for user ${userId}:`, err?.message || err);
-    return {};
+    if (isQuotaExceededError(err)) {
+      markFirestoreQuotaExceeded();
+    }
+    return merged;
   }
 }
 

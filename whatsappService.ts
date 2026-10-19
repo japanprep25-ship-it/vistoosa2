@@ -7,9 +7,17 @@
 
 import type { Express, Response } from 'express';
 import { requireAuth, AuthenticatedRequest } from './authMiddleware';
-import { db } from './firebaseAdmin';
+import {
+  db,
+  isFirestoreQuotaExceeded,
+  markFirestoreQuotaExceeded,
+  isQuotaExceededError,
+} from './firebaseAdmin';
 
 const WHATSAPP_COLLECTION = 'whatsappConfig';
+
+// In-memory cache for high resilience during cloud quota limits
+const inMemoryWhatsapp = new Map<string, WhatsappConfig>();
 
 export interface WhatsappConfig {
   phoneNumberId: string;
@@ -21,20 +29,37 @@ export interface WhatsappConfig {
 export async function loadWhatsappConfig(userId: string): Promise<WhatsappConfig | null> {
   if (!userId) return null;
 
+  const local = inMemoryWhatsapp.get(userId);
+  if (local) return local;
+
+  if (isFirestoreQuotaExceeded()) {
+    return local || null;
+  }
+
   try {
     const docRef = db.collection(WHATSAPP_COLLECTION).doc(userId);
     const doc = await docRef.get();
 
     if (!doc.exists) return null;
-    return doc.data() as WhatsappConfig;
+    const data = doc.data() as WhatsappConfig;
+    inMemoryWhatsapp.set(userId, data);
+    return data;
   } catch (err: any) {
-    console.error(`[WhatsappService]: Error loading WhatsApp config for user ${userId}:`, err?.message || err);
-    return null;
+    if (isQuotaExceededError(err)) {
+      markFirestoreQuotaExceeded();
+    }
+    return inMemoryWhatsapp.get(userId) || null;
   }
 }
 
 export async function saveWhatsappConfig(userId: string, config: WhatsappConfig): Promise<void> {
   if (!userId) return;
+
+  inMemoryWhatsapp.set(userId, config);
+
+  if (isFirestoreQuotaExceeded()) {
+    return;
+  }
 
   try {
     const docRef = db.collection(WHATSAPP_COLLECTION).doc(userId);
@@ -46,7 +71,9 @@ export async function saveWhatsappConfig(userId: string, config: WhatsappConfig)
       { merge: true }
     );
   } catch (err: any) {
-    console.error(`[WhatsappService]: Error saving WhatsApp config for user ${userId}:`, err?.message || err);
+    if (isQuotaExceededError(err)) {
+      markFirestoreQuotaExceeded();
+    }
   }
 }
 

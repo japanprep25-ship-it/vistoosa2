@@ -469,7 +469,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, token, 
                 </div>
               </div>
               <span className="text-xs px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 font-mono font-semibold">
-                {language === 'en' ? 'English (EN)' : 'বাংলা (BN)'}
+                {language === 'en' ? 'English' : 'বাংলা'}
               </span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
@@ -498,7 +498,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, token, 
                 }`}
               >
                 <div>
-                  <p className="text-sm font-bold">বাংলা (Bengali)</p>
+                  <p className="text-sm font-bold">বাংলা</p>
                   <p className="text-xs opacity-75">সম্পূর্ণ বাংলা ইন্টারফেস</p>
                 </div>
                 {language === 'bn' && <CheckCircle2 className="w-5 h-5 text-amber-400" />}

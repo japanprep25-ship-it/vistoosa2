@@ -129,7 +129,7 @@ export const LoginWelcomeModal: React.FC<LoginWelcomeModalProps> = ({
               {user.name || cleanUserEmail.split('@')[0]}
             </span>
             <span className="text-amber-400 font-semibold text-base sm:text-lg block mt-1.5 tracking-wide">
-              {user.designation || user.role}
+              {user.designation || (isMother ? 'Mother Owner' : 'Staff')}
             </span>
           </h1>
 

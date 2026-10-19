@@ -144,7 +144,7 @@ export function sanitizeUser(user: UserRecord): UserProfile {
   const { passwordHash, failedLoginAttempts, lockUntil, ...sanitized } = user;
   return {
     ...sanitized,
-    permissions: user.role === 'Owner' || user.role === 'Admin' ? { ...DEFAULT_PERMISSIONS } : (user.permissions || {}),
+    permissions: user.role.toLowerCase() === 'owner' ? { ...DEFAULT_PERMISSIONS } : (user.permissions || {}),
   };
 }
 

@@ -92,7 +92,7 @@ export const LoginWelcomeModal: React.FC<LoginWelcomeModalProps> = ({
         <div className="space-y-2">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-semibold uppercase tracking-wider mx-auto bg-amber-500/10 border-amber-500/30 text-amber-300">
             <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-            <span>{isBangla ? 'লগইন সফল • ৩ সেকেন্ড ওয়েলকাম' : 'Authentication Successful • 3s Welcome'}</span>
+            <span>{isBangla ? 'লগইন সফল' : 'Authentication Successful'}</span>
           </div>
 
           <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">

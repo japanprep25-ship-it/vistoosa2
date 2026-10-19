@@ -84,7 +84,7 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
         return {
           ...defaultSettings,
           ...parsed,
-          logoImage: defaultSettings.logoImage,
+          logoImage: parsed.logoImage || defaultSettings.logoImage,
         };
       } catch (e) {
         return defaultSettings;
@@ -122,7 +122,7 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
             appTagline: serverS.appTagline ?? prev.appTagline ?? defaultSettings.appTagline,
             themePreset: serverS.themePreset || prev.themePreset || defaultSettings.themePreset,
             fontPreset: serverS.fontPreset || prev.fontPreset || defaultSettings.fontPreset,
-            logoImage: defaultSettings.logoImage,
+            logoImage: prev.logoImage || defaultSettings.logoImage,
             isDarkMode: typeof serverS.isDarkMode === 'boolean' ? serverS.isDarkMode : prev.isDarkMode,
             motherGmail: serverS.motherGmail ? String(serverS.motherGmail).trim().toLowerCase() : prev.motherGmail || defaultSettings.motherGmail,
           };

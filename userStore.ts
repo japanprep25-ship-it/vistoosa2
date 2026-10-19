@@ -287,10 +287,7 @@ export async function adminCreateUser(
   const displayName = (name && name.trim()) || cleanEmail.split('@')[0] || 'Team User';
   const userId = `usr_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
 
-  const finalPermissions =
-    role === 'Owner' || role === 'Admin'
-      ? { ...DEFAULT_PERMISSIONS }
-      : permissions || { dashboard: true, orders: true };
+  const finalPermissions = permissions || (role === 'Owner' ? { ...DEFAULT_PERMISSIONS } : { dashboard: true, orders: true });
 
   const newUser: UserRecord = {
     id: userId,
@@ -339,12 +336,7 @@ export async function updateUser(
     email: updates.email !== undefined ? updates.email.trim().toLowerCase() : user.email,
     role: updates.role !== undefined ? updates.role : user.role,
     designation: updates.designation !== undefined ? updates.designation.trim() : user.designation,
-    permissions:
-      updates.role === 'Owner' || updates.role === 'Admin'
-        ? { ...DEFAULT_PERMISSIONS }
-        : updates.permissions !== undefined
-        ? updates.permissions
-        : user.permissions,
+    permissions: updates.permissions !== undefined ? updates.permissions : user.permissions,
     status: updates.status !== undefined ? updates.status : user.status,
   };
 

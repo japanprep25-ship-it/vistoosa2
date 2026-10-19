@@ -10,6 +10,7 @@ import {
 import { requireAuth, AuthenticatedRequest } from './authMiddleware';
 
 const BRAND_COLLECTION = 'brandAssets';
+const BRAND_STORAGE_FILE = path.resolve(process.cwd(), 'brand_storage.json');
 
 interface BrandMeta {
   version: number;
@@ -25,6 +26,51 @@ let localMetaCache: BrandMeta = {
 };
 
 const imageBufferCache = new Map<string, { buffer: Buffer; updatedAt: number }>();
+
+// Load from disk storage on startup to persist across server restarts / redeploys
+function loadBrandStorageFromDisk() {
+  try {
+    if (fs.existsSync(BRAND_STORAGE_FILE)) {
+      const raw = fs.readFileSync(BRAND_STORAGE_FILE, 'utf8');
+      const data = JSON.parse(raw);
+      if (data && data.meta) {
+        localMetaCache = {
+          version: Number(data.meta.version) || Date.now(),
+          hasCustomLogo: Boolean(data.meta.hasCustomLogo),
+          hasDarkLogo: Boolean(data.meta.hasDarkLogo),
+        };
+      }
+      if (data && data.variants && typeof data.variants === 'object') {
+        for (const [vKey, vVal] of Object.entries(data.variants)) {
+          if (typeof vVal === 'string' && vVal.length > 0) {
+            const cleanBase64 = vVal.replace(/^data:image\/\w+;base64,/, '');
+            const buffer = Buffer.from(cleanBase64, 'base64');
+            imageBufferCache.set(vKey, { buffer, updatedAt: localMetaCache.version });
+          }
+        }
+      }
+      console.log('[Brand Storage Disk]: Loaded custom brand assets from disk successfully.');
+    }
+  } catch (err) {
+    console.warn('[Brand Storage Disk Load Warning]:', err);
+  }
+}
+
+// Initialize disk load
+loadBrandStorageFromDisk();
+
+function saveBrandStorageToDisk(meta: BrandMeta, variantsMap: Record<string, string>) {
+  try {
+    const diskData = {
+      meta,
+      variants: variantsMap,
+      updatedAt: new Date().toISOString(),
+    };
+    fs.writeFileSync(BRAND_STORAGE_FILE, JSON.stringify(diskData, null, 2), 'utf8');
+  } catch (err) {
+    console.warn('[Brand Storage Disk Save Warning]:', err);
+  }
+}
 
 const BUNDLED_DEFAULTS: Record<string, string> = {
   'logo-512': path.resolve(process.cwd(), 'public/vistoosa-logo.png'),
@@ -52,8 +98,12 @@ const VALID_VARIANTS = new Set([
   'maskable-512',
 ]);
 
-// Helper to load meta from Firestore or cache
+// Helper to load meta from Firestore, disk, or cache
 export async function getBrandMeta(): Promise<BrandMeta> {
+  if (localMetaCache.hasCustomLogo) {
+    return localMetaCache;
+  }
+
   if (isFirestoreQuotaExceeded()) {
     return localMetaCache;
   }
@@ -83,6 +133,11 @@ export async function getBrandImageBuffer(variant: string): Promise<Buffer | nul
   if (meta.hasCustomLogo) {
     const cached = imageBufferCache.get(normalizedVariant);
     if (cached && cached.updatedAt >= meta.version) {
+      return cached.buffer;
+    }
+
+    // Try loading from disk buffer cache first if populated
+    if (cached) {
       return cached.buffer;
     }
 
@@ -253,6 +308,8 @@ export function mountBrandRoutes(app: Express) {
         hasDarkLogo = true;
       }
 
+      const savedVariantsMap: Record<string, string> = {};
+
       for (const [key, base64Val] of Object.entries(variants)) {
         const normKey = key === 'maskable-512' ? 'icon-maskable-512' : key;
         if (!VALID_VARIANTS.has(normKey) && normKey !== 'logo-dark-512') {
@@ -271,6 +328,8 @@ export function mountBrandRoutes(app: Express) {
           });
         }
 
+        savedVariantsMap[normKey] = base64Val;
+
         // Update local image buffer cache
         const buffer = Buffer.from(cleanBase64, 'base64');
         imageBufferCache.set(normKey, { buffer, updatedAt: newVersion });
@@ -286,17 +345,16 @@ export function mountBrandRoutes(app: Express) {
         hasDarkLogo,
       };
 
+      // Save to disk storage for persistence across redeploys / restarts
+      saveBrandStorageToDisk(activeMeta, savedVariantsMap);
+
+      // Save to Firestore if available
       if (!isFirestoreQuotaExceeded()) {
         try {
           const batch = db.batch();
-          for (const [vKey, vVal] of Object.entries(variants)) {
-            const normKey = vKey === 'maskable-512' ? 'icon-maskable-512' : vKey;
-            if (!VALID_VARIANTS.has(normKey) && normKey !== 'logo-dark-512') {
-              continue;
-            }
-            if (typeof vVal !== 'string') continue;
+          for (const [vKey, vVal] of Object.entries(savedVariantsMap)) {
             const cleanBase64 = vVal.replace(/^data:image\/\w+;base64,/, '');
-            const docRef = db.collection(BRAND_COLLECTION).doc(normKey);
+            const docRef = db.collection(BRAND_COLLECTION).doc(vKey);
             batch.set(docRef, { data: cleanBase64, updatedAt: newVersion });
           }
           const metaRef = db.collection(BRAND_COLLECTION).doc('meta');
@@ -355,6 +413,15 @@ export function mountBrandRoutes(app: Express) {
         hasCustomLogo: false,
         hasDarkLogo: false,
       };
+
+      // Remove disk storage file if exists
+      try {
+        if (fs.existsSync(BRAND_STORAGE_FILE)) {
+          fs.unlinkSync(BRAND_STORAGE_FILE);
+        }
+      } catch (err) {
+        console.warn('[Brand Storage Disk Delete Warning]:', err);
+      }
 
       if (!isFirestoreQuotaExceeded()) {
         try {

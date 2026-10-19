@@ -1175,8 +1175,8 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
           <div className="flex items-center gap-1.5 overflow-x-auto w-full pb-1 md:pb-0 scrollbar-none">
             {[
               { id: 'All', label: 'All', count: statusCounts.all },
-              { id: 'Pending', label: t('orders.pendingTab'), count: statusCounts.pending },
-              { id: 'Approved', label: t('orders.approvedTab'), count: statusCounts.approved },
+              { id: 'Pending', label: 'Approve', count: statusCounts.pending },
+              { id: 'Approved', label: 'Approved', count: statusCounts.approved },
               { id: 'Dispatched', label: t('orders.dispatchedTab'), count: statusCounts.dispatched },
               { id: 'Delivered', label: t('orders.deliveredTab'), count: statusCounts.delivered },
               { id: 'Return', label: 'Return', count: statusCounts.returnTotal },
@@ -1580,6 +1580,7 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
           displayedOrders.map((order) => (
             <div
               key={order.id}
+              onDoubleClick={() => handleToggleSelectOrder(order.id)}
               className={`glass-card rounded-2xl p-4 transition-all duration-200 relative overflow-hidden ${
                 selectedOrderIds.includes(order.id)
                   ? 'border-amber-500/60 bg-amber-500/5'
@@ -1591,12 +1592,8 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                 <div className="space-y-1.5">
                   <div className="flex flex-wrap items-center gap-2">
                     {/* Select Row Checkbox */}
-                    <input
-                      type="checkbox"
-                      checked={selectedOrderIds.includes(order.id)}
-                      onChange={() => handleToggleSelectOrder(order.id)}
-                      className="w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-amber-500 focus:ring-amber-500 cursor-pointer accent-amber-500"
-                    />
+                    {/* Selection Indicator (No Checkbox) */}
+                    <div className={`w-3 h-3 rounded-full ${selectedOrderIds.includes(order.id) ? 'bg-amber-500' : 'bg-zinc-700'}`} />
 
                     <span className="font-mono text-xs font-bold text-amber-400 px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800">
                       {order.id}

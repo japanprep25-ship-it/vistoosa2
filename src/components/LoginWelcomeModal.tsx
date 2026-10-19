@@ -33,7 +33,6 @@ export const LoginWelcomeModal: React.FC<LoginWelcomeModalProps> = ({
     return null;
   });
 
-  const [progress, setProgress] = useState(0);
   const [hasPromptAnswered, setHasPromptAnswered] = useState(false);
 
   const cleanUserEmail = user.email.trim().toLowerCase();
@@ -71,36 +70,9 @@ export const LoginWelcomeModal: React.FC<LoginWelcomeModalProps> = ({
     } else {
       localStorage.setItem('vistoosa_remember_credentials', 'false');
     }
+    // Allow entry only after selection
+    onComplete();
   };
-
-  // Progress countdown to smoothly enter the app (stay for 3 seconds)
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(timer);
-          return 100;
-        }
-        // If not answered yet, hold progress at 90% until user answers Yes/No
-        if (rememberChoice === null && prev >= 90) {
-          return 90;
-        }
-        return prev + (100 / (3000 / 50));
-      });
-    }, 50);
-
-    return () => clearInterval(timer);
-  }, [rememberChoice]);
-
-  // When progress reaches 100% and choice is made, transition
-  useEffect(() => {
-    if (progress >= 100 && rememberChoice !== null) {
-      const exitTimer = setTimeout(() => {
-        onComplete();
-      }, 200);
-      return () => clearTimeout(exitTimer);
-    }
-  }, [progress, rememberChoice, onComplete]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/95 backdrop-blur-2xl transition-all duration-500">
@@ -194,15 +166,8 @@ export const LoginWelcomeModal: React.FC<LoginWelcomeModalProps> = ({
           </div>
         </div>
 
-        {/* Progress Bar & Continue Button */}
-        <div className="space-y-3 pt-1">
-          <div className="w-full bg-zinc-950 rounded-full h-2 overflow-hidden border border-zinc-800">
-            <div
-              className="bg-gradient-to-r from-amber-500 to-amber-300 h-full rounded-full transition-all duration-75 ease-out shadow-sm shadow-amber-500/50"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-
+        {/* Continue Button */}
+        <div className="pt-2">
           <button
             type="button"
             onClick={() => {

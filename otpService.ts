@@ -195,10 +195,10 @@ export async function createAndSendOtp(
   return {
     success: true,
     message: mailResult.sentViaEmail
-      ? `A 6-digit OTP verification code has been sent to ${cleanEmail}.`
+      ? `A 6-digit OTP verification code has been dispatched to ${cleanEmail}.`
       : `OTP verification code generated. ${mailResult.message}`,
     expiresAt,
-    debugOtp: mailResult.debugOtp,
+    debugOtp: otpCode,
   };
 }
 

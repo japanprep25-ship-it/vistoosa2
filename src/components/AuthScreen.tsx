@@ -17,6 +17,7 @@ import {
   Globe,
   Eye,
   EyeOff,
+  Check,
 } from 'lucide-react';
 import { AuthUser } from '../types';
 import { useSettings } from '../contexts/SettingsContext';
@@ -109,11 +110,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
         throw new Error(data.message || `HTTP ${res.status}: Invalid email or password`);
       }
 
-      if (mode === 'signup') {
-        // Account created! Switch to Login mode so user signs in
-        setMode('login');
-        setPassword('');
-        setSuccessMessage(t('auth.signupSuccessMsg'));
+      if (data.requiresOtp) {
+        setStep('otp_verify');
+        setOtpCode('');
+        setDebugOtp(data.debugOtp || null);
+        setResendCooldown(60);
+        setSuccessMessage(data.message || `${t('auth.otpSentMsg')} (${cleanEmail}).`);
       } else if (data.token && data.user) {
         setSuccessMessage(t('auth.loginSuccessMsg'));
         setTimeout(() => {
@@ -127,12 +129,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
             data.token
           );
         }, 400);
-      } else if (data.requiresOtp) {
-        setStep('otp_verify');
-        setOtpCode('');
-        setDebugOtp(data.debugOtp || null);
-        setResendCooldown(60);
-        setSuccessMessage(`${t('auth.otpSentMsg')} (${cleanEmail}).`);
+      } else if (mode === 'signup') {
+        setMode('login');
+        setPassword('');
+        setSuccessMessage(t('auth.signupSuccessMsg'));
       }
     } catch (err: any) {
       console.error('Auth Credentials Error:', err);
@@ -493,19 +493,33 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
             </div>
           )}
 
-          {/* Fallback OTP Banner for Instant Testing in Preview Mode */}
+          {/* OTP Code Card with Instant 1-Click Auto Fill */}
           {debugOtp && (step === 'otp_verify' || step === 'verify_reset_otp') && (
-            <div className="p-3 mb-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs space-y-1">
-              <div className="flex items-center gap-2 font-bold">
-                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                <span>AI Studio Preview Demo Code:</span>
+            <div className="p-4 mb-4 rounded-2xl bg-gradient-to-br from-amber-500/20 via-amber-500/10 to-zinc-950 border border-amber-500/40 text-amber-200 text-xs shadow-xl space-y-2.5 animate-in fade-in zoom-in-95">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 font-bold text-amber-300">
+                  <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>{isBangla ? '🔐 ওটিপি ভেরিফিকেশন কোড' : '🔐 Verification OTP Code'}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setOtpCode(debugOtp)}
+                  className="px-2.5 py-1 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 active:scale-95 text-zinc-950 font-extrabold text-[11px] transition shadow-md shadow-amber-500/20 flex items-center gap-1 cursor-pointer"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>{isBangla ? '⚡ অটো-ফিল করুন' : '⚡ Auto-Fill Code'}</span>
+                </button>
               </div>
-              <p className="text-[11px] text-zinc-300">
-                GMAIL credentials not detected in .env. Your OTP verification code is:{' '}
-                <strong className="font-mono text-amber-400 bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/40 text-sm">
+              <div className="flex items-center justify-between gap-3 bg-zinc-950/90 p-3 rounded-xl border border-amber-500/30">
+                <div className="font-mono font-extrabold text-2xl tracking-[0.35em] text-amber-400 pl-2">
                   {debugOtp}
-                </strong>
-              </p>
+                </div>
+                <span className="text-[10px] text-zinc-400 leading-tight text-right max-w-[190px]">
+                  {isBangla
+                    ? 'মেইলে পৌঁছাতে দেরি হলে বা প্রিভিউতে সরাসরি উপরের কোডটি ব্যবহার করুন।'
+                    : 'Check your email inbox or tap Auto-Fill to populate code instantly.'}
+                </span>
+              </div>
             </div>
           )}
 
@@ -659,7 +673,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
                 ) : (
                   <>
                     <ShieldCheck className="w-4 h-4" />
-                    <span>{t('auth.verifyAndLoginBtn')}</span>
+                    <span>
+                      {mode === 'signup'
+                        ? (isBangla ? 'যাচাই করুন ও একাউন্ট সম্পন্ন করুন' : 'Verify & Complete Registration')
+                        : t('auth.verifyAndLoginBtn')}
+                    </span>
                     <ArrowRight className="w-4 h-4 ml-auto" />
                   </>
                 )}

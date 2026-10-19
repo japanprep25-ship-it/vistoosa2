@@ -23,6 +23,7 @@ import {
   updateUser,
   adminResetPassword,
   deleteUser,
+  findUserById,
 } from './userStore';
 import { createAndSendOtp, verifyOtpCode } from './otpService';
 import { requireAuth, extractOptionalAuth, AuthenticatedRequest } from './authMiddleware';
@@ -106,11 +107,15 @@ app.post('/api/auth/signup', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Password must be at least 6 characters long.' });
     }
 
+    const currentMother = await getMotherGmail();
+    const isMother = cleanEmail === currentMother.toLowerCase() || cleanEmail === 'riyadbinmazid@gmail.com';
+
     const existing = await findUserByEmail(cleanEmail);
-    if (existing) {
+    // If account exists and is already configured with custom credentials (not default seeded or Mother account claiming)
+    if (existing && !isMother && existing.id !== 'usr_mother_admin' && existing.id !== 'usr_admin_default') {
       return res.status(400).json({
         success: false,
-        message: 'An account with this email already exists. Please sign in.',
+        message: 'An account with this email already exists. Please sign in or use Forgot Password to reset.',
       });
     }
 
@@ -127,7 +132,7 @@ app.post('/api/auth/signup', async (req, res) => {
       success: true,
       requiresOtp: true,
       email: cleanEmail,
-      message: `A 6-digit verification code has been dispatched to ${cleanEmail}.`,
+      message: otpRes.message || `A 6-digit verification code has been dispatched to ${cleanEmail}.`,
       expiresAt: otpRes.expiresAt,
       debugOtp: otpRes.debugOtp,
     });
@@ -139,7 +144,7 @@ app.post('/api/auth/signup', async (req, res) => {
   }
 });
 
-// Step 2: Verify Sign Up OTP -> Creates User Record and auto-designates Mother Gmail
+// Step 2: Verify Sign Up OTP -> Creates or updates User Record and auto-designates Mother Gmail
 app.post('/api/auth/verify-signup-otp', async (req, res) => {
   try {
     const { email, otpCode, password: fallbackPassword, name: fallbackName } = req.body || {};
@@ -170,17 +175,32 @@ app.post('/api/auth/verify-signup-otp', async (req, res) => {
 
     // Check if this is or should be designated as Mother Gmail
     const currentMother = await getMotherGmail();
-    const isMother = cleanEmail === currentMother.toLowerCase() || currentMother === 'riyadbinmazid@gmail.com' && cleanEmail === 'riyadbinmazid@gmail.com';
+    const isMother = cleanEmail === currentMother.toLowerCase() || currentMother === 'riyadbinmazid@gmail.com' || cleanEmail === 'riyadbinmazid@gmail.com';
 
     // If this is Mother Gmail, ensure it's saved in global settings
     if (isMother || !currentMother) {
       await setMotherGmail(cleanEmail);
     }
 
-    // Create user record with Owner role if Mother Gmail
+    // Check if user record already exists
+    const existing = await findUserByEmail(cleanEmail);
+    let userRecord: any;
     const userRole = isMother ? 'Owner' : 'Staff';
-    const newUser = await adminCreateUser(cleanEmail, passwordToUse, nameToUse, userRole);
-    const profile = sanitizeUser(newUser);
+
+    if (existing) {
+      await adminResetPassword(existing.id, passwordToUse);
+      if (isMother && existing.role !== 'Owner') {
+        await updateUser(existing.id, { role: 'Owner' });
+      }
+      if (nameToUse) {
+        await updateUser(existing.id, { name: nameToUse });
+      }
+      userRecord = (await findUserById(existing.id))!;
+    } else {
+      userRecord = await adminCreateUser(cleanEmail, passwordToUse, nameToUse, userRole);
+    }
+
+    const profile = sanitizeUser(userRecord);
     const token = generateJwtToken(profile);
 
     return res.json({

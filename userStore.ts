@@ -259,8 +259,8 @@ export async function adminCreateUser(
   if (!cleanEmail || !cleanEmail.includes('@')) {
     throw new Error('Please enter a valid email address.');
   }
-  if (!password || password.length < 8) {
-    throw new Error('Password must be at least 8 characters long.');
+  if (!password || password.length < 6) {
+    throw new Error('Password must be at least 6 characters long.');
   }
   const existing = await findUserByEmail(cleanEmail);
   if (existing) {
@@ -333,8 +333,8 @@ export async function updateUser(
 }
 
 export async function adminResetPassword(id: string, newPassword: string): Promise<void> {
-  if (!newPassword || newPassword.length < 8) {
-    throw new Error('Password must be at least 8 characters long.');
+  if (!newPassword || newPassword.length < 6) {
+    throw new Error('Password must be at least 6 characters long.');
   }
   const user = await findUserById(id);
   if (!user) {

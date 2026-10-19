@@ -421,11 +421,12 @@ export const BrandLogoManager: React.FC = () => {
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {/* Preview 1: Dark UI */}
-          <div className="p-3.5 rounded-xl bg-[#0f0f14] border border-zinc-800 flex flex-col items-center justify-center gap-2 text-center">
-            <span className="text-[10px] text-amber-400 font-semibold tracking-wider uppercase">
+          <div className="p-4 rounded-2xl bg-[#0f0f14] border border-zinc-800/80 relative overflow-hidden flex flex-col items-center justify-center gap-2 text-center group">
+            <div className="absolute inset-0 bg-gradient-to-tr from-amber-500/10 via-purple-500/10 to-transparent animate-pulse pointer-events-none blur-xl opacity-70" />
+            <span className="text-[10px] text-amber-400 font-semibold tracking-wider uppercase relative z-10">
               Dark Background UI
             </span>
-            <div className="h-12 flex items-center justify-center p-1">
+            <div className="h-14 flex items-center justify-center p-1 relative z-10 w-full">
               {darkPreviewSrc ? (
                 <img
                   src={darkPreviewSrc}
@@ -433,18 +434,22 @@ export const BrandLogoManager: React.FC = () => {
                   className="max-h-full object-contain"
                 />
               ) : (
-                <span className="text-[11px] text-zinc-600">Default Vistoosa Logo</span>
+                <div className="flex flex-col items-center justify-center text-zinc-500 text-[11px] gap-1 py-3 border border-dashed border-zinc-800/80 rounded-xl w-full bg-zinc-950/40">
+                  <ImageIcon className="w-4 h-4 text-zinc-600 animate-pulse" />
+                  <span className="text-[10px] text-zinc-500">{isBangla ? 'লোগো ঘর খালি' : 'Logo box empty'}</span>
+                </div>
               )}
             </div>
-            <span className="text-[9px] text-zinc-500">Header & Sidebar (Dark Mode)</span>
+            <span className="text-[9px] text-zinc-500 relative z-10">Header & Sidebar (Dark Mode)</span>
           </div>
 
           {/* Preview 2: Light UI */}
-          <div className="p-3.5 rounded-xl bg-white text-zinc-900 border border-zinc-300 flex flex-col items-center justify-center gap-2 text-center">
-            <span className="text-[10px] text-zinc-800 font-bold tracking-wider uppercase">
+          <div className="p-4 rounded-2xl bg-zinc-900/60 text-zinc-100 border border-zinc-800/80 relative overflow-hidden flex flex-col items-center justify-center gap-2 text-center group">
+            <div className="absolute inset-0 bg-gradient-to-tr from-amber-400/10 via-pink-500/10 to-transparent animate-pulse pointer-events-none blur-xl opacity-70" />
+            <span className="text-[10px] text-zinc-300 font-bold tracking-wider uppercase relative z-10">
               Light Background UI
             </span>
-            <div className="h-12 flex items-center justify-center p-1">
+            <div className="h-14 flex items-center justify-center p-1 relative z-10 w-full">
               {mainPreviewSrc ? (
                 <img
                   src={mainPreviewSrc}
@@ -452,18 +457,22 @@ export const BrandLogoManager: React.FC = () => {
                   className="max-h-full object-contain"
                 />
               ) : (
-                <span className="text-[11px] text-zinc-400">Default Vistoosa Logo</span>
+                <div className="flex flex-col items-center justify-center text-zinc-500 text-[11px] gap-1 py-3 border border-dashed border-zinc-800/80 rounded-xl w-full bg-zinc-950/40">
+                  <ImageIcon className="w-4 h-4 text-zinc-600 animate-pulse" />
+                  <span className="text-[10px] text-zinc-500">{isBangla ? 'লোগো ঘর খালি' : 'Logo box empty'}</span>
+                </div>
               )}
             </div>
-            <span className="text-[9px] text-zinc-500">Export Reports & Light Theme</span>
+            <span className="text-[9px] text-zinc-500 relative z-10">Export Reports & Light Theme</span>
           </div>
 
           {/* Preview 3: App Icon / PWA Launcher */}
-          <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800 flex flex-col items-center justify-center gap-2 text-center">
-            <span className="text-[10px] text-emerald-400 font-semibold tracking-wider uppercase flex items-center gap-1">
+          <div className="p-4 rounded-2xl bg-zinc-950/80 border border-zinc-800/80 relative overflow-hidden flex flex-col items-center justify-center gap-2 text-center group">
+            <div className="absolute inset-0 bg-gradient-to-tr from-purple-500/10 via-amber-500/10 to-transparent animate-pulse pointer-events-none blur-xl opacity-70" />
+            <span className="text-[10px] text-emerald-400 font-semibold tracking-wider uppercase flex items-center gap-1 relative z-10">
               <Smartphone className="w-3 h-3" /> PWA / Favicon
             </span>
-            <div className="w-12 h-12 rounded-2xl bg-white p-1.5 shadow-md flex items-center justify-center overflow-hidden">
+            <div className="w-14 h-14 rounded-2xl bg-zinc-900/80 border border-zinc-800 p-1.5 shadow-md flex items-center justify-center overflow-hidden relative z-10">
               {iconPreviewSrc ? (
                 <img
                   src={iconPreviewSrc}
@@ -471,10 +480,12 @@ export const BrandLogoManager: React.FC = () => {
                   className="max-w-full max-h-full object-contain"
                 />
               ) : (
-                <span className="text-[10px] text-zinc-400 font-mono">V</span>
+                <div className="flex items-center justify-center text-zinc-600">
+                  <Upload className="w-4 h-4 text-zinc-600 animate-pulse" />
+                </div>
               )}
             </div>
-            <span className="text-[9px] text-zinc-500">iOS & Android Home Screen Icon</span>
+            <span className="text-[9px] text-zinc-500 relative z-10">iOS & Android Home Screen Icon</span>
           </div>
         </div>
       </div>

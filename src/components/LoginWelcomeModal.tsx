@@ -81,22 +81,26 @@ export const LoginWelcomeModal: React.FC<LoginWelcomeModalProps> = ({
           clearInterval(timer);
           return 100;
         }
+        // If not answered yet, hold progress at 90% until user answers Yes/No
+        if (rememberChoice === null && prev >= 90) {
+          return 90;
+        }
         return prev + (100 / (3000 / 50));
       });
     }, 50);
 
     return () => clearInterval(timer);
-  }, []);
+  }, [rememberChoice]);
 
-  // When progress reaches 100%, transition
+  // When progress reaches 100% and choice is made, transition
   useEffect(() => {
-    if (progress >= 100) {
+    if (progress >= 100 && rememberChoice !== null) {
       const exitTimer = setTimeout(() => {
         onComplete();
       }, 200);
       return () => clearTimeout(exitTimer);
     }
-  }, [progress, onComplete]);
+  }, [progress, rememberChoice, onComplete]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/95 backdrop-blur-2xl transition-all duration-500">
@@ -124,8 +128,8 @@ export const LoginWelcomeModal: React.FC<LoginWelcomeModalProps> = ({
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-amber-400 to-amber-500">
               {user.name || cleanUserEmail.split('@')[0]}
             </span>
-            <span className="text-zinc-300 font-medium text-base block mt-1">
-              ({user.designation || designationTitle})
+            <span className="text-amber-400 font-semibold text-base sm:text-lg block mt-1.5 tracking-wide">
+              {user.designation || user.role}
             </span>
           </h1>
 
@@ -142,7 +146,7 @@ export const LoginWelcomeModal: React.FC<LoginWelcomeModalProps> = ({
           </div>
         </div>
 
-        {/* Reminder / Stay Logged In Prompt (Requirement 6) */}
+        {/* Reminder / Stay Logged In Prompt (Requirement) */}
         <div className="p-4 rounded-2xl bg-zinc-950/80 border border-zinc-800 text-left space-y-3">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30">
@@ -150,12 +154,12 @@ export const LoginWelcomeModal: React.FC<LoginWelcomeModalProps> = ({
             </div>
             <div>
               <h3 className="text-xs font-bold text-zinc-100 flex items-center gap-1.5">
-                <span>{isBangla ? 'পাসওয়ার্ড সেভ করে লগইন থাকতে চান?' : 'Save credentials & stay logged in?'}</span>
+                <span>{isBangla ? 'পাসওয়ার্ড সেভ করে লগইন থাকতে চান? (Stay Log In)' : 'Stay logged in? (Save credentials)'}</span>
               </h3>
               <p className="text-[11px] text-zinc-400 mt-0.5">
                 {isBangla
-                  ? 'এই ডিভাইসে বা ডাউনলোড করা অ্যাপে পরবর্তীতে সরাসরি প্রবেশ করতে চাইলে সেভ করে রাখুন।'
-                  : 'Keep your session active on this device or downloaded app for one-touch access.'}
+                  ? 'এটিতে হ্যাঁ বা না সিলেক্ট করার পর আপনি মূল ওয়েব অ্যাপে প্রবেশ করতে পারবেন।'
+                  : 'Please select Yes or No to proceed into the web application.'}
               </p>
             </div>
           </div>
@@ -165,26 +169,27 @@ export const LoginWelcomeModal: React.FC<LoginWelcomeModalProps> = ({
             <button
               type="button"
               onClick={() => handleSelectRemember('yes')}
-              className={`py-2 px-3 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 border cursor-pointer ${
+              className={`py-2.5 px-3 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 border cursor-pointer ${
                 rememberChoice === 'yes'
                   ? 'bg-amber-500 text-zinc-950 border-amber-400 font-bold shadow-md shadow-amber-500/30'
                   : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-zinc-700/80'
               }`}
             >
               {rememberChoice === 'yes' && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-              <span>{isBangla ? 'হ্যাঁ, সেভ রাখুন' : 'Yes, Save & Stay In'}</span>
+              <span>{isBangla ? 'হ্যাঁ (Yes)' : 'Yes, Stay In'}</span>
             </button>
 
             <button
               type="button"
               onClick={() => handleSelectRemember('no')}
-              className={`py-2 px-3 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 border cursor-pointer ${
+              className={`py-2.5 px-3 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 border cursor-pointer ${
                 rememberChoice === 'no'
-                  ? 'bg-zinc-800 text-white border-zinc-600'
+                  ? 'bg-zinc-800 text-white border-zinc-600 font-bold'
                   : 'bg-zinc-900/60 hover:bg-zinc-800 text-zinc-400 border-zinc-800'
               }`}
             >
-              <span>{isBangla ? 'এখন নয়' : 'Not Now'}</span>
+              {rememberChoice === 'no' && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+              <span>{isBangla ? 'না (No)' : 'No'}</span>
             </button>
           </div>
         </div>
@@ -200,10 +205,24 @@ export const LoginWelcomeModal: React.FC<LoginWelcomeModalProps> = ({
 
           <button
             type="button"
-            onClick={onComplete}
-            className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-600 to-amber-500 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-extrabold text-xs tracking-wider uppercase transition shadow-lg shadow-amber-500/25 flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
+            onClick={() => {
+              if (rememberChoice === null) {
+                alert(isBangla ? 'দয়া করে "হ্যাঁ" অথবা "না" সিলেক্ট করুন' : 'Please select Yes or No to continue.');
+                return;
+              }
+              onComplete();
+            }}
+            className={`w-full py-3 px-4 rounded-2xl font-extrabold text-xs tracking-wider uppercase transition shadow-lg flex items-center justify-center gap-2 cursor-pointer ${
+              rememberChoice === null
+                ? 'bg-zinc-800 text-zinc-500 border border-zinc-700 cursor-not-allowed'
+                : 'bg-gradient-to-r from-amber-500 via-amber-600 to-amber-500 hover:from-amber-400 hover:to-amber-500 text-zinc-950 shadow-amber-500/25 active:scale-[0.99]'
+            }`}
           >
-            <span>{isBangla ? 'ওয়ার্কস্পেসে প্রবেশ করুন' : 'Enter Vistoosa ERP'}</span>
+            <span>
+              {rememberChoice === null
+                ? (isBangla ? '⚠️ প্রথমে হ্যাঁ বা না সিলেক্ট করুন' : '⚠️ Please select Yes or No to Enter')
+                : (isBangla ? 'ওয়ার্কস্পেসে প্রবেশ করুন' : 'Enter Vistoosa ERP')}
+            </span>
             <ArrowRight className="w-4 h-4 ml-1" />
           </button>
         </div>

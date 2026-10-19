@@ -59,7 +59,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, token, 
   const { language, setLanguage, t } = useLanguage();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [saveToast, setSaveToast] = useState<string | null>(null);
-  const [activeSettingsTab, setActiveSettingsTab] = useState<'general' | 'access'>('general');
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'general' | 'access' | 'logo'>('general');
 
   const [formData, setFormData] = useState({
     appName: settings.appName,
@@ -399,6 +399,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, token, 
                 General
               </button>
               <button
+                onClick={() => setActiveSettingsTab('logo')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
+                  activeSettingsTab === 'logo'
+                    ? 'bg-amber-500 text-zinc-950 shadow'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5" /> Logo & Branding
+              </button>
+              <button
                 onClick={() => setActiveSettingsTab('access')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
                   activeSettingsTab === 'access'
@@ -569,6 +579,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, token, 
              </p>
           </div>
         </div>
+      ) : activeSettingsTab === 'logo' ? (
+        <BrandLogoManager />
       ) : (
         <div className="space-y-6">
           {/* Mother Gmail Master Ownership Card (Requirement 3 & 4) */}
@@ -782,63 +794,59 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, token, 
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1">Role / Access Level</label>
-                <select
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">Role / পদবী বা রোল (Manually Typed)</label>
+                <input
+                  type="text"
                   value={newUserRole}
-                  onChange={(e) => setNewUserRole(e.target.value as any)}
+                  onChange={(e) => setNewUserRole(e.target.value)}
+                  placeholder="e.g. Managing Director / Admin / Staff"
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
-                >
-                  <option value="Staff">Staff (Operations - Manual Page Access)</option>
-                  {currentUser?.role === 'Owner' && <option value="Admin">Admin (Executive Administrator - Mother Approved)</option>}
-                  {currentUser?.role === 'Owner' && <option value="Owner">Owner (System Root Owner)</option>}
-                </select>
+                />
               </div>
 
-              {newUserRole === 'Staff' && (
-                <div className="space-y-2 pt-2 border-t border-zinc-800">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider">Per-Page Permissions</label>
-                    <div className="space-x-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const all: Record<string, boolean> = {};
-                          ALL_PAGES.forEach((p) => (all[p.key] = true));
-                          setNewUserPermissions(all);
-                        }}
-                        className="text-[11px] text-amber-400 hover:underline"
-                      >
-                        Select All
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setNewUserPermissions({})}
-                        className="text-[11px] text-zinc-400 hover:underline"
-                      >
-                        Clear All
-                      </button>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 bg-zinc-900/60 rounded-xl border border-zinc-800">
-                    {ALL_PAGES.map((page) => (
-                      <label
-                        key={page.key}
-                        className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-zinc-800/60 cursor-pointer text-xs text-zinc-200"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={!!newUserPermissions[page.key]}
-                          onChange={(e) =>
-                            setNewUserPermissions({ ...newUserPermissions, [page.key]: e.target.checked })
-                          }
-                          className="rounded border-zinc-700 text-amber-500 focus:ring-amber-500 w-4 h-4 bg-zinc-950"
-                        />
-                        <span>{page.label}</span>
-                      </label>
-                    ))}
+              <div className="space-y-2 pt-2 border-t border-zinc-800">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider">Per-Page Permissions (Manual Access)</label>
+                  <div className="space-x-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const all: Record<string, boolean> = {};
+                        ALL_PAGES.forEach((p) => (all[p.key] = true));
+                        setNewUserPermissions(all);
+                      }}
+                      className="text-[11px] text-amber-400 hover:underline"
+                    >
+                      Select All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewUserPermissions({})}
+                      className="text-[11px] text-zinc-400 hover:underline"
+                    >
+                      Clear All
+                    </button>
                   </div>
                 </div>
-              )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 bg-zinc-900/60 rounded-xl border border-zinc-800">
+                  {ALL_PAGES.map((page) => (
+                    <label
+                      key={page.key}
+                      className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-zinc-800/60 cursor-pointer text-xs text-zinc-200"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={!!newUserPermissions[page.key]}
+                        onChange={(e) =>
+                          setNewUserPermissions({ ...newUserPermissions, [page.key]: e.target.checked })
+                        }
+                        className="rounded border-zinc-700 text-amber-500 focus:ring-amber-500 w-4 h-4 bg-zinc-950"
+                      />
+                      <span>{page.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-zinc-800">
                 <button
@@ -888,16 +896,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, token, 
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-zinc-300 mb-1">Role</label>
-                    <select
+                    <label className="block text-xs font-semibold text-zinc-300 mb-1">Role / পদবী (Manually Typed)</label>
+                    <input
+                      type="text"
                       value={editRole}
-                      onChange={(e) => setEditRole(e.target.value as any)}
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
-                    >
-                      <option value="Staff">Staff</option>
-                      {currentUser?.role === 'Owner' && <option value="Admin">Admin</option>}
-                      {currentUser?.role === 'Owner' && <option value="Owner">Owner</option>}
-                    </select>
+                      onChange={(e) => setEditRole(e.target.value)}
+                      placeholder="e.g. Managing Director / Admin"
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                    />
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-zinc-300 mb-1">Account Status</label>
@@ -913,10 +919,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, token, 
                 </div>
               </div>
 
-              {editRole === 'Staff' ? (
+              {editRole.toLowerCase() !== 'owner' ? (
                 <div className="space-y-2 pt-2 border-t border-zinc-800">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider">Per-Page Permissions</label>
+                    <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider">Per-Page Permissions (Manual Access)</label>
                     <div className="space-x-2">
                       <button
                         type="button"

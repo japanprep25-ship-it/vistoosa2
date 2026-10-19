@@ -25,6 +25,7 @@ import {
   CheckSquare,
   Square,
   Settings as SettingsIcon,
+  Database,
 } from 'lucide-react';
 import { AuthUser } from '../types';
 
@@ -45,9 +46,10 @@ export const ALL_PAGES = [
 interface SettingsViewProps {
   currentUser?: AuthUser | null;
   token?: string | null;
+  onOpenGasModal: () => void;
 }
 
-export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, token }) => {
+export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, token, onOpenGasModal }) => {
   const settings = useSettings();
   const { language, setLanguage, t } = useLanguage();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -441,6 +443,24 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, token }
                 ))}
               </div>
             </div>
+          </div>
+
+          {/* GAS Integration Card */}
+          <div className="p-6 rounded-2xl glass-panel border border-emerald-500/30 bg-emerald-900/10 space-y-4">
+             <div className="flex items-center justify-between">
+               <h3 className="text-lg font-bold text-emerald-100 flex items-center gap-2">
+                 <Database className="w-5 h-5 text-emerald-500" /> GAS & DB Schema
+               </h3>
+               <button
+                 onClick={onOpenGasModal}
+                 className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-bold rounded-xl text-xs transition"
+               >
+                 View Integration Panel
+               </button>
+             </div>
+             <p className="text-xs text-emerald-400/80">
+               Configure and manage your Google Apps Script database schema and endpoints.
+             </p>
           </div>
         </div>
       ) : (

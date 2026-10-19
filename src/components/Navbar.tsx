@@ -58,20 +58,15 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <div
             onClick={onGoHome}
-            className="flex items-center gap-2 sm:gap-3 cursor-pointer group"
+            className="flex flex-col cursor-pointer group px-2"
             title="Go to Business Dashboard"
           >
-            <BrandLogo heightPx={40} className="shrink-0 group-hover:scale-105 transition-transform" />
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-brand text-sm font-bold tracking-[0.2em] text-zinc-100 uppercase group-hover:text-amber-400 transition-colors">
-                  Vistoosa
-                </span>
-                <span className="hidden sm:inline-block text-[10px] px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-400 font-semibold tracking-wider uppercase">
-                  Management System
-                </span>
-              </div>
-            </div>
+            <span className="font-brand text-sm font-bold tracking-[0.2em] text-zinc-100 uppercase group-hover:text-amber-400 transition-colors">
+              Vistoosa
+            </span>
+            <span className="text-[10px] text-amber-400 font-semibold tracking-wider uppercase">
+              Management System
+            </span>
           </div>
         </div>
 
@@ -106,16 +101,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span className="hidden sm:inline">{t('header.aiAssistant')}</span>
           </button>
 
-          {/* Google Sheets GAS Code & Webhook Connection */}
-          <button
-            id="navbar-gas-modal-btn"
-            onClick={onOpenGasModal}
-            className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/80 text-zinc-300 text-xs font-medium active:scale-95 transition"
-            title="Google Apps Script & Database Schema"
-          >
-            <Database className="w-3.5 h-3.5 text-emerald-400" />
-            <span>{t('header.gasApi')}</span>
-          </button>
+
 
           {/* Dark / Light Mode Toggle */}
           <button

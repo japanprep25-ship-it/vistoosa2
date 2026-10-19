@@ -914,7 +914,7 @@ export default function App() {
               </div>
             )}
 
-            {activeTab === 'settings' && <SettingsView currentUser={currentUser} token={authToken} />}
+            {activeTab === 'settings' && <SettingsView currentUser={currentUser} token={authToken} onOpenGasModal={() => setIsGasModalOpen(true)} />}
           </PageTransitionWrapper>
         </main>
       </div>

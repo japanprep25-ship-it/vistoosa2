@@ -9,7 +9,7 @@ import { mountWhatsappRoutes, sendTrackingWhatsapp } from './whatsappService';
 import { mountIntegrationsConfigRoutes } from './integrationsConfigStore';
 import { mountMetaIntegrationRoutes, registerOrderCreationHook } from './metaIntegrationService';
 import { mountBrandRoutes } from './brandStore';
-import { mountGlobalSettingsRoutes } from './globalSettingsStore';
+import { mountGlobalSettingsRoutes, getMotherGmail, setMotherGmail } from './globalSettingsStore';
 import { testFirestoreConnection } from './firebaseAdmin';
 import {
   createUser,
@@ -90,26 +90,113 @@ registerOrderCreationHook((newOrder) => {
   });
 });
 
-// Direct Email & Password Authentication Endpoints (OTP Turned Off)
+// In-memory pending signup store for OTP verification
+const pendingSignups = new Map<string, { password: string; name?: string; createdAt: number }>();
+
+// Step 1: Sign up request -> sends 6-digit OTP verification code to email
 app.post('/api/auth/signup', async (req, res) => {
   try {
     const { email, password, name } = req.body || {};
     const cleanEmail = String(email || '').trim().toLowerCase();
 
-    // Create user record in userStore (throws if invalid or duplicate email)
-    const result = await createUser(cleanEmail, password, name);
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      return res.status(400).json({ success: false, message: 'Please provide a valid email address.' });
+    }
+    if (!password || password.length < 6) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters long.' });
+    }
+
+    const existing = await findUserByEmail(cleanEmail);
+    if (existing) {
+      return res.status(400).json({
+        success: false,
+        message: 'An account with this email already exists. Please sign in.',
+      });
+    }
+
+    // Save pending credentials
+    pendingSignups.set(cleanEmail, {
+      password,
+      name: name?.trim() || undefined,
+      createdAt: Date.now(),
+    });
+
+    const otpRes = await createAndSendOtp(cleanEmail, 'signup');
 
     return res.json({
       success: true,
-      requiresOtp: false,
-      message: 'Account created successfully.',
-      token: result.token,
-      user: result.user,
+      requiresOtp: true,
+      email: cleanEmail,
+      message: `A 6-digit verification code has been dispatched to ${cleanEmail}.`,
+      expiresAt: otpRes.expiresAt,
+      debugOtp: otpRes.debugOtp,
     });
   } catch (err: any) {
     return res.status(400).json({
       success: false,
-      message: err?.message || 'Failed to create account.',
+      message: err?.message || 'Failed to initiate sign up.',
+    });
+  }
+});
+
+// Step 2: Verify Sign Up OTP -> Creates User Record and auto-designates Mother Gmail
+app.post('/api/auth/verify-signup-otp', async (req, res) => {
+  try {
+    const { email, otpCode, password: fallbackPassword, name: fallbackName } = req.body || {};
+    const cleanEmail = String(email || '').trim().toLowerCase();
+    const cleanOtp = String(otpCode || '').trim();
+
+    if (!cleanEmail || cleanOtp.length !== 6) {
+      return res.status(400).json({ success: false, message: 'Valid email and 6-digit OTP code required.' });
+    }
+
+    const verifyResult = await verifyOtpCode(cleanEmail, cleanOtp);
+    if (!verifyResult.success) {
+      return res.status(400).json({
+        success: false,
+        message: verifyResult.message || 'Invalid or expired OTP code.',
+      });
+    }
+
+    const pending = pendingSignups.get(cleanEmail);
+    const passwordToUse = pending?.password || fallbackPassword;
+    const nameToUse = pending?.name || fallbackName;
+
+    if (!passwordToUse) {
+      return res.status(400).json({ success: false, message: 'Password information missing. Please submit registration again.' });
+    }
+
+    pendingSignups.delete(cleanEmail);
+
+    // Check if this is or should be designated as Mother Gmail
+    const currentMother = await getMotherGmail();
+    const isMother = cleanEmail === currentMother.toLowerCase() || currentMother === 'riyadbinmazid@gmail.com' && cleanEmail === 'riyadbinmazid@gmail.com';
+
+    // If this is Mother Gmail, ensure it's saved in global settings
+    if (isMother || !currentMother) {
+      await setMotherGmail(cleanEmail);
+    }
+
+    // Create user record with Owner role if Mother Gmail
+    const userRole = isMother ? 'Owner' : 'Staff';
+    const newUser = await adminCreateUser(cleanEmail, passwordToUse, nameToUse, userRole);
+    const profile = sanitizeUser(newUser);
+    const token = generateJwtToken(profile);
+
+    return res.json({
+      success: true,
+      message: isMother
+        ? '👑 Mother Owner account created, verified, and designated successfully!'
+        : 'Account created and verified successfully.',
+      token,
+      user: profile,
+      isMother,
+      motherGmail: await getMotherGmail(),
+    });
+  } catch (err: any) {
+    return res.status(400).json({
+      success: false,
+      message: err?.message || 'Failed to verify and create account.',
     });
   }
 });
@@ -121,6 +208,16 @@ app.post('/api/auth/login', async (req, res) => {
 
     // Validate email + password match stored hash
     const authResult = await authenticateUserCredentials(cleanEmail, password);
+    const currentMother = await getMotherGmail();
+    const isMother = cleanEmail === currentMother.toLowerCase();
+
+    // If Mother Gmail logs in, ensure their role is Owner
+    if (isMother && authResult.user.role !== 'Owner') {
+      try {
+        const updated = await updateUser(authResult.user.id, { role: 'Owner' });
+        authResult.user = sanitizeUser(updated);
+      } catch {}
+    }
 
     return res.json({
       success: true,
@@ -128,6 +225,8 @@ app.post('/api/auth/login', async (req, res) => {
       message: 'Logged in successfully.',
       token: authResult.token,
       user: authResult.user,
+      isMother,
+      motherGmail: currentMother,
     });
   } catch (err: any) {
     return res.status(401).json({

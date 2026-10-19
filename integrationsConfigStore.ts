@@ -1,5 +1,5 @@
 import type { Express, Response } from 'express';
-import { requireAuth, AuthenticatedRequest } from './authMiddleware';
+import { requireAuth, requireMotherGmail, AuthenticatedRequest } from './authMiddleware';
 import {
   db,
   isFirestoreQuotaExceeded,
@@ -114,8 +114,8 @@ export async function saveIntegrationsConfig(
 }
 
 export function mountIntegrationsConfigRoutes(app: Express) {
-  // GET /api/settings/integrations - Load all persistent integration settings for user
-  app.get('/api/settings/integrations', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  // GET /api/settings/integrations - Load all persistent integration settings (Mother Gmail ONLY)
+  app.get('/api/settings/integrations', requireMotherGmail, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const userId = req.userId!;
       const config = await loadIntegrationsConfig(userId);
@@ -128,8 +128,8 @@ export function mountIntegrationsConfigRoutes(app: Express) {
     }
   });
 
-  // POST /api/settings/integrations - Save persistent integration settings for user
-  app.post('/api/settings/integrations', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  // POST /api/settings/integrations - Save persistent integration settings (Mother Gmail ONLY)
+  app.post('/api/settings/integrations', requireMotherGmail, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const userId = req.userId!;
       const payload = req.body || {};

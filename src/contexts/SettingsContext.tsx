@@ -12,12 +12,14 @@ export interface SettingsData {
   fontPreset: FontPreset;
   logoImage: string | null;
   isDarkMode: boolean;
+  motherGmail: string;
 }
 
 interface SettingsContextType extends SettingsData {
   updateSettings: (newSettings: Partial<SettingsData>) => void;
   toggleDarkMode: () => void;
   refetchSettings: () => Promise<void>;
+  updateMotherGmail: (newEmail: string) => void;
 }
 
 const defaultSettings: SettingsData = {
@@ -29,6 +31,7 @@ const defaultSettings: SettingsData = {
   fontPreset: 'default',
   logoImage: '/logo_white.png',
   isDarkMode: true,
+  motherGmail: 'riyadbinmazid@gmail.com',
 };
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
@@ -121,6 +124,7 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
             fontPreset: serverS.fontPreset || prev.fontPreset || defaultSettings.fontPreset,
             logoImage: defaultSettings.logoImage,
             isDarkMode: typeof serverS.isDarkMode === 'boolean' ? serverS.isDarkMode : prev.isDarkMode,
+            motherGmail: serverS.motherGmail ? String(serverS.motherGmail).trim().toLowerCase() : prev.motherGmail || defaultSettings.motherGmail,
           };
           localStorage.setItem('vistoosa-settings', JSON.stringify(merged));
           return merged;
@@ -197,6 +201,15 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
 
   const toggleDarkMode = () => updateSettings({ isDarkMode: !settings.isDarkMode });
 
+  const updateMotherGmail = (newEmail: string) => {
+    const clean = newEmail.trim().toLowerCase();
+    setSettings((prev) => {
+      const merged = { ...prev, motherGmail: clean };
+      localStorage.setItem('vistoosa-settings', JSON.stringify(merged));
+      return merged;
+    });
+  };
+
   const customTheme = themeColors[settings.themePreset] || null;
   const activeFonts = fontConfigurations[settings.fontPreset] || fontConfigurations.default;
 
@@ -207,6 +220,7 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
         updateSettings,
         toggleDarkMode,
         refetchSettings: fetchGlobalSettings,
+        updateMotherGmail,
       }}
     >
       <style>

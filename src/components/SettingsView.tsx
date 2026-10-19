@@ -26,6 +26,11 @@ import {
   Square,
   Settings as SettingsIcon,
   Database,
+  Crown,
+  Mail,
+  RotateCcw,
+  Loader2,
+  ArrowRight,
 } from 'lucide-react';
 import { AuthUser } from '../types';
 
@@ -253,6 +258,102 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, token, 
     }
   };
 
+  // Mother Gmail Change State (Requirement 3)
+  const [isMotherModalOpen, setIsMotherModalOpen] = useState(false);
+  const [motherOtpStep, setMotherOtpStep] = useState<'email' | 'otp'>('email');
+  const [newMotherEmail, setNewMotherEmail] = useState('');
+  const [motherOtpCode, setMotherOtpCode] = useState('');
+  const [isMotherLoading, setIsMotherLoading] = useState(false);
+  const [motherCooldown, setMotherCooldown] = useState<number>(0);
+  const [motherDebugOtp, setMotherDebugOtp] = useState<string | null>(null);
+  const [motherError, setMotherError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (motherCooldown <= 0) return;
+    const t = setInterval(() => setMotherCooldown((c) => c - 1), 1000);
+    return () => clearInterval(t);
+  }, [motherCooldown]);
+
+  const handleRequestMotherOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMotherError(null);
+    const cleanEmail = newMotherEmail.trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      setMotherError('Please enter a valid new Mother Gmail address.');
+      return;
+    }
+    if (cleanEmail === settings.motherGmail.toLowerCase()) {
+      setMotherError('This is already the current Mother Gmail.');
+      return;
+    }
+
+    setIsMotherLoading(true);
+    try {
+      const activeToken = token || localStorage.getItem('vistoosa_auth_token') || '';
+      const res = await fetch('/api/settings/mother-gmail/request-otp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${activeToken.replace(/^"|"$/g, '')}`,
+        },
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Failed to dispatch verification OTP.');
+      }
+
+      setMotherOtpStep('otp');
+      setMotherCooldown(60);
+      setMotherDebugOtp(data.debugOtp || null);
+      setSaveToast(`OTP sent to current Mother Gmail (${data.currentMotherGmail || settings.motherGmail})`);
+      setTimeout(() => setSaveToast(null), 3000);
+    } catch (err: any) {
+      setMotherError(err.message || 'Failed to send OTP.');
+    } finally {
+      setIsMotherLoading(false);
+    }
+  };
+
+  const handleVerifyMotherChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMotherError(null);
+    const cleanOtp = motherOtpCode.trim();
+    if (cleanOtp.length !== 6) {
+      setMotherError('Please enter the 6-digit OTP code.');
+      return;
+    }
+
+    setIsMotherLoading(true);
+    try {
+      const activeToken = token || localStorage.getItem('vistoosa_auth_token') || '';
+      const res = await fetch('/api/settings/mother-gmail/verify-change', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${activeToken.replace(/^"|"$/g, '')}`,
+        },
+        body: JSON.stringify({
+          newMotherGmail: newMotherEmail.trim().toLowerCase(),
+          otpCode: cleanOtp,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Verification failed.');
+      }
+
+      settings.updateMotherGmail(data.motherGmail || newMotherEmail.trim().toLowerCase());
+      setIsMotherModalOpen(false);
+      setSaveToast(`👑 Mother Gmail successfully updated to ${data.motherGmail || newMotherEmail}!`);
+      setTimeout(() => setSaveToast(null), 4000);
+      fetchTeamUsers();
+    } catch (err: any) {
+      setMotherError(err.message || 'Failed to transfer Mother Gmail ownership.');
+    } finally {
+      setIsMotherLoading(false);
+    }
+  };
+
   const themes: { id: ThemePreset; name: string; colorClass: string }[] = [
     { id: 'amber', name: 'Premium Gold (Default)', colorClass: 'bg-amber-500' },
     { id: 'emerald', name: 'Royal Emerald', colorClass: 'bg-emerald-500' },
@@ -465,6 +566,53 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, token, 
         </div>
       ) : (
         <div className="space-y-6">
+          {/* Mother Gmail Master Ownership Card (Requirement 3 & 4) */}
+          <div className="p-6 rounded-2xl glass-panel border border-amber-500/40 bg-gradient-to-r from-amber-500/10 via-zinc-900/90 to-zinc-900/90 space-y-4 shadow-xl">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5">
+                <div className="p-3.5 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-md shrink-0">
+                  <Crown className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-white">
+                      {language === 'bn' ? '👑 মাদার জিমেইল (Master Account)' : '👑 Mother Gmail (Master Account)'}
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                      Root Owner
+                    </span>
+                  </div>
+                  <p className="text-xs font-mono text-amber-400 font-semibold mt-1">
+                    {settings.motherGmail}
+                  </p>
+                  <p className="text-[11px] text-zinc-400 mt-1 max-w-md">
+                    {language === 'bn'
+                      ? 'শুধুমাত্র এই মাদার জিমেইল সব API ইন্টিগ্রেশন এবং কোর সেটিংস এক্সেস করতে পারে। মাদার জিমেইল পরিবর্তন করতে বর্তমান জিমেইলে ওটিপি ভেরিফিকেশন কোড প্রয়োজন।'
+                      : 'Only this Mother Gmail account has authority to access and configure API integrations. Changing Mother Gmail requires a 6-digit OTP sent to this address.'}
+                  </p>
+                </div>
+              </div>
+
+              {isAdminOrOwner && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMotherModalOpen(true);
+                    setMotherOtpStep('email');
+                    setNewMotherEmail('');
+                    setMotherOtpCode('');
+                    setMotherDebugOtp(null);
+                    setMotherError(null);
+                  }}
+                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-bold text-xs shadow-lg shadow-amber-500/20 flex items-center gap-2 transition cursor-pointer shrink-0"
+                >
+                  <KeyRound className="w-4 h-4" />
+                  <span>{language === 'bn' ? 'মাদার জিমেইল পরিবর্তন করুন' : 'Change Mother Gmail'}</span>
+                </button>
+              )}
+            </div>
+          </div>
+
           <div className="p-6 rounded-2xl glass-panel border border-amber-500/30 bg-zinc-900/80 space-y-4">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-zinc-800 pb-4">
               <div>
@@ -844,6 +992,173 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, token, 
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Mother Gmail OTP Change Modal (Requirement 3) */}
+      {isMotherModalOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-zinc-950 border border-amber-500/40 rounded-3xl max-w-md w-full p-6 sm:p-7 space-y-5 shadow-2xl relative">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Crown className="w-5 h-5 text-amber-500" />
+                <h3 className="text-base font-bold text-zinc-100">
+                  {language === 'bn' ? 'মাদার জিমেইল পরিবর্তন করুন' : 'Change Mother Gmail'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMotherModalOpen(false)}
+                className="text-zinc-400 hover:text-zinc-100 p-1 rounded-lg hover:bg-zinc-800 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {motherError && (
+              <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{motherError}</span>
+              </div>
+            )}
+
+            {motherOtpStep === 'email' ? (
+              <form onSubmit={handleRequestMotherOtp} className="space-y-4">
+                <div className="p-3 rounded-2xl bg-zinc-900/80 border border-zinc-800 space-y-1">
+                  <p className="text-[11px] text-zinc-400">Current Mother Gmail:</p>
+                  <p className="text-xs font-mono font-bold text-amber-400">{settings.motherGmail}</p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                    {language === 'bn' ? 'নতুন মাদার জিমেইল এড্রেস' : 'New Mother Gmail Address'}
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="email"
+                      required
+                      value={newMotherEmail}
+                      onChange={(e) => setNewMotherEmail(e.target.value)}
+                      placeholder="new.owner@gmail.com"
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3.5 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500 font-mono"
+                    />
+                    <Mail className="w-4 h-4 text-zinc-500 absolute left-3 top-3" />
+                  </div>
+                  <p className="text-[10px] text-zinc-400 mt-1.5">
+                    {language === 'bn'
+                      ? 'বর্তমান মাদার জিমেইলে একটি ৬-সংখ্যার ওটিপি কোড পাঠানো হবে।'
+                      : 'A 6-digit OTP will be dispatched to current Mother Gmail to authorize transfer.'}
+                  </p>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsMotherModalOpen(false)}
+                    className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isMotherLoading}
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-bold text-xs shadow-lg transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {isMotherLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin text-zinc-950" />
+                        <span>Sending OTP...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>{language === 'bn' ? 'ওটিপি কোড পাঠান' : 'Send Verification OTP'}</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <form onSubmit={handleVerifyMotherChange} className="space-y-4">
+                <div className="p-3.5 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-1 text-center">
+                  <p className="text-[11px] text-zinc-400">
+                    OTP sent to current: <strong className="text-amber-300 font-mono">{settings.motherGmail}</strong>
+                  </p>
+                  <p className="text-[11px] text-zinc-300">
+                    New Target Owner: <strong className="text-emerald-400 font-mono">{newMotherEmail}</strong>
+                  </p>
+                </div>
+
+                {motherDebugOtp && (
+                  <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs space-y-1 text-center">
+                    <p className="text-[11px] text-zinc-300">
+                      Preview Verification OTP:{' '}
+                      <strong className="font-mono text-amber-400 bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/40 text-sm">
+                        {motherDebugOtp}
+                      </strong>
+                    </p>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-2 text-center">
+                    {language === 'bn' ? '৬-ডিজিট ওটিপি কোড লিখুন' : 'Enter 6-Digit OTP Code'}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={6}
+                    value={motherOtpCode}
+                    onChange={(e) => setMotherOtpCode(e.target.value.replace(/\D/g, ''))}
+                    placeholder="123456"
+                    className="w-full rounded-2xl bg-zinc-900 border border-amber-500/50 py-3 text-center text-2xl font-bold tracking-[0.4em] font-mono text-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                  />
+                </div>
+
+                <div className="flex justify-between items-center pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (motherCooldown <= 0) {
+                        handleRequestMotherOtp({ preventDefault: () => {} } as any);
+                      }
+                    }}
+                    disabled={motherCooldown > 0 || isMotherLoading}
+                    className="text-xs text-amber-400 hover:underline flex items-center gap-1.5 disabled:text-zinc-600 cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>
+                      {motherCooldown > 0 ? `Resend OTP (${motherCooldown}s)` : 'Resend OTP'}
+                    </span>
+                  </button>
+
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setMotherOtpStep('email')}
+                      className="px-3.5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold transition cursor-pointer"
+                    >
+                      Back
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isMotherLoading || motherOtpCode.length !== 6}
+                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-bold text-xs shadow-lg transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                    >
+                      {isMotherLoading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin text-zinc-950" />
+                          <span>Verifying...</span>
+                        </>
+                      ) : (
+                        <span>{language === 'bn' ? 'মালিকানা হস্তান্তর করুন' : 'Confirm Transfer'}</span>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

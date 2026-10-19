@@ -18,14 +18,6 @@ export async function requireAuth(req: AuthenticatedRequest, res: Response, next
     }
 
     if (!token) {
-      // Fallback to default admin user so single-user mode or unauthenticated preview session never fails
-      const defaultUser = await findUserById('usr_admin_default');
-      if (defaultUser) {
-        req.userId = defaultUser.id;
-        req.user = sanitizeUser(defaultUser);
-        return next();
-      }
-
       return res.status(401).json({
         success: false,
         message: 'Authentication required. Please log in.',
@@ -34,14 +26,6 @@ export async function requireAuth(req: AuthenticatedRequest, res: Response, next
 
     const user = await verifyJwtToken(token);
     if (!user) {
-      // If token expired or invalid, fallback to default admin user
-      const defaultUser = await findUserById('usr_admin_default');
-      if (defaultUser) {
-        req.userId = defaultUser.id;
-        req.user = sanitizeUser(defaultUser);
-        return next();
-      }
-
       return res.status(401).json({
         success: false,
         message: 'Invalid or expired session token. Please log in again.',
@@ -52,17 +36,29 @@ export async function requireAuth(req: AuthenticatedRequest, res: Response, next
     req.user = user;
     next();
   } catch (err: any) {
-    const defaultUser = await findUserById('usr_admin_default');
-    if (defaultUser) {
-      req.userId = defaultUser.id;
-      req.user = sanitizeUser(defaultUser);
-      return next();
-    }
     return res.status(401).json({
       success: false,
       message: 'Authentication error: ' + (err?.message || 'Invalid token'),
     });
   }
+}
+
+export async function requireMotherGmail(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  await requireAuth(req, res, async () => {
+    try {
+      const { getMotherGmail } = await import('./globalSettingsStore');
+      const motherGmail = await getMotherGmail();
+      if (!req.user || req.user.email.toLowerCase() !== motherGmail.toLowerCase()) {
+        return res.status(403).json({
+          success: false,
+          message: `Access restricted. Only the authorized Mother Gmail (${motherGmail}) has permission to access API integrations.`,
+        });
+      }
+      next();
+    } catch (e: any) {
+      return res.status(500).json({ success: false, message: e?.message || 'Permission check failed' });
+    }
+  });
 }
 
 export async function extractOptionalAuth(req: AuthenticatedRequest, _res: Response, next: NextFunction) {

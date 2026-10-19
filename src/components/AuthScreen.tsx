@@ -161,7 +161,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), otpCode: cleanOtp }),
+        body: JSON.stringify({ email: email.trim().toLowerCase(), otpCode: cleanOtp, password, name }),
       });
 
       const resText = await res.text();
@@ -409,37 +409,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
 
         {/* Main Auth Box */}
         <div className="glass-panel rounded-3xl p-6 md:p-8 shadow-2xl border border-zinc-800/80 bg-zinc-900/90 backdrop-blur-xl relative overflow-hidden">
-          {/* Express 1-Click Admin Workspace Access Button */}
-          <div className="mb-5 pb-4 border-b border-zinc-800/80">
-            <button
-              type="button"
-              onClick={() => {
-                setIsLoading(true);
-                setTimeout(() => {
-                  onLoginSuccess(
-                    {
-                      email: 'admin@vistoosa.com',
-                      name: 'Vistoosa Admin',
-                      role: 'Admin',
-                      status: 'Active',
-                    },
-                    'demo_vistoosa_admin_token'
-                  );
-                }, 200);
-              }}
-              className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 hover:from-amber-400 hover:to-amber-600 text-zinc-950 font-extrabold text-sm shadow-xl shadow-amber-500/25 hover:shadow-amber-500/40 active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 cursor-pointer border border-amber-300/50"
-            >
-              <Sparkles className="w-4 h-4 fill-zinc-950 text-zinc-950 animate-pulse" />
-              <span>{isBangla ? '⚡ এক ক্লিকে ড্যাশবোর্ডে প্রবেশ করুন (Admin Access)' : '⚡ Express 1-Click Workspace Access'}</span>
-              <ArrowRight className="w-4 h-4 text-zinc-950" />
-            </button>
-            <p className="text-[11px] text-zinc-400 text-center mt-2">
-              {isBangla
-                ? 'পাসওয়ার্ড ছাড়াই সরাসরি ফুল ERP ড্যাশবোর্ড ব্যবহার করতে ওপরের বাটনে ক্লিক করুন।'
-                : 'Click above to enter the full ERP Operations Dashboard instantly without password.'}
-            </p>
-          </div>
-
           {/* Header Bar */}
           <div className="flex items-center justify-between pb-4 mb-5 border-b border-zinc-800/80">
             <div className="pr-2">
@@ -930,21 +899,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
           )}
         </div>
 
-        {/* Demo Admin Card Footer */}
-        <div className="mt-5 p-3.5 rounded-2xl bg-zinc-900/60 border border-zinc-800 text-center space-y-1.5">
-          <p className="text-[11px] text-zinc-400 font-medium">
-            💡 {t('auth.demoAccount')}
-          </p>
-          <div className="flex items-center justify-center gap-2 text-[10px] font-mono text-amber-300 bg-zinc-950/80 py-1.5 px-3 rounded-xl border border-zinc-800 inline-flex">
-            <span>japanprep25@gmail.com</span>
-            <span className="text-zinc-600">|</span>
-            <span>Password: password123</span>
-          </div>
-        </div>
-
-        {/* Footer info */}
-        <div className="mt-4 text-center text-[11px] text-zinc-500">
-          Secured with Bcrypt, Nodemailer 2FA OTP & JWT Auth Token • {appName} ERP v2.5
+        {/* Security Footer info */}
+        <div className="mt-5 text-center text-[11px] text-zinc-500">
+          Secured with Bcrypt, Nodemailer 2FA OTP & JWT Auth Token • {appName} ERP
         </div>
       </div>
     </div>

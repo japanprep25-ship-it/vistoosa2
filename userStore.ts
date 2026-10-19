@@ -66,6 +66,16 @@ const DEFAULT_PERMISSIONS: Record<string, boolean> = {
 
 const DEFAULT_USERS: UserRecord[] = [
   {
+    id: 'usr_mother_admin',
+    email: 'riyadbinmazid@gmail.com',
+    passwordHash: bcrypt.hashSync('password123', 10),
+    name: 'Riyad Bin Mazid (Mother Owner)',
+    role: 'Owner',
+    permissions: { ...DEFAULT_PERMISSIONS },
+    status: 'Active',
+    createdAt: new Date().toISOString(),
+  },
+  {
     id: 'usr_admin_default',
     email: 'japanprep25@gmail.com',
     passwordHash: bcrypt.hashSync('password123', 10),

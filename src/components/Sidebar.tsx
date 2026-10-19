@@ -59,8 +59,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const isDrawerOpen = isOpen !== undefined ? isOpen : (isOpenMobile || false);
   const handleClose = onClose || onCloseMobile;
-  const { appName, appMonogram, logoImage } = useSettings();
+  const { appName, appMonogram, logoImage, motherGmail } = useSettings();
   const { t } = useLanguage();
+
+  const isMother = currentUser?.email && motherGmail
+    ? currentUser.email.trim().toLowerCase() === motherGmail.trim().toLowerCase()
+    : false;
 
   // Close drawer on Escape key press
   useEffect(() => {
@@ -168,6 +172,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // Filter items based on user permissions
   const filteredNavItems = navItems.filter((item) => {
+    // Requirement 4: Only Mother Gmail can access the API / Integrations page
+    if (item.id === 'integrations' && !isMother) {
+      return false;
+    }
     if (!currentUser) return true;
     if (currentUser.role === 'Owner' || currentUser.role === 'Admin') return true;
     if (currentUser.permissions && currentUser.permissions[item.id] === true) return true;

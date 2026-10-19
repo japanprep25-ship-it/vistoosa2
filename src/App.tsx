@@ -37,8 +37,11 @@ import { AIAssistantWidget } from './components/AIAssistantWidget';
 import { GoogleSheetsIntegrationModal } from './components/GoogleSheetsIntegrationModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { SettingsView } from './components/SettingsView';
+import { LoginWelcomeModal } from './components/LoginWelcomeModal';
 import { PageTransitionWrapper } from './components/PageTransitionWrapper';
 import { useSettings } from './contexts/SettingsContext';
+import { useLanguage } from './contexts/LanguageContext';
+import { Lock } from 'lucide-react';
 import {
   getInitialNavigationState,
   persistNavigationState,
@@ -53,6 +56,7 @@ export default function App() {
     return localStorage.getItem('vistoosa_auth_token') || null;
   });
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [welcomeUser, setWelcomeUser] = useState<AuthUser | null>(null);
   const [isVerifyingAuth, setIsVerifyingAuth] = useState<boolean>(true);
   const [authorizedUsers, setAuthorizedUsers] = useState<AuthUser[]>(INITIAL_AUTHORIZED_USERS);
 
@@ -110,6 +114,7 @@ export default function App() {
     localStorage.setItem('vistoosa_auth_token', token);
     setAuthToken(token);
     setCurrentUser(user);
+    setWelcomeUser(user);
   };
 
   const handleLogout = () => {
@@ -168,7 +173,12 @@ export default function App() {
   const [isGasModalOpen, setIsGasModalOpen] = useState(false);
   const [isCashModalOpenFromDashboard, setIsCashModalOpenFromDashboard] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-  const { isDarkMode, toggleDarkMode } = useSettings();
+  const { isDarkMode, toggleDarkMode, motherGmail } = useSettings();
+  const { isBangla } = useLanguage();
+
+  const isMother = currentUser?.email && motherGmail
+    ? currentUser.email.trim().toLowerCase() === motherGmail.trim().toLowerCase()
+    : false;
 
   // Synchronize document class with isDarkMode state from SettingsContext
   React.useEffect(() => {
@@ -233,16 +243,21 @@ export default function App() {
   // Enforce per-page permissions: redirect if user tries to access unpermitted page
   React.useEffect(() => {
     if (!currentUser) return;
+    // Requirement 4: Only Mother Gmail can access the API / Integrations page
+    if (activeTab === 'integrations' && !isMother) {
+      navigateTo('dashboard');
+      return;
+    }
     if (currentUser.role === 'Owner' || currentUser.role === 'Admin') return;
     const perms = currentUser.permissions || {};
     if (!perms[activeTab]) {
       const allTabs: ActiveTab[] = ['dashboard', 'orders', 'cogs', 'integrations', 'dispatch', 'inventory', 'reconciliation', 'crm', 'ai', 'gas', 'settings'];
-      const firstAllowed = allTabs.find((t) => perms[t]) || 'dashboard';
+      const firstAllowed = allTabs.find((t) => t !== 'integrations' && perms[t]) || 'dashboard';
       if (firstAllowed !== activeTab) {
         navigateTo(firstAllowed);
       }
     }
-  }, [currentUser, activeTab]);
+  }, [currentUser, activeTab, isMother]);
 
   // Periodically poll for live inbound website orders received via WooCommerce / Shopify webhooks
   React.useEffect(() => {
@@ -741,6 +756,15 @@ export default function App() {
     <div
       className={`min-h-screen ${isDarkMode ? 'dark bg-[#0f0f14] text-zinc-100' : 'bg-[#f8fafc] text-zinc-900'} flex flex-col font-sans transition-colors duration-300`}
     >
+      {/* Welcome Greeting Screen (Requirement 7) */}
+      {welcomeUser && (
+        <LoginWelcomeModal
+          user={welcomeUser}
+          motherGmail={motherGmail}
+          onComplete={() => setWelcomeUser(null)}
+        />
+      )}
+
       {/* Top App Bar */}
       <Navbar
         user={currentUser}
@@ -812,31 +836,55 @@ export default function App() {
             )}
 
             {activeTab === 'integrations' && (
-              <IntegrationsHubView
-                config={integrationConfig}
-                onUpdateConfig={handleUpdateIntegrationConfig}
-                activeSubTab={integrationsSubTab}
-                onSubTabChange={handleIntegrationsSubTabChange}
-                onSimulatedOrderReceived={(order) => {
-                  setOrders((prev) => [order, ...prev]);
-                  // If it's a prepaid order (bKash or Nagad), record cash entry
-                  if (order.paymentMethod === 'bKash' || order.paymentMethod === 'Nagad' || order.paymentMethod === 'Prepaid') {
-                    const newCash: CashEntry = {
-                      id: `cash-auto-${Date.now()}`,
-                      date: new Date().toISOString().split('T')[0],
-                      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                      type: 'inflow',
-                      account: order.paymentMethod === 'bKash' ? 'bKash Merchant' : 'Petty Cash Drawer',
-                      category: 'Customer Advance',
-                      amount: order.totalAmount,
-                      description: `Advance received for order #${order.id} (${order.customerName})`,
-                      referenceId: order.id,
-                      performedBy: 'Automated Webhook',
-                    };
-                    setCashEntries((prev) => [newCash, ...prev]);
-                  }
-                }}
-              />
+              isMother ? (
+                <IntegrationsHubView
+                  config={integrationConfig}
+                  onUpdateConfig={handleUpdateIntegrationConfig}
+                  activeSubTab={integrationsSubTab}
+                  onSubTabChange={handleIntegrationsSubTabChange}
+                  onSimulatedOrderReceived={(order) => {
+                    setOrders((prev) => [order, ...prev]);
+                    // If it's a prepaid order (bKash or Nagad), record cash entry
+                    if (order.paymentMethod === 'bKash' || order.paymentMethod === 'Nagad' || order.paymentMethod === 'Prepaid') {
+                      const newCash: CashEntry = {
+                        id: `cash-auto-${Date.now()}`,
+                        date: new Date().toISOString().split('T')[0],
+                        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                        type: 'inflow',
+                        account: order.paymentMethod === 'bKash' ? 'bKash Merchant' : 'Petty Cash Drawer',
+                        category: 'Customer Advance',
+                        amount: order.totalAmount,
+                        description: `Advance received for order #${order.id} (${order.customerName})`,
+                        referenceId: order.id,
+                        performedBy: 'Automated Webhook',
+                      };
+                      setCashEntries((prev) => [newCash, ...prev]);
+                    }
+                  }}
+                />
+              ) : (
+                <div className="max-w-xl mx-auto my-12 p-8 rounded-3xl glass-panel border border-red-500/40 bg-zinc-950/90 text-center space-y-4 shadow-2xl animate-in fade-in zoom-in-95">
+                  <div className="w-16 h-16 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 mx-auto flex items-center justify-center shadow-lg">
+                    <Lock className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-xl font-bold text-white">
+                    {isBangla ? '🔒 এক্সেস সংরক্ষিত (Mother Gmail Required)' : '🔒 Access Restricted (Mother Gmail Only)'}
+                  </h3>
+                  <p className="text-xs text-zinc-300 leading-relaxed max-w-md mx-auto">
+                    {isBangla
+                      ? `শুধুমাত্র অনুমোদিত মাদার জিমেইল (${motherGmail}) এই API ইন্টিগ্রেশন পেজ এবং ক্রেডেনশিয়াল পরিবর্তন করতে পারবে।`
+                      : `Only the authorized Mother Gmail account (${motherGmail}) has permission to access API keys, Webhooks, Meta, WhatsApp, and Pathao integrations.`}
+                  </p>
+                  <div className="pt-2">
+                    <button
+                      onClick={() => navigateTo('dashboard')}
+                      className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer shadow-lg shadow-amber-500/20 transition"
+                    >
+                      {isBangla ? 'ড্যাশবোর্ডে ফিরে যান' : 'Return to Dashboard'}
+                    </button>
+                  </div>
+                </div>
+              )
             )}
 
             {activeTab === 'dispatch' && (

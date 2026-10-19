@@ -16,7 +16,7 @@ export interface OtpRecord {
   email: string;
   otpCode: string;
   expiresAt: number;
-  type: 'login' | 'signup' | 'forgot_password';
+  type: 'login' | 'signup' | 'forgot_password' | 'mother_change';
   attempts: number;
   createdAt: string;
 }
@@ -32,7 +32,7 @@ export function generateRandom6DigitOtp(): string {
 export async function sendOtpEmail(
   toEmail: string,
   otpCode: string,
-  type: 'login' | 'signup' | 'forgot_password'
+  type: 'login' | 'signup' | 'forgot_password' | 'mother_change'
 ): Promise<{ sentViaEmail: boolean; message: string; debugOtp?: string }> {
   const cleanEmail = toEmail.trim().toLowerCase();
   const resendApiKey = process.env.RESEND_API_KEY ? process.env.RESEND_API_KEY.trim() : '';
@@ -47,6 +47,7 @@ export async function sendOtpEmail(
     login: 'Your Vistoosa OS Login Verification Code',
     signup: 'Verify Your New Vistoosa OS Account',
     forgot_password: 'Reset Password Verification Code - Vistoosa OS',
+    mother_change: 'Security Verification Code: Transfer Mother Gmail - Vistoosa OS',
   };
 
   const subject = `${subjectMap[type] || 'Verification Code'}: ${otpCode}`;
@@ -160,7 +161,7 @@ export async function sendOtpEmail(
  */
 export async function createAndSendOtp(
   email: string,
-  type: 'login' | 'signup' | 'forgot_password'
+  type: 'login' | 'signup' | 'forgot_password' | 'mother_change'
 ): Promise<{ success: boolean; message: string; expiresAt: number; debugOtp?: string }> {
   const cleanEmail = email.trim().toLowerCase();
   const otpCode = generateRandom6DigitOtp();

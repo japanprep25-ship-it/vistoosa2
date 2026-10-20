@@ -481,7 +481,7 @@ export async function testMetaConnection(overrideConfig?: Partial<MetaConfig>) {
   const currentConfig = await loadMetaConfig();
   const config = { ...currentConfig, ...overrideConfig };
   const results: {
-    pageAccess: { ok: boolean; pageName?: string; pageId?: string; error?: string };
+    pageAccess: { ok: boolean; pageName?: string; pageId?: string; error?: string; warning?: string };
     whatsapp: { ok: boolean; verifiedName?: string; phoneNumber?: string; error?: string };
     overall: boolean;
   } = {
@@ -493,15 +493,21 @@ export async function testMetaConnection(overrideConfig?: Partial<MetaConfig>) {
   // Test Page Access Token
   if (config.pageAccessToken && config.pageAccessToken !== '••••••••') {
     try {
-      const res = await fetch(`https://graph.facebook.com/v19.0/me?fields=id,name&access_token=${config.pageAccessToken}`);
+      const res = await fetch(`https://graph.facebook.com/v19.0/me?fields=id&access_token=${config.pageAccessToken}`);
       const data = await res.json();
       if (res.ok && data.id) {
-        results.pageAccess = { ok: true, pageName: data.name, pageId: data.id };
+        const warning = data.id !== config.pageId ? 'Connected ID differs from configured Page ID' : undefined;
+        results.pageAccess = { ok: true, pageId: data.id, warning };
       } else {
-        results.pageAccess = { ok: false, error: data.error?.message || 'Invalid Page Access Token' };
+        const errorMsg = data.error?.message || 'Meta API error';
+        let simpleError = 'Token error';
+        if (errorMsg.includes('pages_read_engagement')) simpleError = 'Permissions missing (pages_read_engagement)';
+        else if (errorMsg.includes('Invalid')) simpleError = 'Token invalid';
+        else simpleError = 'Meta API error';
+        results.pageAccess = { ok: false, error: simpleError };
       }
     } catch (err: any) {
-      results.pageAccess = { ok: false, error: err?.message || 'Connection failed' };
+      results.pageAccess = { ok: false, error: 'Connection failed' };
     }
   } else {
     results.pageAccess = { ok: false, error: 'Page Access Token not configured' };

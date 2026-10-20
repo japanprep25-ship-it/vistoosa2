@@ -27,8 +27,11 @@ import {
   MessageCircle,
   Eye,
   EyeOff,
+  AlertTriangle,
+  XCircle,
+  MinusCircle,
 } from 'lucide-react';
-import { ChannelIntegrationConfig, Order } from '../types';
+import { ChannelIntegrationConfig, Order, MetaCheckItem } from '../types';
 
 const SecretInput: React.FC<{
   value: string;
@@ -108,6 +111,8 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [metaChecklist, setMetaChecklist] = useState<MetaCheckItem[] | null>(null);
+  const [metaOverallPass, setMetaOverallPass] = useState<boolean>(false);
 
   // 1. Website Configuration with persistent localStorage layer
   const [websiteConfig, setWebsiteConfig] = useState(() => {
@@ -576,6 +581,7 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
   const handleTestMeta = async () => {
     setIsTesting(true);
     setTestResult(null);
+    setMetaChecklist(null);
 
     try {
       const res = await fetch('/api/settings/meta-order/test-connection', {
@@ -591,29 +597,30 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
         data = { success: false, message: `Server response (HTTP ${res.status}): ${text.slice(0, 100)}` };
       }
       if (data && data.results) {
-        const pageMsg = data.results.pageAccess?.ok
-          ? `Page "${data.results.pageAccess.pageName || 'Vistoosa'}" verified (ID: ${data.results.pageAccess.pageId || metaConfig.pageId})`
-          : (metaConfig.pageAccessToken ? `Page Token: ${data.results.pageAccess?.error}` : 'Page Token not configured');
-        const waMsg = data.results.whatsapp?.ok
-          ? `WhatsApp "${data.results.whatsapp.verifiedName || 'Vistoosa'}" active`
-          : (metaConfig.whatsappAccessToken ? `WhatsApp: ${data.results.whatsapp?.error}` : 'WhatsApp not configured');
+        const isOverall = Boolean(data.results.overall);
+        setMetaOverallPass(isOverall);
+
+        const list: MetaCheckItem[] = Array.isArray(data.results.checklist)
+          ? data.results.checklist
+          : (data.results.checks ? Object.values(data.results.checks) : []);
+        setMetaChecklist(list);
 
         setTestResult({
-          success: data.results.overall,
-          message: data.results.overall
-            ? `Meta Graph API Connection Validated! ${pageMsg} | ${waMsg}`
-            : `Meta Connection Test: ${pageMsg} | ${waMsg}`,
+          success: isOverall,
+          message: isOverall
+            ? 'Meta connection validated: Checks 1 & 2 passed. Messenger automation ready!'
+            : 'Meta connection test completed with warnings or issues. See checklist below.',
         });
       } else {
         setTestResult({
-          success: true,
-          message: 'Meta Webhook Receiver active at /webhook/meta. Conversions API ready.',
+          success: false,
+          message: data?.message || 'Meta API test returned an empty response.',
         });
       }
-    } catch (e) {
+    } catch {
       setTestResult({
-        success: true,
-        message: 'Meta Webhook Receiver online. Verified Messenger webhook endpoint and Graph API responder.',
+        success: false,
+        message: 'Could not connect to server to test Meta connection.',
       });
     } finally {
       setIsTesting(false);
@@ -1665,6 +1672,88 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
                     Save Meta Configuration (Permanent)
                   </button>
                 </div>
+
+                {/* Meta Verification Results Checklist */}
+                {metaChecklist && metaChecklist.length > 0 && (
+                  <div className="mt-4 p-4 rounded-2xl bg-zinc-900/90 border border-zinc-800 shadow-xl space-y-3">
+                    <div className="flex items-center justify-between pb-2.5 border-b border-zinc-800">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-white tracking-wide">
+                          Messenger Order Automation Checks
+                        </span>
+                        <span className="text-[11px] text-zinc-400">
+                          (মেসেঞ্জার অর্ডার সংযোগ পরীক্ষা)
+                        </span>
+                      </div>
+                      <span
+                        className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                          metaOverallPass
+                            ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                            : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                        }`}
+                      >
+                        {metaOverallPass ? 'Ready for Messenger Orders' : 'Action Required'}
+                      </span>
+                    </div>
+
+                    <div className="space-y-2">
+                      {metaChecklist.map((item) => (
+                        <div
+                          key={item.id}
+                          className={`p-2.5 rounded-xl border flex items-start gap-3 transition ${
+                            item.status === 'ok'
+                              ? 'bg-emerald-500/5 border-emerald-500/20'
+                              : item.status === 'warning'
+                              ? 'bg-amber-500/5 border-amber-500/20'
+                              : item.status === 'fail'
+                              ? 'bg-rose-500/5 border-rose-500/20'
+                              : 'bg-zinc-800/20 border-zinc-800/60'
+                          }`}
+                        >
+                          <div className="mt-0.5 shrink-0">
+                            {item.status === 'ok' && (
+                              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                            )}
+                            {item.status === 'warning' && (
+                              <AlertTriangle className="w-4 h-4 text-amber-400" />
+                            )}
+                            {item.status === 'fail' && (
+                              <XCircle className="w-4 h-4 text-rose-400" />
+                            )}
+                            {item.status === 'neutral' && (
+                              <MinusCircle className="w-4 h-4 text-zinc-400" />
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-baseline gap-2 flex-wrap">
+                              <span className="text-xs font-semibold text-zinc-200">
+                                {item.name}:
+                              </span>
+                              <span
+                                className={`text-xs ${
+                                  item.status === 'ok'
+                                    ? 'text-emerald-300 font-medium'
+                                    : item.status === 'warning'
+                                    ? 'text-amber-300 font-medium'
+                                    : item.status === 'fail'
+                                    ? 'text-rose-300 font-medium'
+                                    : 'text-zinc-400'
+                                }`}
+                              >
+                                {item.message}
+                              </span>
+                            </div>
+                            {item.hintBn && (
+                              <p className="text-[11px] text-zinc-400 mt-0.5">
+                                {item.hintBn}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </form>
             </div>
 

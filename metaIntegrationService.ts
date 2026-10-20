@@ -477,57 +477,429 @@ export async function sendMetaReply(
 // 5. Test Meta Connection
 // -----------------------------------------------------------------------
 
-export async function testMetaConnection(overrideConfig?: Partial<MetaConfig>) {
+// -----------------------------------------------------------------------
+// 5. Test Meta Connection
+// -----------------------------------------------------------------------
+
+export interface MetaCheckItem {
+  id: 'token_validity' | 'page_match' | 'webhook_subscription' | 'whatsapp';
+  name: string;
+  nameBn: string;
+  status: 'ok' | 'warning' | 'fail' | 'neutral';
+  message: string;
+  hintBn: string;
+}
+
+export interface MetaConnectionResults {
+  overall: boolean;
+  checks: {
+    tokenValidity: MetaCheckItem;
+    pageMatch: MetaCheckItem;
+    webhookSubscription: MetaCheckItem;
+    whatsapp: MetaCheckItem;
+  };
+  checklist: MetaCheckItem[];
+  pageAccess: { ok: boolean; pageName?: string; pageId?: string; error?: string; warning?: string };
+  whatsapp: { ok: boolean; verifiedName?: string; phoneNumber?: string; error?: string };
+}
+
+/**
+ * Sanitizes Meta API error messages to keep them short and plain English,
+ * completely stripping URLs, documentation references, and raw codes.
+ */
+export function cleanMetaErrorMessage(rawError: any): string {
+  if (!rawError) return 'Meta API error';
+  let message = '';
+  if (typeof rawError === 'string') {
+    message = rawError;
+  } else if (rawError.message) {
+    message = String(rawError.message);
+  } else if (rawError.error_user_msg) {
+    message = String(rawError.error_user_msg);
+  } else {
+    message = 'Meta API error';
+  }
+
+  // Remove URLs & documentation links
+  message = message.replace(/https?:\/\/\S+/gi, '').trim();
+
+  // Remove trailing documentation instructions
+  message = message.replace(/(please\s+)?(refer to|see|visit|check).*$/i, '').trim();
+
+  // Strip trailing punctuation / parentheses / brackets left by stripping URLs
+  message = message.replace(/[\(\)\[\]]+$/g, '').trim();
+
+  // Strip error code prefix e.g. "(#100) "
+  message = message.replace(/^\(#\d+\)\s*/, '');
+
+  // Truncate to first sentence if long
+  if (message.length > 80 && message.includes('.')) {
+    const firstSentence = message.split('.')[0].trim();
+    if (firstSentence.length > 10) {
+      message = firstSentence;
+    }
+  }
+
+  // Truncate if still over 90 characters
+  if (message.length > 90) {
+    message = message.slice(0, 87) + '...';
+  }
+
+  return message || 'Meta API error';
+}
+
+export async function testMetaConnection(overrideConfig?: Partial<MetaConfig>): Promise<MetaConnectionResults> {
   const currentConfig = await loadMetaConfig();
   const config = { ...currentConfig, ...overrideConfig };
-  const results: {
-    pageAccess: { ok: boolean; pageName?: string; pageId?: string; error?: string; warning?: string };
-    whatsapp: { ok: boolean; verifiedName?: string; phoneNumber?: string; error?: string };
-    overall: boolean;
-  } = {
-    pageAccess: { ok: false },
-    whatsapp: { ok: false },
-    overall: false,
+
+  const metaAppId = String(config.metaAppId || '').trim();
+  const metaAppSecret = (config.metaAppSecret && config.metaAppSecret !== '••••••••' ? config.metaAppSecret : currentConfig.metaAppSecret || '').trim();
+  const pageAccessToken = (config.pageAccessToken && config.pageAccessToken !== '••••••••' ? config.pageAccessToken : currentConfig.pageAccessToken || '').trim();
+  const pageId = String(config.pageId || '').trim();
+  const whatsappAccessToken = (config.whatsappAccessToken && config.whatsappAccessToken !== '••••••••' ? config.whatsappAccessToken : currentConfig.whatsappAccessToken || '').trim();
+  const whatsappPhoneNumberId = String(config.whatsappPhoneNumberId || '').trim();
+
+  let tokenCheck: MetaCheckItem;
+  let pageMatchCheck: MetaCheckItem;
+  let webhookCheck: MetaCheckItem;
+  let whatsappCheck: MetaCheckItem;
+
+  let debugProfileId = '';
+
+  // -------------------------------------------------------------------------
+  // Check 1: Token Validity
+  // Call: GET https://graph.facebook.com/v21.0/debug_token?input_token=<pageAccessToken>&access_token=<metaAppId>|<metaAppSecret>
+  // Show: is_valid, token type, expiry ('never expires' or formatted), and 'pages_messaging' scope.
+  // -------------------------------------------------------------------------
+  if (!pageAccessToken) {
+    tokenCheck = {
+      id: 'token_validity',
+      name: 'Token Validity',
+      nameBn: 'টোকেন মেয়াদ ও সক্ষমতা',
+      status: 'fail',
+      message: 'Page Access Token not configured',
+      hintBn: 'পেজ এক্সেস টোকেন প্রদান করুন',
+    };
+  } else if (!metaAppId || !metaAppSecret) {
+    tokenCheck = {
+      id: 'token_validity',
+      name: 'Token Validity',
+      nameBn: 'টোকেন মেয়াদ ও সক্ষমতা',
+      status: 'fail',
+      message: 'Meta App ID & Secret required to inspect token',
+      hintBn: 'টোকেন যাচাইয়ের জন্য App ID ও App Secret প্রয়োজন',
+    };
+  } else {
+    try {
+      const appAccessToken = `${metaAppId}|${metaAppSecret}`;
+      const debugUrl = `https://graph.facebook.com/v21.0/debug_token?input_token=${encodeURIComponent(pageAccessToken)}&access_token=${encodeURIComponent(appAccessToken)}`;
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 9000);
+      const res = await fetch(debugUrl, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        const shortErr = cleanMetaErrorMessage(data?.error);
+        const isExpiredOrInvalid = data?.error?.code === 190 || /access token|expired|invalid/i.test(shortErr);
+        tokenCheck = {
+          id: 'token_validity',
+          name: 'Token Validity',
+          nameBn: 'টোকেন মেয়াদ ও সক্ষমতা',
+          status: 'fail',
+          message: isExpiredOrInvalid ? 'Token invalid or expired' : shortErr,
+          hintBn: 'টোকেন মেয়াদোত্তীর্ণ বা অকার্যকর',
+        };
+      } else if (data.data) {
+        const d = data.data;
+        const isValid = Boolean(d.is_valid);
+        const tokenType = d.type ? String(d.type).toUpperCase() : 'PAGE';
+        const expiresAt = typeof d.expires_at === 'number' ? d.expires_at : 0;
+        const scopes: string[] = Array.isArray(d.scopes) ? d.scopes : [];
+        const hasMessaging = scopes.includes('pages_messaging');
+        debugProfileId = String(d.profile_id || d.target_id || (tokenType === 'PAGE' ? d.user_id : '') || '').trim();
+
+        let expiryStr = 'never expires';
+        if (expiresAt > 0) {
+          const diffSec = expiresAt - Math.floor(Date.now() / 1000);
+          if (diffSec <= 0) {
+            expiryStr = 'expired';
+          } else {
+            const diffDays = Math.floor(diffSec / 86400);
+            expiryStr = diffDays > 0 ? `expires in ${diffDays}d` : 'expires today';
+          }
+        }
+
+        if (!isValid) {
+          tokenCheck = {
+            id: 'token_validity',
+            name: 'Token Validity',
+            nameBn: 'টোকেন মেয়াদ ও সক্ষমতা',
+            status: 'fail',
+            message: 'Token invalid or expired',
+            hintBn: 'টোকেন মেয়াদোত্তীর্ণ বা অকার্যকর',
+          };
+        } else if (!hasMessaging) {
+          tokenCheck = {
+            id: 'token_validity',
+            name: 'Token Validity',
+            nameBn: 'টোকেন মেয়াদ ও সক্ষমতা',
+            status: 'fail',
+            message: 'pages_messaging permission missing',
+            hintBn: 'pages_messaging পারমিশন দেওয়া নেই',
+          };
+        } else {
+          tokenCheck = {
+            id: 'token_validity',
+            name: 'Token Validity',
+            nameBn: 'টোকেন মেয়াদ ও সক্ষমতা',
+            status: 'ok',
+            message: `Valid ${tokenType} token (${expiryStr}), pages_messaging granted`,
+            hintBn: 'টোকেন বৈধ এবং মেসেজিং পারমিশন সক্রিয়',
+          };
+        }
+      } else {
+        tokenCheck = {
+          id: 'token_validity',
+          name: 'Token Validity',
+          nameBn: 'টোকেন মেয়াদ ও সক্ষমতা',
+          status: 'fail',
+          message: 'Token invalid or expired',
+          hintBn: 'টোকেন মেয়াদোত্তীর্ণ বা অকার্যকর',
+        };
+      }
+    } catch {
+      tokenCheck = {
+        id: 'token_validity',
+        name: 'Token Validity',
+        nameBn: 'টোকেন মেয়াদ ও সক্ষমতা',
+        status: 'fail',
+        message: 'Could not connect to Meta Graph API',
+        hintBn: 'মেটা সার্ভারের সাথে সংযোগ করা যায়নি',
+      };
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Check 2: Page Match
+  // Compare profile_id / granted page id from debug_token with saved Page ID
+  // -------------------------------------------------------------------------
+  if (!pageId) {
+    pageMatchCheck = {
+      id: 'page_match',
+      name: 'Page Match',
+      nameBn: 'পেজ আইডি ম্যাচিং',
+      status: 'warning',
+      message: 'Page ID not configured in settings',
+      hintBn: 'পেজ আইডি কনফিগার করা নেই',
+    };
+  } else if (debugProfileId && debugProfileId !== pageId) {
+    pageMatchCheck = {
+      id: 'page_match',
+      name: 'Page Match',
+      nameBn: 'পেজ আইডি ম্যাচিং',
+      status: 'warning',
+      message: `Page ID mismatch (token is for ${debugProfileId}, saved is ${pageId})`,
+      hintBn: 'টোকেনের পেজ আইডি ও কনফিগার করা পেজ আইডি ভিন্ন',
+    };
+  } else if (debugProfileId && debugProfileId === pageId) {
+    pageMatchCheck = {
+      id: 'page_match',
+      name: 'Page Match',
+      nameBn: 'পেজ আইডি ম্যাচিং',
+      status: 'ok',
+      message: `Page ID matches token profile (${pageId})`,
+      hintBn: 'পেজ আইডি সঠিক ও টোকেনের সাথে মিলেছে',
+    };
+  } else {
+    if (tokenCheck.status === 'ok') {
+      pageMatchCheck = {
+        id: 'page_match',
+        name: 'Page Match',
+        nameBn: 'পেজ আইডি ম্যাচিং',
+        status: 'ok',
+        message: `Page ID configured (${pageId})`,
+        hintBn: 'পেজ আইডি সফলভাবে কনফিগার করা আছে',
+      };
+    } else {
+      pageMatchCheck = {
+        id: 'page_match',
+        name: 'Page Match',
+        nameBn: 'পেজ আইডি ম্যাচিং',
+        status: 'warning',
+        message: 'Could not verify Page match (token invalid)',
+        hintBn: 'টোকেন যাচাই না হওয়ায় পেজ মিলানো যায়নি',
+      };
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Check 3: Webhook Subscription
+  // GET https://graph.facebook.com/v21.0/<pageId>/subscribed_apps?access_token=<pageAccessToken>
+  // Show whether this app is subscribed and which fields ('messages' should be present).
+  // If it fails, show 'Could not verify webhook subscription' as a neutral warning, not an error.
+  // -------------------------------------------------------------------------
+  if (!pageId || !pageAccessToken) {
+    webhookCheck = {
+      id: 'webhook_subscription',
+      name: 'Webhook Subscription',
+      nameBn: 'ওয়েবহুক সাবস্ক্রিপশন',
+      status: 'warning',
+      message: 'Could not verify webhook subscription',
+      hintBn: 'ওয়েবহুক সাবস্ক্রিপশন যাচাই করা যায়নি',
+    };
+  } else {
+    try {
+      const subUrl = `https://graph.facebook.com/v21.0/${encodeURIComponent(pageId)}/subscribed_apps?access_token=${encodeURIComponent(pageAccessToken)}`;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const subRes = await fetch(subUrl, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      const subData = await subRes.json();
+      if (!subRes.ok || subData.error || !Array.isArray(subData.data)) {
+        webhookCheck = {
+          id: 'webhook_subscription',
+          name: 'Webhook Subscription',
+          nameBn: 'ওয়েবহুক সাবস্ক্রিপশন',
+          status: 'warning',
+          message: 'Could not verify webhook subscription',
+          hintBn: 'ওয়েবহুক সাবস্ক্রিপশন যাচাই করা যায়নি',
+        };
+      } else {
+        const apps = subData.data;
+        if (apps.length === 0) {
+          webhookCheck = {
+            id: 'webhook_subscription',
+            name: 'Webhook Subscription',
+            nameBn: 'ওয়েবহুক সাবস্ক্রিপশন',
+            status: 'warning',
+            message: 'App not subscribed to Page webhooks',
+            hintBn: 'পেজে অ্যাপটি সাবস্ক্রাইব করা নেই',
+          };
+        } else {
+          const targetApp = (metaAppId ? apps.find((a: any) => String(a.id) === String(metaAppId)) : null) || apps[0];
+          const fields: string[] = Array.isArray(targetApp?.subscribed_fields)
+            ? targetApp.subscribed_fields
+            : (Array.isArray(targetApp?.fields) ? targetApp.fields : []);
+          const hasMessages = fields.includes('messages');
+
+          if (hasMessages) {
+            webhookCheck = {
+              id: 'webhook_subscription',
+              name: 'Webhook Subscription',
+              nameBn: 'ওয়েবহুক সাবস্ক্রিপশন',
+              status: 'ok',
+              message: `Subscribed (fields: ${fields.join(', ')})`,
+              hintBn: 'মেসেঞ্জার ওয়েবহুক সফলভাবে সংযুক্ত',
+            };
+          } else {
+            webhookCheck = {
+              id: 'webhook_subscription',
+              name: 'Webhook Subscription',
+              nameBn: 'ওয়েবহুক সাবস্ক্রিপশন',
+              status: 'warning',
+              message: `Subscribed, missing 'messages' (fields: ${fields.length ? fields.join(', ') : 'none'})`,
+              hintBn: 'messages ফিল্ড সাবস্ক্রাইব করা নেই',
+            };
+          }
+        }
+      }
+    } catch {
+      webhookCheck = {
+        id: 'webhook_subscription',
+        name: 'Webhook Subscription',
+        nameBn: 'ওয়েবহুক সাবস্ক্রিপশন',
+        status: 'warning',
+        message: 'Could not verify webhook subscription',
+        hintBn: 'ওয়েবহুক সাবস্ক্রিপশন যাচাই করা যায়নি',
+      };
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Check 4: WhatsApp
+  // Show a neutral grey note 'WhatsApp not configured (optional)' when not configured, never a red error.
+  // -------------------------------------------------------------------------
+  if (!whatsappAccessToken || !whatsappPhoneNumberId) {
+    whatsappCheck = {
+      id: 'whatsapp',
+      name: 'WhatsApp',
+      nameBn: 'হোয়াটসঅ্যাপ সংযোগ',
+      status: 'neutral',
+      message: 'WhatsApp not configured (optional)',
+      hintBn: 'হোয়াটসঅ্যাপ কনফিগার করা নেই (ঐচ্ছিক)',
+    };
+  } else {
+    try {
+      const waUrl = `https://graph.facebook.com/v21.0/${encodeURIComponent(whatsappPhoneNumberId)}?access_token=${encodeURIComponent(whatsappAccessToken)}`;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const waRes = await fetch(waUrl, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      const waData = await waRes.json();
+
+      if (waRes.ok && waData.id) {
+        whatsappCheck = {
+          id: 'whatsapp',
+          name: 'WhatsApp',
+          nameBn: 'হোয়াটসঅ্যাপ সংযোগ',
+          status: 'ok',
+          message: `WhatsApp active: ${waData.verified_name || waData.display_phone_number || 'Connected'}`,
+          hintBn: 'হোয়াটসঅ্যাপ সফলভাবে সংযুক্ত',
+        };
+      } else {
+        const shortErr = cleanMetaErrorMessage(waData?.error);
+        whatsappCheck = {
+          id: 'whatsapp',
+          name: 'WhatsApp',
+          nameBn: 'হোয়াটসঅ্যাপ সংযোগ',
+          status: 'warning', // Never a red error!
+          message: `WhatsApp check: ${shortErr}`,
+          hintBn: 'হোয়াটসঅ্যাপ সংযোগ পরীক্ষা সমস্যা',
+        };
+      }
+    } catch {
+      whatsappCheck = {
+        id: 'whatsapp',
+        name: 'WhatsApp',
+        nameBn: 'হোয়াটসঅ্যাপ সংযোগ',
+        status: 'warning', // Never a red error!
+        message: 'WhatsApp connection check timed out',
+        hintBn: 'হোয়াটসঅ্যাপ সংযোগ সময়োত্তীর্ণ',
+      };
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Overall Status
+  // "The overall status is green when checks 1 and 2 pass."
+  // -------------------------------------------------------------------------
+  const overall = tokenCheck.status === 'ok' && pageMatchCheck.status === 'ok';
+  const checklist = [tokenCheck, pageMatchCheck, webhookCheck, whatsappCheck];
+
+  return {
+    overall,
+    checks: {
+      tokenValidity: tokenCheck,
+      pageMatch: pageMatchCheck,
+      webhookSubscription: webhookCheck,
+      whatsapp: whatsappCheck,
+    },
+    checklist,
+    pageAccess: {
+      ok: overall,
+      pageId: pageId || debugProfileId,
+      error: tokenCheck.status !== 'ok' ? tokenCheck.message : (pageMatchCheck.status !== 'ok' ? pageMatchCheck.message : undefined),
+      warning: pageMatchCheck.status === 'warning' ? pageMatchCheck.message : (webhookCheck.status === 'warning' ? webhookCheck.message : undefined),
+    },
+    whatsapp: {
+      ok: whatsappCheck.status === 'ok',
+      error: whatsappCheck.status === 'warning' ? whatsappCheck.message : undefined,
+    },
   };
-
-  // Test Page Access Token
-  if (config.pageAccessToken && config.pageAccessToken !== '••••••••' && config.pageId) {
-    try {
-      const res = await fetch(`https://graph.facebook.com/v21.0/${config.pageId}?access_token=${config.pageAccessToken}`);
-      const data = await res.json();
-      if (res.ok && data.id) {
-        results.pageAccess = { ok: true, pageId: data.id };
-      } else {
-        results.pageAccess = { ok: false, error: data.error?.message || 'Meta API error' };
-      }
-    } catch (err: any) {
-      results.pageAccess = { ok: false, error: 'Connection failed' };
-    }
-  } else if (!config.pageId) {
-    results.pageAccess = { ok: false, error: 'Page ID not configured' };
-  } else {
-    results.pageAccess = { ok: false, error: 'Page Access Token not configured' };
-  }
-
-  // Test WhatsApp
-  if (config.whatsappAccessToken && config.whatsappPhoneNumberId && config.whatsappAccessToken !== '••••••••') {
-    try {
-      const res = await fetch(`https://graph.facebook.com/v21.0/${config.whatsappPhoneNumberId}?access_token=${config.whatsappAccessToken}`);
-      const data = await res.json();
-      if (res.ok && data.id) {
-        results.whatsapp = { ok: true, verifiedName: data.verified_name || 'Vistoosa Official', phoneNumber: data.display_phone_number };
-      } else {
-        results.whatsapp = { ok: false, error: data.error?.message || 'Invalid WhatsApp Token / Phone ID' };
-      }
-    } catch (err: any) {
-      results.whatsapp = { ok: false, error: 'WhatsApp connection failed' };
-    }
-  } else {
-    results.whatsapp = { ok: false, error: 'WhatsApp not configured (optional)' };
-  }
-
-  results.overall = results.pageAccess.ok;
-  return results;
 }
 
 // -----------------------------------------------------------------------

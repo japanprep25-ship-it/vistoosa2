@@ -288,3 +288,26 @@ export interface MultiAgentMemo {
   duplicateOfId?: string;
   duplicateReason?: string;
 }
+
+export interface MetaCheckItem {
+  id: 'token_validity' | 'page_match' | 'webhook_subscription' | 'whatsapp';
+  name: string;
+  nameBn: string;
+  status: 'ok' | 'warning' | 'fail' | 'neutral';
+  message: string;
+  hintBn: string;
+}
+
+export interface MetaConnectionResults {
+  overall: boolean;
+  checks: {
+    tokenValidity: MetaCheckItem;
+    pageMatch: MetaCheckItem;
+    webhookSubscription: MetaCheckItem;
+    whatsapp: MetaCheckItem;
+  };
+  checklist: MetaCheckItem[];
+  pageAccess: { ok: boolean; pageName?: string; pageId?: string; error?: string; warning?: string };
+  whatsapp: { ok: boolean; verifiedName?: string; phoneNumber?: string; error?: string };
+}
+

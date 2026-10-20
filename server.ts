@@ -50,6 +50,55 @@ app.use(express.text({ limit: '15mb', type: ['text/plain', 'text/json', 'applica
 // Mount Meta Integration Routes FIRST to ensure it is not swallowed by other routes or middleware
 mountMetaIntegrationRoutes(app);
 
+// Public Routes (Privacy & Data Deletion)
+const htmlWrapper = (title: string, content: string) => `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; margin: 0; padding: 20px; background-color: #121212; color: #e4e4e7; }
+    .container { max-width: 600px; margin: 0 auto; background: #1f1f23; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5); }
+    h1 { color: #f59e0b; margin-top: 0; }
+    h2 { color: #f59e0b; }
+    .bengali { font-size: 0.9em; color: #a1a1aa; border-top: 1px solid #3f3f46; margin-top: 30px; padding-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    ${content}
+  </div>
+</body>
+</html>
+`;
+
+app.get('/privacy', (req, res) => {
+  res.send(htmlWrapper('Privacy Policy - Vistoosa', `
+    <h1>Privacy Policy</h1>
+    <p>At <strong>Vistoosa</strong> (based in Dhaka, Bangladesh), we value your privacy. We collect your name, phone number, delivery address, and order details provided through our website, Facebook Messenger, Instagram, and WhatsApp. This information is used solely to process your orders, deliver products, and provide customer support.</p>
+    <p>We share your data exclusively with our courier partners (e.g., Pathao) to ensure successful delivery. We never sell your personal information. Your data is stored securely. You may request access to, correction of, or deletion of your personal data at any time.</p>
+    <p><strong>Contact Us:</strong><br>Email: [business email]<br>Phone: [business phone]</p>
+    <div class="bengali">
+      <h2>গোপনীয়তা নীতি (সংক্ষেপ)</h2>
+      <p>ভিস্টুসা (ঢাকা, বাংলাদেশ) আপনার গোপনীয়তাকে গুরুত্ব দেয়। আমরা আমাদের ওয়েবসাইট, ফেসবুক মেসেঞ্জার, ইনস্টাগ্রাম এবং হোয়াটসঅ্যাপের মাধ্যমে আপনার নাম, ফোন নম্বর, ঠিকানা এবং অর্ডারের তথ্য সংগ্রহ করি। আমরা এই তথ্যগুলো শুধুমাত্র অর্ডার প্রসেস করা এবং ডেলিভারি দেওয়ার জন্য ব্যবহার করি। আমরা কোনো তৃতীয় পক্ষের কাছে আপনার তথ্য বিক্রি করি না। আপনার তথ্য নিরাপদ। আপনার তথ্যের অধিকার বা তা মুছে ফেলার জন্য আমাদের সাথে যোগাযোগ করুন।</p>
+    </div>
+  `));
+});
+
+app.get('/data-deletion', (req, res) => {
+  res.send(htmlWrapper('Data Deletion Request - Vistoosa', `
+    <h1>Data Deletion Request</h1>
+    <p>If you wish to request the deletion of your personal data, please send a message to our official Facebook page or email us at <strong>[business email]</strong> with your full name and phone number.</p>
+    <p>We will process your request and delete your personal data from our records within 7 business days.</p>
+    <div class="bengali">
+      <h2>তথ্য মুছে ফেলার অনুরোধ</h2>
+      <p>আপনি যদি আপনার ব্যক্তিগত তথ্য মুছে ফেলতে চান, তবে অনুগ্রহ করে আমাদের ফেসবুক পেজে মেসেজ করুন অথবা আপনার নাম ও ফোন নম্বরসহ <strong>[business email]</strong> ঠিকানায় মেইল করুন। আমরা ৭ কার্যদিবসের মধ্যে আপনার তথ্য আমাদের রেকর্ড থেকে মুছে ফেলবো।</p>
+    </div>
+  `));
+});
+
 // WooCommerce & Generic Webhook Handshake Interceptor
 app.use((req, res, next) => {
   const isWcPing =

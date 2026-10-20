@@ -493,18 +493,13 @@ export async function testMetaConnection(overrideConfig?: Partial<MetaConfig>) {
   // Test Page Access Token
   if (config.pageAccessToken && config.pageAccessToken !== '••••••••') {
     try {
-      const res = await fetch(`https://graph.facebook.com/v19.0/me?fields=id&access_token=${config.pageAccessToken}`);
+      const res = await fetch(`https://graph.facebook.com/v21.0/me?fields=id&access_token=${config.pageAccessToken}`);
       const data = await res.json();
       if (res.ok && data.id) {
-        const warning = data.id !== config.pageId ? 'Connected ID differs from configured Page ID' : undefined;
+        const warning = data.id !== config.pageId ? 'Token belongs to a different page than the saved Page ID' : undefined;
         results.pageAccess = { ok: true, pageId: data.id, warning };
       } else {
-        const errorMsg = data.error?.message || 'Meta API error';
-        let simpleError = 'Token error';
-        if (errorMsg.includes('pages_read_engagement')) simpleError = 'Permissions missing (pages_read_engagement)';
-        else if (errorMsg.includes('Invalid')) simpleError = 'Token invalid';
-        else simpleError = 'Meta API error';
-        results.pageAccess = { ok: false, error: simpleError };
+        results.pageAccess = { ok: false, error: data.error?.message || 'Meta API error' };
       }
     } catch (err: any) {
       results.pageAccess = { ok: false, error: 'Connection failed' };
@@ -516,7 +511,7 @@ export async function testMetaConnection(overrideConfig?: Partial<MetaConfig>) {
   // Test WhatsApp
   if (config.whatsappAccessToken && config.whatsappPhoneNumberId && config.whatsappAccessToken !== '••••••••') {
     try {
-      const res = await fetch(`https://graph.facebook.com/v19.0/${config.whatsappPhoneNumberId}?access_token=${config.whatsappAccessToken}`);
+      const res = await fetch(`https://graph.facebook.com/v21.0/${config.whatsappPhoneNumberId}?access_token=${config.whatsappAccessToken}`);
       const data = await res.json();
       if (res.ok && data.id) {
         results.whatsapp = { ok: true, verifiedName: data.verified_name || 'Vistoosa Official', phoneNumber: data.display_phone_number };
@@ -524,13 +519,13 @@ export async function testMetaConnection(overrideConfig?: Partial<MetaConfig>) {
         results.whatsapp = { ok: false, error: data.error?.message || 'Invalid WhatsApp Token / Phone ID' };
       }
     } catch (err: any) {
-      results.whatsapp = { ok: false, error: err?.message || 'WhatsApp connection failed' };
+      results.whatsapp = { ok: false, error: 'WhatsApp connection failed' };
     }
   } else {
-    results.whatsapp = { ok: false, error: 'WhatsApp credentials not configured' };
+    results.whatsapp = { ok: false, error: 'WhatsApp not configured (optional)' };
   }
 
-  results.overall = results.pageAccess.ok || results.whatsapp.ok;
+  results.overall = results.pageAccess.ok;
   return results;
 }
 

@@ -78,9 +78,16 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
   activeSubTab,
   onSubTabChange,
 }) => {
-  const [activeTab, setActiveTab] = useState<'website' | 'pathao' | 'meta' | 'gas' | 'whatsapp'>(
-    activeSubTab || 'website'
-  );
+  const [activeTab, setActiveTab] = useState<'website' | 'pathao' | 'meta' | 'gas' | 'whatsapp'>(() => {
+    if (activeSubTab) return activeSubTab;
+    try {
+      const saved = localStorage.getItem('vistoosa_integrations_subtab');
+      if (saved && ['website', 'pathao', 'meta', 'gas', 'whatsapp'].includes(saved)) {
+        return saved as any;
+      }
+    } catch {}
+    return 'website';
+  });
 
   React.useEffect(() => {
     if (activeSubTab && activeSubTab !== activeTab) {
@@ -90,6 +97,9 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
 
   const handleSelectTab = (tab: 'website' | 'pathao' | 'meta' | 'gas' | 'whatsapp') => {
     setActiveTab(tab);
+    try {
+      localStorage.setItem('vistoosa_integrations_subtab', tab);
+    } catch {}
     if (onSubTabChange) {
       onSubTabChange(tab);
     }
@@ -99,11 +109,25 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
-  // Form states
-  const [websiteConfig, setWebsiteConfig] = useState(config.website);
-  const [pathaoConfig, setPathaoConfig] = useState(config.pathao);
+  // 1. Website Configuration with persistent localStorage layer
+  const [websiteConfig, setWebsiteConfig] = useState(() => {
+    try {
+      const saved = localStorage.getItem('vistoosa_website_config');
+      if (saved) return { ...config.website, ...JSON.parse(saved) };
+    } catch {}
+    return config.website;
+  });
+
+  // 2. Pathao Courier Configuration with persistent localStorage layer
+  const [pathaoConfig, setPathaoConfig] = useState(() => {
+    try {
+      const saved = localStorage.getItem('vistoosa_pathao_config');
+      if (saved) return { ...config.pathao, ...JSON.parse(saved) };
+    } catch {}
+    return config.pathao;
+  });
   
-  // Meta configuration state with localStorage backup
+  // 3. Meta Business Suite Configuration with persistent localStorage layer
   const [metaConfig, setMetaConfig] = useState(() => {
     try {
       const saved = localStorage.getItem('vistoosa_meta_config');
@@ -125,24 +149,110 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
     };
   });
 
-  const [whatsappConfig, setWhatsappConfig] = useState({
-    phoneNumberId: '',
-    accessToken: '',
-    templateName: 'vistoosa_order_tracking',
-    languageCode: 'en_US',
-    status: 'disconnected' as 'connected' | 'disconnected',
+  // 4. WhatsApp Cloud API Configuration with persistent localStorage layer
+  const [whatsappConfig, setWhatsappConfig] = useState(() => {
+    try {
+      const saved = localStorage.getItem('vistoosa_whatsapp_config');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {
+      phoneNumberId: config.meta?.whatsappPhoneNumberId || '',
+      accessToken: config.meta?.whatsappAccessToken || '',
+      templateName: 'vistoosa_order_tracking',
+      languageCode: 'en_US',
+      status: 'disconnected' as 'connected' | 'disconnected',
+    };
   });
 
-  // Simulator state for live testing Meta messaging & Gemini AI parsing
-  const [simChannel, setSimChannel] = useState<'messenger' | 'instagram' | 'whatsapp'>('messenger');
-  const [simCustomerName, setSimCustomerName] = useState('Arif Hossain');
-  const [simSenderId, setSimSenderId] = useState('01711223344');
-  const [simMessageText, setSimMessageText] = useState(
-    'আসসালামু আলাইকুম, আমি আপনাদের নেভি ব্লু সুপিমা পোলো টি শার্ট সাইজ L নিতে চাই। ডেলিভারি ধানমন্ডি রোড ৭, ঢাকা। নাম আরিফ হোসেন, ফোন 01711223344। ক্যাশ অন ডেলিভারি দিবেন।'
-  );
+  // 5. Google Apps Script (GAS) Database with persistent localStorage layer
+  const [gasConfig, setGasConfig] = useState(() => {
+    try {
+      const saved = localStorage.getItem('vistoosa_gas_config');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {
+      webAppUrl: '',
+      sheetUrl: '',
+      appScriptDeploymentId: '',
+      status: 'disconnected' as 'connected' | 'disconnected',
+    };
+  });
+
+  // Simulator state with localStorage backup
+  const [simChannel, setSimChannel] = useState<'messenger' | 'instagram' | 'whatsapp'>(() => {
+    try {
+      const saved = localStorage.getItem('vistoosa_sim_channel');
+      if (saved && ['messenger', 'instagram', 'whatsapp'].includes(saved)) return saved as any;
+    } catch {}
+    return 'messenger';
+  });
+  const [simCustomerName, setSimCustomerName] = useState(() => {
+    try {
+      return localStorage.getItem('vistoosa_sim_customer_name') || 'Arif Hossain';
+    } catch {
+      return 'Arif Hossain';
+    }
+  });
+  const [simSenderId, setSimSenderId] = useState(() => {
+    try {
+      return localStorage.getItem('vistoosa_sim_sender_id') || '01711223344';
+    } catch {
+      return '01711223344';
+    }
+  });
+  const [simMessageText, setSimMessageText] = useState(() => {
+    try {
+      return (
+        localStorage.getItem('vistoosa_sim_message_text') ||
+        'আসসালামু আলাইকুম, আমি আপনাদের নেভি ব্লু সুপিমা পোলো টি শার্ট সাইজ L নিতে চাই। ডেলিভারি ধানমন্ডি রোড ৭, ঢাকা। নাম আরিফ হোসেন, ফোন 01711223344। ক্যাশ অন ডেলিভারি দিবেন।'
+      );
+    } catch {
+      return 'আসসালামু আলাইকুম, আমি আপনাদের নেভি ব্লু সুপিমা পোলো টি শার্ট সাইজ L নিতে চাই। ডেলিভারি ধানমন্ডি রোড ৭, ঢাকা। নাম আরিফ হোসেন, ফোন 01711223344। ক্যাশ অন ডেলিভারি দিবেন।';
+    }
+  });
   const [simAttachmentUrl, setSimAttachmentUrl] = useState('');
   const [isSimulating, setIsSimulating] = useState(false);
   const [simResponse, setSimResponse] = useState<any | null>(null);
+
+  // Auto-sync all configurations to localStorage whenever modified
+  useEffect(() => {
+    try {
+      localStorage.setItem('vistoosa_website_config', JSON.stringify(websiteConfig));
+    } catch {}
+  }, [websiteConfig]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('vistoosa_pathao_config', JSON.stringify(pathaoConfig));
+    } catch {}
+  }, [pathaoConfig]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('vistoosa_meta_config', JSON.stringify(metaConfig));
+    } catch {}
+  }, [metaConfig]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('vistoosa_whatsapp_config', JSON.stringify(whatsappConfig));
+    } catch {}
+  }, [whatsappConfig]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('vistoosa_gas_config', JSON.stringify(gasConfig));
+    } catch {}
+  }, [gasConfig]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('vistoosa_sim_channel', simChannel);
+      localStorage.setItem('vistoosa_sim_customer_name', simCustomerName);
+      localStorage.setItem('vistoosa_sim_sender_id', simSenderId);
+      localStorage.setItem('vistoosa_sim_message_text', simMessageText);
+    } catch {}
+  }, [simChannel, simCustomerName, simSenderId, simMessageText]);
 
   const originUrl = typeof window !== 'undefined' ? window.location.origin : 'https://vistoosa.app';
   const websiteWebhookFullUrl = `${originUrl}/api/webhooks/website/orders`;
@@ -163,12 +273,36 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
     setTimeout(() => setCopiedKey(null), 2500);
   };
 
-  // Prefill configuration from backend endpoints on mount
+  // Safe merge helper: NEVER let an empty string or masked secret from server wipe out valid local data
+  const mergeSafe = <T extends Record<string, any>>(local: T, server: Partial<T> | undefined | null): T => {
+    if (!server || typeof server !== 'object') return local;
+    const result: T = { ...local };
+    for (const key of Object.keys(server) as (keyof T)[]) {
+      const sVal = server[key];
+      const lVal = local[key];
+      if (sVal === undefined || sVal === null) continue;
+      if (typeof sVal === 'string') {
+        const trimmed = sVal.trim();
+        // If server sent blank, do NOT overwrite non-empty local value
+        if (trimmed === '' && lVal && typeof lVal === 'string' && lVal.trim() !== '') {
+          continue;
+        }
+        // If server sent masked bullets '••••••••', do NOT overwrite actual local token
+        if (trimmed.includes('••') && lVal && typeof lVal === 'string' && !lVal.includes('••') && lVal.trim() !== '') {
+          continue;
+        }
+      }
+      result[key] = sVal as any;
+    }
+    return result;
+  };
+
+  // Prefill configuration from backend endpoints on mount with safe non-destructive merging
   useEffect(() => {
     const headers = getAuthHeaders();
 
     const loadSettings = async () => {
-      // 1. Website & Meta settings
+      // 1. Website, Meta, and GAS settings from /api/settings/integrations
       try {
         const res = await fetch('/api/settings/integrations', { headers });
         const text = await res.text();
@@ -180,10 +314,34 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
         }
         if (res.ok && data && data.success && data.config) {
           if (data.config.website) {
-            setWebsiteConfig((prev) => ({ ...prev, ...data.config.website, status: 'connected' }));
+            setWebsiteConfig((prev: any) => {
+              const merged = mergeSafe(prev, data.config.website);
+              if (merged.storeUrl || merged.apiKey) merged.status = 'connected';
+              try {
+                localStorage.setItem('vistoosa_website_config', JSON.stringify(merged));
+              } catch {}
+              return merged;
+            });
           }
           if (data.config.meta) {
-            setMetaConfig((prev: any) => ({ ...prev, ...data.config.meta, status: 'connected' }));
+            setMetaConfig((prev: any) => {
+              const merged = mergeSafe(prev, data.config.meta);
+              if (merged.metaAppId || merged.pageAccessToken) merged.status = 'connected';
+              try {
+                localStorage.setItem('vistoosa_meta_config', JSON.stringify(merged));
+              } catch {}
+              return merged;
+            });
+          }
+          if (data.config.gas) {
+            setGasConfig((prev: any) => {
+              const merged = mergeSafe(prev, data.config.gas);
+              if (merged.webAppUrl) merged.status = 'connected';
+              try {
+                localStorage.setItem('vistoosa_gas_config', JSON.stringify(merged));
+              } catch {}
+              return merged;
+            });
           }
         }
       } catch (err) {
@@ -202,10 +360,14 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
         }
         if (res.ok && data && data.success && data.config) {
           setMetaConfig((prev: any) => {
-            const merged = { ...prev, ...data.config };
+            const merged = mergeSafe(prev, data.config);
             if (data.verifyToken && !merged.metaVerifyToken) {
               merged.metaVerifyToken = data.verifyToken;
             }
+            if (merged.metaAppId || merged.pageAccessToken) merged.status = 'connected';
+            try {
+              localStorage.setItem('vistoosa_meta_config', JSON.stringify(merged));
+            } catch {}
             return merged;
           });
         }
@@ -224,16 +386,22 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
           data = { configured: false };
         }
         if (res.ok && data && data.configured) {
-          setPathaoConfig((prev) => ({
-            ...prev,
-            baseUrl: data.baseUrl || prev.baseUrl || 'https://api-hermes.pathao.com',
-            clientId: data.clientId || prev.clientId || '',
-            clientSecret: data.clientSecret || prev.clientSecret || '',
-            username: data.username || prev.username || prev.merchantId || '',
-            password: data.password || prev.password || '',
-            storeId: data.storeId || prev.storeId || '',
-            status: 'connected',
-          }));
+          setPathaoConfig((prev: any) => {
+            const serverPathao = {
+              baseUrl: data.baseUrl || prev.baseUrl || 'https://api-hermes.pathao.com',
+              clientId: data.clientId || '',
+              clientSecret: data.clientSecret || '',
+              username: data.username || '',
+              password: data.password || '',
+              storeId: data.storeId || '',
+              status: 'connected' as const,
+            };
+            const merged = mergeSafe(prev, serverPathao);
+            try {
+              localStorage.setItem('vistoosa_pathao_config', JSON.stringify(merged));
+            } catch {}
+            return merged;
+          });
         }
       } catch (err) {
         console.error('Error loading Pathao settings:', err);
@@ -250,12 +418,19 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
           data = { configured: false };
         }
         if (res.ok && data && data.configured) {
-          setWhatsappConfig({
-            phoneNumberId: data.phoneNumberId || '',
-            accessToken: data.accessToken || '',
-            templateName: data.templateName || 'vistoosa_order_tracking',
-            languageCode: data.languageCode || 'en_US',
-            status: 'connected',
+          setWhatsappConfig((prev: any) => {
+            const serverWa = {
+              phoneNumberId: data.phoneNumberId || '',
+              accessToken: data.accessToken || '',
+              templateName: data.templateName || 'vistoosa_order_tracking',
+              languageCode: data.languageCode || 'en_US',
+              status: 'connected' as const,
+            };
+            const merged = mergeSafe(prev, serverWa);
+            try {
+              localStorage.setItem('vistoosa_whatsapp_config', JSON.stringify(merged));
+            } catch {}
+            return merged;
           });
         }
       } catch (err) {
@@ -275,6 +450,10 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
     };
 
     setWebsiteConfig(updatedWeb);
+    try {
+      localStorage.setItem('vistoosa_website_config', JSON.stringify(updatedWeb));
+    } catch {}
+
     onUpdateConfig({
       ...config,
       website: updatedWeb,

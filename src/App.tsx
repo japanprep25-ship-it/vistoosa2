@@ -141,7 +141,14 @@ export default function App() {
   const [integrationConfig, setIntegrationConfig] = useState<ChannelIntegrationConfig>(() => {
     try {
       const saved = localStorage.getItem('vistoosa_integration_config');
-      if (saved) return JSON.parse(saved);
+      let base = saved ? JSON.parse(saved) : INITIAL_INTEGRATION_CONFIG;
+      const web = localStorage.getItem('vistoosa_website_config');
+      if (web) base.website = { ...base.website, ...JSON.parse(web) };
+      const pth = localStorage.getItem('vistoosa_pathao_config');
+      if (pth) base.pathao = { ...base.pathao, ...JSON.parse(pth) };
+      const meta = localStorage.getItem('vistoosa_meta_config');
+      if (meta) base.meta = { ...base.meta, ...JSON.parse(meta) };
+      return base;
     } catch (e) {
       // fallback
     }
@@ -152,10 +159,45 @@ export default function App() {
     setIntegrationConfig(newConfig);
     try {
       localStorage.setItem('vistoosa_integration_config', JSON.stringify(newConfig));
+      if (newConfig.website) localStorage.setItem('vistoosa_website_config', JSON.stringify(newConfig.website));
+      if (newConfig.pathao) localStorage.setItem('vistoosa_pathao_config', JSON.stringify(newConfig.pathao));
+      if (newConfig.meta) localStorage.setItem('vistoosa_meta_config', JSON.stringify(newConfig.meta));
     } catch (e) {
       console.warn('Could not save integration config to localStorage', e);
     }
   };
+
+  // Sync server integration configs on mount
+  React.useEffect(() => {
+    const fetchServerIntegrations = async () => {
+      try {
+        const token = localStorage.getItem('vistoosa_auth_token') || '';
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token.replace(/^"|"$/g, '')}`;
+
+        const res = await fetch('/api/settings/integrations', { headers });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.success && data.config) {
+            setIntegrationConfig((prev) => {
+              const updated = {
+                ...prev,
+                website: data.config.website ? { ...prev.website, ...data.config.website } : prev.website,
+                meta: data.config.meta ? { ...prev.meta, ...data.config.meta } : prev.meta,
+              };
+              localStorage.setItem('vistoosa_integration_config', JSON.stringify(updated));
+              if (updated.website) localStorage.setItem('vistoosa_website_config', JSON.stringify(updated.website));
+              if (updated.meta) localStorage.setItem('vistoosa_meta_config', JSON.stringify(updated.meta));
+              return updated;
+            });
+          }
+        }
+      } catch {
+        // silent fallback to localStorage
+      }
+    };
+    fetchServerIntegrations();
+  }, []);
 
   // Navigation State with URL Hash & localStorage persistence
   const [activeTab, setActiveTab] = useState<ActiveTab>(() => {

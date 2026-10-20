@@ -234,7 +234,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   onSelectTab(item.id);
                   if (handleClose) handleClose();
                 }}
-                className={`w-full flex items-center justify-between p-2.5 rounded-2xl text-left transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between p-3 min-h-[48px] rounded-2xl text-left transition-all active:scale-[0.98] cursor-pointer ${
                   isActive
                     ? 'bg-gradient-to-r from-amber-500/20 via-amber-500/10 to-transparent text-amber-300 border border-amber-500/40 shadow-sm'
                     : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/80 border border-transparent'

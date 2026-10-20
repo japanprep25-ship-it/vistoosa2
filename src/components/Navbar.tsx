@@ -94,10 +94,10 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             id="navbar-ai-assistant-btn"
             onClick={onOpenAiDrawer}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-500/20 to-amber-500/20 hover:from-purple-500/30 hover:to-amber-500/30 border border-amber-500/30 text-amber-300 text-xs font-medium active:scale-95 transition"
+            className="flex items-center gap-1.5 px-3 py-2 min-h-[44px] rounded-xl bg-gradient-to-r from-purple-500/20 to-amber-500/20 hover:from-purple-500/30 hover:to-amber-500/30 border border-amber-500/30 text-amber-300 text-xs font-medium active:scale-95 transition-all cursor-pointer"
             title="Open Veer (Vistoosa AI Fashion Agent)"
           >
-            <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-spin" style={{ animationDuration: '6s' }} />
+            <Sparkles className="w-4 h-4 text-amber-400 animate-spin" style={{ animationDuration: '6s' }} />
             <span className="hidden sm:inline">{t('header.aiAssistant')}</span>
           </button>
 
@@ -106,7 +106,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Dark / Light Mode Toggle */}
           <button
             onClick={onToggleDarkMode}
-            className="p-1.5 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition"
+            className="p-2.5 min-h-[44px] min-w-[44px] rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 active:scale-95 transition-all flex items-center justify-center cursor-pointer"
             title="Toggle theme"
           >
             {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-zinc-300" />}
@@ -118,12 +118,12 @@ export const Navbar: React.FC<NavbarProps> = ({
               <p className="text-xs font-semibold text-zinc-200 leading-tight">{user.name}</p>
               <p className="text-[10px] text-amber-400 font-mono">{user.role}</p>
             </div>
-            <div className="w-8 h-8 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-bold text-amber-400">
+            <div className="w-9 h-9 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-bold text-amber-400">
               {user.name.charAt(0)}
             </div>
             <button
               onClick={onLogout}
-              className="p-1.5 rounded-xl text-zinc-400 hover:text-red-400 hover:bg-red-500/10 transition flex items-center gap-1"
+              className="p-2.5 min-h-[44px] min-w-[44px] rounded-xl text-zinc-400 hover:text-red-400 hover:bg-red-500/10 active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer"
               title={t('header.signOut')}
             >
               <LogOut className="w-4 h-4" />

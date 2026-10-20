@@ -62,84 +62,92 @@
 html:not(.dark) {
   color-scheme: light;
   background-color: #f1f5f9;
-  color: #09090b;
+  color: #000000;
 }
 
 html:not(.dark) body {
   background-color: #f1f5f9 !important;
-  color: #09090b !important;
+  color: #000000 !important;
 }
 
 /* 1. Dark Fonts for Crystal Clear Eye Visibility */
-html:not(.dark) :is(h1, h2, h3, h4, h5, h6, th, dt) {
-  color: #09090b !important;
+html:not(.dark) :is(h1, h2, h3, h4, h5, h6, th, dt, b, strong) {
+  color: #000000 !important;
+  font-weight: 700;
 }
 
-html:not(.dark) .text-white {
-  color: #09090b !important;
+html:not(.dark) :is(p, span, label, div, td, li, dd, input, textarea, select) {
+  color: #000000;
 }
 
-html:not(.dark) .text-zinc-100 {
-  color: #09090b !important;
-}
-
-html:not(.dark) .text-zinc-200 {
-  color: #09090b !important;
-}
-
+html:not(.dark) .text-white,
+html:not(.dark) .text-zinc-100,
+html:not(.dark) .text-zinc-200,
 html:not(.dark) .text-zinc-300 {
-  color: #18181b !important;
+  color: #000000 !important;
 }
 
-html:not(.dark) .text-zinc-400 {
-  color: #27272a !important; /* Rich readable dark charcoal */
-}
-
-html:not(.dark) .text-zinc-500 {
-  color: #3f3f46 !important; /* Visible secondary text */
-}
-
+html:not(.dark) .text-zinc-400,
 html:not(.dark) .text-gray-400,
-html:not(.dark) .text-slate-400 {
-  color: #27272a !important;
+html:not(.dark) .text-slate-400,
+html:not(.dark) .text-neutral-400 {
+  color: #0f172a !important; /* Rich deep black-navy: 100% visible to eye */
+  font-weight: 500;
 }
 
-html:not(.dark) .text-gray-300,
-html:not(.dark) .text-slate-300 {
-  color: #18181b !important;
+html:not(.dark) .text-zinc-500,
+html:not(.dark) .text-gray-500,
+html:not(.dark) .text-slate-500,
+html:not(.dark) .text-neutral-500,
+html:not(.dark) .text-zinc-600 {
+  color: #1e293b !important; /* Visible secondary text, crisp contrast */
+  font-weight: 500;
 }
 
 /* Status & Colored Text Adjustments for Light Mode Readability */
+html:not(.dark) .text-amber-500,
 html:not(.dark) .text-amber-400,
 html:not(.dark) .text-amber-300 {
-  color: #b45309 !important; /* amber-700: sharp & high-contrast on light backgrounds */
+  color: #92400e !important; /* amber-800: sharp & high-contrast on light backgrounds */
+  font-weight: 600;
 }
 
+html:not(.dark) .text-emerald-500,
 html:not(.dark) .text-emerald-400,
 html:not(.dark) .text-emerald-300 {
-  color: #047857 !important; /* emerald-700 */
+  color: #065f46 !important; /* emerald-800 */
+  font-weight: 600;
 }
 
+html:not(.dark) .text-blue-500,
 html:not(.dark) .text-blue-400,
 html:not(.dark) .text-blue-300 {
-  color: #1d4ed8 !important; /* blue-700 */
+  color: #1e40af !important; /* blue-800 */
+  font-weight: 600;
 }
 
+html:not(.dark) .text-rose-500,
 html:not(.dark) .text-rose-400,
 html:not(.dark) .text-rose-300,
+html:not(.dark) .text-red-500,
 html:not(.dark) .text-red-400,
 html:not(.dark) .text-red-300 {
-  color: #be123c !important; /* rose-700 */
+  color: #9f1239 !important; /* rose-800 */
+  font-weight: 600;
 }
 
+html:not(.dark) .text-purple-500,
 html:not(.dark) .text-purple-400,
 html:not(.dark) .text-purple-300 {
-  color: #6b21a8 !important; /* purple-700 */
+  color: #581c87 !important; /* purple-800 */
+  font-weight: 600;
 }
 
+html:not(.dark) .text-sky-500,
 html:not(.dark) .text-sky-400,
 html:not(.dark) .text-sky-300 {
-  color: #0369a1 !important; /* sky-700 */
+  color: #075985 !important; /* sky-800 */
+  font-weight: 600;
 }
 
 /* 2. White Text Preserved in Solid Saturated Buttons & Badges */
@@ -173,63 +181,80 @@ html:not(.dark) :is(
 
 /* Primary amber buttons have black text */
 html:not(.dark) :is(.bg-amber-500, .bg-amber-400) {
-  color: #09090b !important;
+  color: #000000 !important;
 }
 html:not(.dark) :is(.bg-amber-500, .bg-amber-400) :is(span, p, strong, div) {
-  color: #09090b !important;
+  color: #000000 !important;
 }
 
 /* 3. Cards & Panels: Crisp White Background + Solid Visible Borderlines */
 html:not(.dark) .glass-card,
-html:not(.dark) .glass-panel {
+html:not(.dark) .glass-panel,
+html:not(.dark) .glass-panel-light {
   background-color: #ffffff !important;
-  border: 1px solid #cbd5e1 !important; /* Sharp, clearly visible borderline */
-  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.08), 0 1px 2px -1px rgba(15, 23, 42, 0.06) !important;
-  color: #09090b !important;
+  border: 1.5px solid #94a3b8 !important; /* Sharp, clearly visible borderline outline */
+  box-shadow: 0 1px 4px 0 rgba(15, 23, 42, 0.08), 0 2px 8px -2px rgba(15, 23, 42, 0.06) !important;
+  color: #000000 !important;
 }
 
 html:not(.dark) .glass-card:hover,
 html:not(.dark) .glass-panel:hover {
-  border-color: #94a3b8 !important;
-  box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.1), 0 2px 4px -2px rgba(15, 23, 42, 0.08) !important;
+  border-color: #64748b !important;
+  box-shadow: 0 4px 12px -2px rgba(15, 23, 42, 0.12), 0 2px 6px -2px rgba(15, 23, 42, 0.08) !important;
 }
 
 /* Zinc Card Containers in Light Mode */
 html:not(.dark) .bg-zinc-900,
 html:not(.dark) [class*="bg-zinc-900/"] {
   background-color: #ffffff !important;
-  color: #09090b !important;
+  color: #000000 !important;
+  border-color: #94a3b8 !important;
 }
 
 html:not(.dark) .bg-zinc-950,
 html:not(.dark) [class*="bg-zinc-950/"] {
   background-color: #f8fafc !important;
-  color: #09090b !important;
+  color: #000000 !important;
+  border-color: #94a3b8 !important;
 }
 
 html:not(.dark) .bg-zinc-800,
 html:not(.dark) [class*="bg-zinc-800/"] {
-  background-color: #f1f5f9 !important;
-  color: #09090b !important;
+  background-color: #e2e8f0 !important;
+  color: #000000 !important;
+  border-color: #94a3b8 !important;
 }
 
-/* Crisp Visible Borderlines on all Zinc & Subdued Borders */
+/* Crisp Visible Borderlines on all Zinc, Slate & Subdued Borders */
 html:not(.dark) .border-zinc-800,
 html:not(.dark) .border-zinc-700,
 html:not(.dark) .border-zinc-900,
 html:not(.dark) .border-zinc-600,
+html:not(.dark) .border-zinc-500,
 html:not(.dark) [class*="border-zinc-800"],
 html:not(.dark) [class*="border-zinc-700"],
 html:not(.dark) [class*="border-zinc-900"],
 html:not(.dark) [class*="border-zinc-600"],
 html:not(.dark) [class*="border-white/"] {
-  border-color: #cbd5e1 !important; /* slate-300: crisp, high contrast visible border */
+  border-color: #94a3b8 !important; /* slate-400: crisp, high contrast visible border */
+}
+
+/* Solid visible outline on all rounded cards and modules */
+html:not(.dark) :is(
+  .rounded-2xl.border,
+  .rounded-3xl.border,
+  .rounded-xl.border,
+  [class*="rounded-2xl border"],
+  [class*="rounded-3xl border"]
+) {
+  border-color: #94a3b8 !important;
+  border-width: 1.5px !important;
 }
 
 /* Hover Borderlines */
 html:not(.dark) [class*="hover:border-zinc-"]:hover,
 html:not(.dark) [class*="hover:border-amber-"]:hover {
-  border-color: #94a3b8 !important;
+  border-color: #475569 !important;
 }
 
 /* Accent Card Borders in Light Mode */
@@ -281,12 +306,13 @@ html:not(.dark) input[type="date"],
 html:not(.dark) select,
 html:not(.dark) textarea {
   background-color: #ffffff !important;
-  color: #09090b !important;
-  border: 1px solid #cbd5e1 !important;
+  color: #000000 !important;
+  border: 1.5px solid #94a3b8 !important;
+  font-weight: 500;
 }
 html:not(.dark) input::placeholder,
 html:not(.dark) textarea::placeholder {
-  color: #64748b !important;
+  color: #475569 !important; /* darker visible placeholder */
 }
 html:not(.dark) input:focus,
 html:not(.dark) select:focus,

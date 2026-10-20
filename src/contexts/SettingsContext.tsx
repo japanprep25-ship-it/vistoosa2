@@ -231,15 +231,37 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
             --font-brand: ${activeFonts.brand};
             --font-body: ${activeFonts.body};
             ${
-              customTheme
-                ? `
-              --color-amber-200: ${customTheme[200]} !important;
-              --color-amber-300: ${customTheme[300]} !important;
-              --color-amber-400: ${customTheme[400]} !important;
-              --color-amber-500: ${customTheme[500]} !important;
-              --color-amber-600: ${customTheme[600]} !important;
-            `
-                : ''
+              settings.themePreset === 'emerald' ? `
+              --color-amber-200: #a7f3d0 !important;
+              --color-amber-300: #6ee7b7 !important;
+              --color-amber-400: #34d399 !important;
+              --color-amber-500: #10b981 !important;
+              --color-amber-600: #059669 !important;
+              ` : settings.themePreset === 'blue' ? `
+              --color-amber-200: #bfdbfe !important;
+              --color-amber-300: #93c5fd !important;
+              --color-amber-400: #60a5fa !important;
+              --color-amber-500: #3b82f6 !important;
+              --color-amber-600: #2563eb !important;
+              ` : settings.themePreset === 'rose' ? `
+              --color-amber-200: #fecdd3 !important;
+              --color-amber-300: #fda4af !important;
+              --color-amber-400: #fb7185 !important;
+              --color-amber-500: #f43f5e !important;
+              --color-amber-600: #e11d48 !important;
+              ` : settings.themePreset === 'purple' ? `
+              --color-amber-200: #e9d5ff !important;
+              --color-amber-300: #d8b4fe !important;
+              --color-amber-400: #c084fc !important;
+              --color-amber-500: #a855f7 !important;
+              --color-amber-600: #9333ea !important;
+              ` : `
+              --color-amber-200: #fde68a !important;
+              --color-amber-300: #fcd34d !important;
+              --color-amber-400: #fbbf24 !important;
+              --color-amber-500: #f59e0b !important;
+              --color-amber-600: #d97706 !important;
+              `
             }
           }
         `}

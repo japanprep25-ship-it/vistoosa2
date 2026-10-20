@@ -34,8 +34,10 @@ import {
   AlertTriangle,
   CheckSquare,
   Square,
+  Printer,
 } from 'lucide-react';
 import { Order, OrderStatus, OrderChannel, Product } from '../types';
+import { LabelPreviewModal, CourierLabelButton } from './CourierLabel';
 import { useLanguage } from '../contexts/LanguageContext';
 import { ALL_DISTRICT_NAMES, detectDistrict } from '../utils/districtDetector';
 import {
@@ -95,6 +97,7 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [selectedChatOrder, setSelectedChatOrder] = useState<Order | null>(null);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
+  const [previewOrders, setPreviewOrders] = useState<any[] | null>(null);
 
   // Trash & Bulk selection state
   const [viewMode, setViewMode] = useState<'active' | 'trash'>('active');
@@ -802,6 +805,26 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
   };
 
 
+
+  const toLabelOrder = (o: Order) => ({
+    id: o.id,
+    date: o.createdAt ? new Date(o.createdAt).toLocaleDateString("en-GB") : new Date().toLocaleDateString("en-GB"),
+    recipientName: o.customerName,
+    phone: o.phone,
+    address: o.address,
+    courier: o.courier,
+    consignmentId: o.pathaoConsignmentId || o.consignmentId,
+    weight: o.weight || "1 KG",
+    products: (o.items || []).map(i => ({
+      name: i.productName,
+      size: i.size,
+      qty: i.quantity,
+      price: i.unitPrice
+    })),
+    deliveryCharge: o.deliveryCharge,
+    discount: o.discount,
+    advance: o.advance,
+  });
 
   return (
     <div className="space-y-6">
@@ -1526,13 +1549,25 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
 
             <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
               {viewMode === 'active' ? (
-                <button
-                  onClick={() => setIsSoftDeleteConfirmOpen(true)}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-lg shadow-rose-600/20 active:scale-95 transition cursor-pointer"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  <span>Delete Selected ({selectedOrderIds.length})</span>
-                </button>
+                <>
+                  <button
+                    onClick={() => {
+                      const ordersToPrint = displayedOrders.filter(o => selectedOrderIds.includes(o.id)).map(toLabelOrder);
+                      setPreviewOrders(ordersToPrint);
+                    }}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold shadow-lg shadow-amber-600/20 active:scale-95 transition cursor-pointer"
+                  >
+                    <Printer className="w-4 h-4" />
+                    <span>Print Labels ({selectedOrderIds.length})</span>
+                  </button>
+                  <button
+                    onClick={() => setIsSoftDeleteConfirmOpen(true)}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-lg shadow-rose-600/20 active:scale-95 transition cursor-pointer"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>Delete Selected ({selectedOrderIds.length})</span>
+                  </button>
+                </>
               ) : (
                 <>
                   <button
@@ -1816,15 +1851,40 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                         )}
 
                         {order.status === 'Approved' && (
-                          <button
-                            id={`btn-dispatch-order-${order.id}`}
-                            onClick={() => onGoToDispatch(order.id)}
-                            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold shadow-sm transition active:scale-95 cursor-pointer"
-                          >
-                            <Layers className="w-3.5 h-3.5" />
-                            <span>Pack & Scan Barcode</span>
-                            <ChevronRight className="w-3.5 h-3.5" />
-                          </button>
+                          <div className="flex gap-2">
+                            <CourierLabelButton
+                              buttonText="Print Label"
+                              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-white text-xs font-bold shadow-sm transition active:scale-95 cursor-pointer"
+                              order={{
+                                id: order.id,
+                                date: new Date(order.createdAt).toLocaleDateString("en-GB"),
+                                recipientName: order.customerName,
+                                phone: order.phone,
+                                address: order.address,
+                                courier: order.courier || "—",
+                                consignmentId: order.pathaoConsignmentId || "",
+                                weight: order.weight || "1 KG",
+                                products: (order.items || []).map(i => ({
+                                  name: i.productName,
+                                  size: i.size,
+                                  qty: i.quantity,
+                                  price: i.unitPrice
+                                })),
+                                deliveryCharge: order.deliveryCharge || order.deliveryFee || 0,
+                                discount: order.discount || 0,
+                                advance: order.advance || 0
+                              }}
+                            />
+                            <button
+                              id={`btn-dispatch-order-${order.id}`}
+                              onClick={() => onGoToDispatch(order.id)}
+                              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold shadow-sm transition active:scale-95 cursor-pointer"
+                            >
+                              <Layers className="w-3.5 h-3.5" />
+                              <span>Pack & Scan Barcode</span>
+                              <ChevronRight className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         )}
 
                         {order.status === 'Dispatched' && (
@@ -2321,7 +2381,9 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
           </div>
         </div>
       )}
-
+      {previewOrders && (
+        <LabelPreviewModal orders={previewOrders} onClose={() => setPreviewOrders(null)} />
+      )}
       {/* Excel Advanced Filter Panel Drawer */}
       <OrderFilterPanel
         isOpen={isFilterPanelOpen}

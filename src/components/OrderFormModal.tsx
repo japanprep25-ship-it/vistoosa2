@@ -143,8 +143,11 @@ export const OrderFormModal: React.FC<OrderFormModalProps> = ({
   const [address, setAddress] = useState('');
   const [district, setDistrict] = useState('Dhaka');
   const [channel, setChannel] = useState<OrderChannel>('WhatsApp');
+  const [courier, setCourier] = useState<string>('Pathao');
   const [deliveryFee, setDeliveryFee] = useState(70);
   const [isManualDeliveryFee, setIsManualDeliveryFee] = useState(false);
+  const [discount, setDiscount] = useState(0);
+  const [advance, setAdvance] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<'Cash on Delivery' | 'bKash' | 'Nagad' | 'Prepaid'>(
     'Cash on Delivery'
   );
@@ -177,6 +180,7 @@ export const OrderFormModal: React.FC<OrderFormModalProps> = ({
         'Dhaka';
       setDistrict(existingDist);
       setChannel(initialOrder.channel || 'WhatsApp');
+      setCourier(initialOrder.courier || 'Pathao');
       setDisablePathaoPickup(
         initialOrder.disablePathaoPickup !== undefined
           ? initialOrder.disablePathaoPickup
@@ -187,6 +191,8 @@ export const OrderFormModal: React.FC<OrderFormModalProps> = ({
           ? initialOrder.deliveryFee
           : calculateDeliveryFee(existingDist, initialOrder.channel || 'WhatsApp')
       );
+      setDiscount(initialOrder.discount || 0);
+      setAdvance(initialOrder.advance || 0);
       setPaymentMethod(initialOrder.paymentMethod || 'Cash on Delivery');
       setNotes(initialOrder.notes || '');
 
@@ -220,9 +226,12 @@ export const OrderFormModal: React.FC<OrderFormModalProps> = ({
       setAddress('');
       setDistrict('Dhaka');
       setChannel('WhatsApp');
+      setCourier('Pathao');
       setDisablePathaoPickup(false);
       setDeliveryFee(70);
       setIsManualDeliveryFee(false);
+      setDiscount(0);
+      setAdvance(0);
       setPaymentMethod('Cash on Delivery');
       setNotes('');
       setIsAutoDistrictDetected(false);
@@ -430,6 +439,10 @@ export const OrderFormModal: React.FC<OrderFormModalProps> = ({
       deliveryFee: Number(deliveryFee) || 0,
       totalAmount,
       paymentMethod,
+      courier,
+      deliveryCharge: Number(deliveryFee) || 0,
+      discount: Number(discount) || 0,
+      advance: Number(advance) || 0,
       disablePathaoPickup,
       status: initialOrder ? initialOrder.status : 'Pending',
       notes: notes.trim(),
@@ -605,6 +618,41 @@ export const OrderFormModal: React.FC<OrderFormModalProps> = ({
                 <p className="text-[10px] text-zinc-500 mt-1">
                   💡 Type address above to auto-detect district.
                 </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <div>
+                <label className="block text-zinc-400 mb-1 font-medium">Courier</label>
+                <select
+                  value={courier}
+                  onChange={(e) => setCourier(e.target.value)}
+                  className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-3.5 py-2.5 text-white font-medium focus:outline-none focus:border-amber-500 cursor-pointer"
+                >
+                  <option value="Pathao">Pathao</option>
+                  <option value="Steadfast">Steadfast</option>
+                  <option value="RedX">RedX</option>
+                  <option value="Paperfly">Paperfly</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-zinc-400 mb-1 font-medium">Discount (৳)</label>
+                <input
+                  type="number"
+                  value={discount}
+                  onChange={(e) => setDiscount(Number(e.target.value))}
+                  className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-3.5 py-2.5 text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+              <div>
+                <label className="block text-zinc-400 mb-1 font-medium">Advance (৳)</label>
+                <input
+                  type="number"
+                  value={advance}
+                  onChange={(e) => setAdvance(Number(e.target.value))}
+                  className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-3.5 py-2.5 text-white focus:outline-none focus:border-amber-500"
+                />
               </div>
             </div>
           </div>

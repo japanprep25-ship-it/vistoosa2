@@ -44,6 +44,9 @@ export interface Order {
   items: OrderItem[];
   totalAmount: number;
   deliveryFee: number;
+  deliveryCharge?: number;
+  discount?: number;
+  advance?: number;
   paymentMethod: 'Cash on Delivery' | 'bKash' | 'Nagad' | 'Prepaid';
   status: OrderStatus;
   createdAt: string;
@@ -51,6 +54,9 @@ export interface Order {
   dispatchedAt?: string;
   pathaoTrackingId?: string;
   pathaoConsignmentId?: string;
+  courier?: string;
+  consignmentId?: string;
+  weight?: string;
   pathaoStatus?: 'Pickup Requested' | 'In Transit' | 'Delivered' | 'Exchange' | 'Partial Delivery' | 'Return' | 'Paid Return';
   disablePathaoPickup?: boolean;
   notes?: string;

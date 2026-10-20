@@ -56,49 +56,290 @@
   border-color: rgba(217, 119, 6, 0.3);
 }
 
-/* Light Mode High Contrast Enhancements */
+/* =========================================================================
+   Light Mode High Contrast & Sharp Card Borderline Enhancements
+   ========================================================================= */
 html:not(.dark) {
   color-scheme: light;
+  background-color: #f1f5f9;
+  color: #09090b;
 }
-html:not(.dark) .text-zinc-400 {
-  color: #52525b !important; /* zinc-600 */
+
+html:not(.dark) body {
+  background-color: #f1f5f9 !important;
+  color: #09090b !important;
 }
-html:not(.dark) .text-zinc-500 {
-  color: #3f3f46 !important; /* zinc-700 */
+
+/* 1. Dark Fonts for Crystal Clear Eye Visibility */
+html:not(.dark) :is(h1, h2, h3, h4, h5, h6, th, dt) {
+  color: #09090b !important;
 }
-html:not(.dark) .text-zinc-300 {
-  color: #27272a !important; /* zinc-800 */
+
+html:not(.dark) .text-white {
+  color: #09090b !important;
 }
+
+html:not(.dark) .text-zinc-100 {
+  color: #09090b !important;
+}
+
 html:not(.dark) .text-zinc-200 {
-  color: #18181b !important; /* zinc-900 */
+  color: #09090b !important;
 }
-html:not(.dark) .bg-zinc-900 {
-  background-color: #f4f4f5 !important;
+
+html:not(.dark) .text-zinc-300 {
   color: #18181b !important;
 }
-html:not(.dark) .bg-zinc-950 {
-  background-color: #e4e4e7 !important;
+
+html:not(.dark) .text-zinc-400 {
+  color: #27272a !important; /* Rich readable dark charcoal */
+}
+
+html:not(.dark) .text-zinc-500 {
+  color: #3f3f46 !important; /* Visible secondary text */
+}
+
+html:not(.dark) .text-gray-400,
+html:not(.dark) .text-slate-400 {
+  color: #27272a !important;
+}
+
+html:not(.dark) .text-gray-300,
+html:not(.dark) .text-slate-300 {
   color: #18181b !important;
 }
-html:not(.dark) .bg-zinc-800 {
-  background-color: #e4e4e7 !important;
-  color: #18181b !important;
+
+/* Status & Colored Text Adjustments for Light Mode Readability */
+html:not(.dark) .text-amber-400,
+html:not(.dark) .text-amber-300 {
+  color: #b45309 !important; /* amber-700: sharp & high-contrast on light backgrounds */
 }
+
+html:not(.dark) .text-emerald-400,
+html:not(.dark) .text-emerald-300 {
+  color: #047857 !important; /* emerald-700 */
+}
+
+html:not(.dark) .text-blue-400,
+html:not(.dark) .text-blue-300 {
+  color: #1d4ed8 !important; /* blue-700 */
+}
+
+html:not(.dark) .text-rose-400,
+html:not(.dark) .text-rose-300,
+html:not(.dark) .text-red-400,
+html:not(.dark) .text-red-300 {
+  color: #be123c !important; /* rose-700 */
+}
+
+html:not(.dark) .text-purple-400,
+html:not(.dark) .text-purple-300 {
+  color: #6b21a8 !important; /* purple-700 */
+}
+
+html:not(.dark) .text-sky-400,
+html:not(.dark) .text-sky-300 {
+  color: #0369a1 !important; /* sky-700 */
+}
+
+/* 2. White Text Preserved in Solid Saturated Buttons & Badges */
+html:not(.dark) :is(
+  .bg-emerald-600, .bg-emerald-500, .bg-emerald-700,
+  .bg-rose-600, .bg-rose-500, .bg-rose-700,
+  .bg-blue-600, .bg-blue-500, .bg-blue-700,
+  .bg-amber-600, .bg-amber-700,
+  .bg-purple-600, .bg-purple-500, .bg-purple-700,
+  .bg-sky-600, .bg-sky-500, .bg-sky-700,
+  .bg-indigo-600, .bg-indigo-500,
+  .bg-red-600, .bg-red-500,
+  .bg-green-600, .bg-green-500
+) {
+  color: #ffffff !important;
+}
+
+html:not(.dark) :is(
+  .bg-emerald-600, .bg-emerald-500, .bg-emerald-700,
+  .bg-rose-600, .bg-rose-500, .bg-rose-700,
+  .bg-blue-600, .bg-blue-500, .bg-blue-700,
+  .bg-amber-600, .bg-amber-700,
+  .bg-purple-600, .bg-purple-500, .bg-purple-700,
+  .bg-sky-600, .bg-sky-500, .bg-sky-700,
+  .bg-indigo-600, .bg-indigo-500,
+  .bg-red-600, .bg-red-500,
+  .bg-green-600, .bg-green-500
+) :is(span, p, strong, div, .text-white, .text-zinc-100, .text-zinc-200) {
+  color: #ffffff !important;
+}
+
+/* Primary amber buttons have black text */
+html:not(.dark) :is(.bg-amber-500, .bg-amber-400) {
+  color: #09090b !important;
+}
+html:not(.dark) :is(.bg-amber-500, .bg-amber-400) :is(span, p, strong, div) {
+  color: #09090b !important;
+}
+
+/* 3. Cards & Panels: Crisp White Background + Solid Visible Borderlines */
+html:not(.dark) .glass-card,
+html:not(.dark) .glass-panel {
+  background-color: #ffffff !important;
+  border: 1px solid #cbd5e1 !important; /* Sharp, clearly visible borderline */
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.08), 0 1px 2px -1px rgba(15, 23, 42, 0.06) !important;
+  color: #09090b !important;
+}
+
+html:not(.dark) .glass-card:hover,
+html:not(.dark) .glass-panel:hover {
+  border-color: #94a3b8 !important;
+  box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.1), 0 2px 4px -2px rgba(15, 23, 42, 0.08) !important;
+}
+
+/* Zinc Card Containers in Light Mode */
+html:not(.dark) .bg-zinc-900,
+html:not(.dark) [class*="bg-zinc-900/"] {
+  background-color: #ffffff !important;
+  color: #09090b !important;
+}
+
+html:not(.dark) .bg-zinc-950,
+html:not(.dark) [class*="bg-zinc-950/"] {
+  background-color: #f8fafc !important;
+  color: #09090b !important;
+}
+
+html:not(.dark) .bg-zinc-800,
+html:not(.dark) [class*="bg-zinc-800/"] {
+  background-color: #f1f5f9 !important;
+  color: #09090b !important;
+}
+
+/* Crisp Visible Borderlines on all Zinc & Subdued Borders */
 html:not(.dark) .border-zinc-800,
 html:not(.dark) .border-zinc-700,
-html:not(.dark) .border-zinc-700\/80,
-html:not(.dark) .border-zinc-800\/80 {
-  border-color: #d4d4d8 !important;
+html:not(.dark) .border-zinc-900,
+html:not(.dark) .border-zinc-600,
+html:not(.dark) [class*="border-zinc-800"],
+html:not(.dark) [class*="border-zinc-700"],
+html:not(.dark) [class*="border-zinc-900"],
+html:not(.dark) [class*="border-zinc-600"],
+html:not(.dark) [class*="border-white/"] {
+  border-color: #cbd5e1 !important; /* slate-300: crisp, high contrast visible border */
 }
-html:not(.dark) .glass-panel {
-  background: rgba(255, 255, 255, 0.92) !important;
-  border: 1px solid rgba(0, 0, 0, 0.12) !important;
+
+/* Hover Borderlines */
+html:not(.dark) [class*="hover:border-zinc-"]:hover,
+html:not(.dark) [class*="hover:border-amber-"]:hover {
+  border-color: #94a3b8 !important;
+}
+
+/* Accent Card Borders in Light Mode */
+html:not(.dark) [class*="border-amber-500"] {
+  border-color: rgba(217, 119, 6, 0.5) !important;
+}
+html:not(.dark) [class*="border-emerald-500"] {
+  border-color: rgba(16, 185, 129, 0.5) !important;
+}
+html:not(.dark) [class*="border-rose-500"],
+html:not(.dark) [class*="border-red-500"] {
+  border-color: rgba(244, 63, 94, 0.5) !important;
+}
+html:not(.dark) [class*="border-blue-500"],
+html:not(.dark) [class*="border-sky-500"] {
+  border-color: rgba(59, 130, 246, 0.5) !important;
+}
+html:not(.dark) [class*="border-purple-500"] {
+  border-color: rgba(168, 85, 247, 0.5) !important;
+}
+
+/* Accent Card Background Tints in Light Mode */
+html:not(.dark) [class*="bg-amber-500/"] {
+  background-color: rgba(245, 158, 11, 0.08) !important;
+}
+html:not(.dark) [class*="bg-emerald-500/"] {
+  background-color: rgba(16, 185, 129, 0.08) !important;
+}
+html:not(.dark) [class*="bg-rose-500/"],
+html:not(.dark) [class*="bg-red-500/"] {
+  background-color: rgba(244, 63, 94, 0.08) !important;
+}
+html:not(.dark) [class*="bg-blue-500/"],
+html:not(.dark) [class*="bg-sky-500/"] {
+  background-color: rgba(59, 130, 246, 0.08) !important;
+}
+html:not(.dark) [class*="bg-purple-500/"] {
+  background-color: rgba(168, 85, 247, 0.08) !important;
+}
+
+/* 4. Form Inputs & Selects */
+html:not(.dark) input[type="text"],
+html:not(.dark) input[type="number"],
+html:not(.dark) input[type="tel"],
+html:not(.dark) input[type="email"],
+html:not(.dark) input[type="password"],
+html:not(.dark) input[type="search"],
+html:not(.dark) input[type="date"],
+html:not(.dark) select,
+html:not(.dark) textarea {
+  background-color: #ffffff !important;
+  color: #09090b !important;
+  border: 1px solid #cbd5e1 !important;
+}
+html:not(.dark) input::placeholder,
+html:not(.dark) textarea::placeholder {
+  color: #64748b !important;
+}
+html:not(.dark) input:focus,
+html:not(.dark) select:focus,
+html:not(.dark) textarea:focus {
+  border-color: #d97706 !important;
+  box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.15) !important;
+}
+
+/* 5. Tables */
+html:not(.dark) table {
+  background-color: #ffffff;
+}
+html:not(.dark) thead tr {
+  background-color: #f8fafc !important;
+  border-bottom: 2px solid #cbd5e1 !important;
+}
+html:not(.dark) th {
+  color: #09090b !important;
+  font-weight: 700 !important;
+}
+html:not(.dark) tbody tr {
+  border-bottom: 1px solid #e2e8f0 !important;
+  background-color: #ffffff !important;
+}
+html:not(.dark) tbody tr:hover {
+  background-color: #f8fafc !important;
+}
+html:not(.dark) td {
   color: #09090b !important;
 }
-html:not(.dark) .glass-card {
-  background: rgba(255, 255, 255, 0.95) !important;
-  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+
+/* 6. Header & Sidebar */
+html:not(.dark) header {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  border-bottom: 1px solid #cbd5e1 !important;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+html:not(.dark) aside {
+  background-color: #ffffff !important;
+  border-right: 1px solid #cbd5e1 !important;
   color: #09090b !important;
+  box-shadow: 2px 0 8px 0 rgba(0, 0, 0, 0.06);
+}
+
+/* 7. Modals & Dialogs */
+html:not(.dark) [role="dialog"],
+html:not(.dark) .fixed.inset-0 .relative:has(form),
+html:not(.dark) .fixed.inset-0 .relative:has(h2),
+html:not(.dark) .fixed.inset-0 .relative:has(h3) {
+  background-color: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
 }
 
 /* Touch-friendly helpers */

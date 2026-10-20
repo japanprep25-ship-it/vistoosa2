@@ -295,6 +295,39 @@ export const OrderFilterPanel: React.FC<OrderFilterPanelProps> = ({
           </div>
         </div>
 
+        {/* Quick Channels Bar inside Filter Section */}
+        <div className="px-4 py-2.5 bg-zinc-900/60 border-b border-zinc-800/80 flex items-center gap-1.5 overflow-x-auto scrollbar-none shrink-0">
+          <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider shrink-0 mr-1">
+            Channel:
+          </span>
+          <button
+            onClick={() => setAllArrayItems('channels', [], false)}
+            className={`px-2.5 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
+              filters.channels.length === 0
+                ? 'bg-amber-500 text-zinc-950 font-bold shadow-sm'
+                : 'bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800 border border-zinc-800'
+            }`}
+          >
+            All Channels
+          </button>
+          {(['WhatsApp', 'Facebook', 'Instagram', 'Website', 'Showroom'] as OrderChannel[]).map((ch) => {
+            const isActive = filters.channels.includes(ch);
+            return (
+              <button
+                key={ch}
+                onClick={() => toggleArrayItem('channels', ch)}
+                className={`px-2.5 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
+                  isActive
+                    ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40 font-bold'
+                    : 'bg-zinc-900/60 text-zinc-400 hover:text-white hover:bg-zinc-800 border border-zinc-800'
+                }`}
+              >
+                {ch}
+              </button>
+            );
+          })}
+        </div>
+
         {/* Drawer Scrollable Filter Accordions */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin scrollbar-thumb-zinc-800">
           {/* 1. ORDER STATUS FILTER */}
@@ -505,10 +538,21 @@ export const OrderFilterPanel: React.FC<OrderFilterPanelProps> = ({
             </button>
 
             {expandedSections.channel && (
-              <div className="p-3 pt-1 border-t border-zinc-800/60 space-y-1.5 bg-zinc-950/40">
+              <div className="p-3 pt-1 border-t border-zinc-800/60 space-y-2 bg-zinc-950/40">
                 <div className="flex justify-between items-center mb-1 px-1">
                   <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">Channels</span>
-                  <div className="flex gap-2 text-[10px]">
+                  <div className="flex items-center gap-2 text-[10px]">
+                    <button
+                      onClick={() => setAllArrayItems('channels', [], false)}
+                      className={`font-semibold cursor-pointer transition ${
+                        filters.channels.length === 0
+                          ? 'text-amber-400 underline font-bold'
+                          : 'text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      All Channels
+                    </button>
+                    <span className="text-zinc-700">|</span>
                     <button
                       onClick={() =>
                         setAllArrayItems(
@@ -517,7 +561,7 @@ export const OrderFilterPanel: React.FC<OrderFilterPanelProps> = ({
                           true
                         )
                       }
-                      className="text-amber-400 hover:underline cursor-pointer font-medium"
+                      className="text-zinc-400 hover:text-zinc-200 hover:underline cursor-pointer font-medium"
                     >
                       Select All
                     </button>
@@ -530,6 +574,29 @@ export const OrderFilterPanel: React.FC<OrderFilterPanelProps> = ({
                     </button>
                   </div>
                 </div>
+
+                {/* All Channels Option Card */}
+                <button
+                  type="button"
+                  onClick={() => setAllArrayItems('channels', [], false)}
+                  className={`w-full flex items-center justify-between p-2 rounded-xl border text-xs cursor-pointer transition ${
+                    filters.channels.length === 0
+                      ? 'bg-amber-500/15 border-amber-500/50 text-amber-200 font-bold shadow-sm'
+                      : 'bg-zinc-900/60 border-zinc-800/80 text-zinc-300 hover:bg-zinc-900'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`w-2.5 h-2.5 rounded-full ${
+                        filters.channels.length === 0 ? 'bg-amber-400 ring-2 ring-amber-400/30' : 'bg-zinc-600'
+                      }`}
+                    />
+                    <span>All Channels (সকল চ্যানেল)</span>
+                  </div>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-950 text-zinc-400">
+                    {orders.length} orders
+                  </span>
+                </button>
 
                 {[
                   { name: 'Facebook', badgeColor: 'text-blue-400 bg-blue-500/10 border-blue-500/30' },

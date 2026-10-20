@@ -35,9 +35,10 @@ import {
   CheckSquare,
   Square,
   Printer,
+  ArrowUpDown,
 } from 'lucide-react';
 import { Order, OrderStatus, OrderChannel, Product } from '../types';
-import { LabelPreviewModal, CourierLabelButton } from './CourierLabel';
+import { LabelPreviewModal } from './CourierLabel';
 import { useLanguage } from '../contexts/LanguageContext';
 import { ALL_DISTRICT_NAMES, detectDistrict } from '../utils/districtDetector';
 import {
@@ -113,9 +114,46 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
   const [dashboardFromDate, setDashboardFromDate] = useState('');
   const [dashboardToDate, setDashboardToDate] = useState('');
 
-  // Partition orders into Active (non-deleted) and Trashed (isDeleted: true)
-  const activeOrders = useMemo(() => orders.filter((o) => !o.isDeleted), [orders]);
-  const trashedOrders = useMemo(() => orders.filter((o) => o.isDeleted === true), [orders]);
+  // Sort order: 'desc' = Latest to Previous (default), 'asc' = Oldest to Latest
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
+
+  // Helper function: Sort orders chronologically (latest date/ID first)
+  const sortOrdersByDate = (a: Order, b: Order, direction: 'desc' | 'asc' = 'desc'): number => {
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    const validA = !isNaN(timeA) && timeA > 0;
+    const validB = !isNaN(timeB) && timeB > 0;
+
+    let diff = 0;
+    if (validA && validB && timeA !== timeB) {
+      diff = timeB - timeA; // Descending: latest date first
+    } else if (validA && !validB) {
+      diff = -1; // Orders with valid timestamp come first
+    } else if (!validA && validB) {
+      diff = 1;
+    } else {
+      // Fallback: compare numerical part of ID (e.g. VIS-2045 vs VIS-2041)
+      const numA = parseInt((a.id || '').replace(/\D/g, ''), 10);
+      const numB = parseInt((b.id || '').replace(/\D/g, ''), 10);
+      if (!isNaN(numA) && !isNaN(numB) && numA !== numB) {
+        diff = numB - numA; // Higher ID is latest
+      } else {
+        diff = (b.id || '').localeCompare(a.id || '');
+      }
+    }
+
+    return direction === 'desc' ? diff : -diff;
+  };
+
+  // Partition orders into Active (non-deleted) and Trashed (isDeleted: true), sorted latest first
+  const activeOrders = useMemo(
+    () => orders.filter((o) => !o.isDeleted).sort((a, b) => sortOrdersByDate(a, b, 'desc')),
+    [orders]
+  );
+  const trashedOrders = useMemo(
+    () => orders.filter((o) => o.isDeleted === true).sort((a, b) => sortOrdersByDate(a, b, 'desc')),
+    [orders]
+  );
 
   // Compute status counts for badge tabs
   const statusCounts = useMemo(() => {
@@ -548,8 +586,8 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
         );
       }
     }
-    return list;
-  }, [activeOrders, filters, searchQuery, returnSubFilter]);
+    return [...list].sort((a, b) => sortOrdersByDate(a, b, sortOrder));
+  }, [activeOrders, filters, searchQuery, returnSubFilter, sortOrder]);
 
   // Filter active orders for Order Engine Analytics Dashboard based on Date Range
   const dashboardFilteredOrders = useMemo(() => {
@@ -618,20 +656,22 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
 
   // Filter Trashed orders using search query
   const filteredTrashedOrders = useMemo(() => {
-    if (!searchQuery.trim()) return trashedOrders;
-    const q = searchQuery.toLowerCase().trim();
-    return trashedOrders.filter((o) => {
-      const firstItem = o.items && o.items[0];
-      return (
-        o.id.toLowerCase().includes(q) ||
-        o.customerName.toLowerCase().includes(q) ||
-        o.phone.includes(q) ||
-        (o.address && o.address.toLowerCase().includes(q)) ||
-        (o.district && o.district.toLowerCase().includes(q)) ||
-        (firstItem?.productName && firstItem.productName.toLowerCase().includes(q))
-      );
-    });
-  }, [trashedOrders, searchQuery]);
+    const list = !searchQuery.trim()
+      ? trashedOrders
+      : trashedOrders.filter((o) => {
+          const q = searchQuery.toLowerCase().trim();
+          const firstItem = o.items && o.items[0];
+          return (
+            o.id.toLowerCase().includes(q) ||
+            o.customerName.toLowerCase().includes(q) ||
+            o.phone.includes(q) ||
+            (o.address && o.address.toLowerCase().includes(q)) ||
+            (o.district && o.district.toLowerCase().includes(q)) ||
+            (firstItem?.productName && firstItem.productName.toLowerCase().includes(q))
+          );
+        });
+    return [...list].sort((a, b) => sortOrdersByDate(a, b, sortOrder));
+  }, [trashedOrders, searchQuery, sortOrder]);
 
   // Displayed orders depending on viewMode ('active' vs 'trash')
   const displayedOrders = viewMode === 'active' ? filteredActiveOrders : filteredTrashedOrders;
@@ -902,45 +942,6 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
             )}
           </button>
 
-          {/* Import from CSV Button */}
-          <button
-            onClick={() => setIsImportModalOpen(true)}
-            className="flex items-center gap-2 px-3.5 py-2.5 rounded-2xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 text-xs font-bold shadow-sm active:scale-95 transition cursor-pointer"
-          >
-            <Upload className="w-4 h-4 text-amber-400" />
-            <span>Import from CSV</span>
-          </button>
-
-          {/* Export to CSV Date Range Group */}
-          <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-zinc-900/90 border border-zinc-800 text-xs">
-            <div className="flex items-center gap-1 px-1.5 py-1">
-              <span className="text-[11px] text-zinc-400 font-medium">From:</span>
-              <input
-                type="date"
-                value={exportFromDate}
-                onChange={(e) => setExportFromDate(e.target.value)}
-                className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-[11px] text-zinc-200 focus:outline-none focus:border-amber-500 cursor-pointer"
-              />
-            </div>
-            <div className="flex items-center gap-1 px-1.5 py-1">
-              <span className="text-[11px] text-zinc-400 font-medium">To:</span>
-              <input
-                type="date"
-                value={exportToDate}
-                onChange={(e) => setExportToDate(e.target.value)}
-                className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-[11px] text-zinc-200 focus:outline-none focus:border-amber-500 cursor-pointer"
-              />
-            </div>
-            <button
-              onClick={handleExportCsv}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-sm active:scale-95 transition cursor-pointer"
-              title="Export filtered active orders to CSV"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Export to CSV</span>
-            </button>
-          </div>
-
           {/* New Manual Order Button */}
           <button
             id="btn-create-new-order"
@@ -1176,6 +1177,110 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
               })}
             </div>
           </div>
+
+          {/* Data Import & Export Hub inside Dashboard */}
+          <div className="glass-panel rounded-3xl p-6 border-zinc-800 space-y-5">
+            <div>
+              <h4 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                <span>Data Management & Reports (ইমপোর্ট ও এক্সপোর্ট)</span>
+              </h4>
+              <p className="text-xs text-zinc-400 mt-1">
+                CSV ফাইল থেকে সরাসরি বাল্ক অর্ডার ইমপোর্ট করুন অথবা যেকোনো নির্দিষ্ট তারিখ অনুযায়ী সম্পূর্ণ অর্ডার ডাটা এক্সপোর্ট করুন।
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Import Orders Card */}
+              <div className="p-5 rounded-2xl bg-zinc-950/70 border border-zinc-800/80 flex flex-col justify-between gap-4">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400">
+                      <Upload className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h5 className="text-sm font-bold text-white">Import Orders from CSV</h5>
+                      <p className="text-[11px] text-zinc-400">Shopify / WooCommerce / Excel CSV ইমপোর্ট</p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-zinc-400 leading-relaxed">
+                    বাল্ক অর্ডার স্প্রেডশীট আপলোড করুন। অটোমেটিক কলাম ম্যাপিং (Customer Name, Phone, Address, Product, Size, Price, Delivery Fee ইত্যাদি) সম্পন্ন হবে।
+                  </p>
+                </div>
+
+                <div className="pt-3 border-t border-zinc-800/60 flex items-center justify-between">
+                  <span className="text-[11px] text-zinc-500 font-mono">Format: .csv (UTF-8)</span>
+                  <button
+                    onClick={() => setIsImportModalOpen(true)}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold shadow-md shadow-amber-500/20 active:scale-95 transition cursor-pointer"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Open CSV Importer</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Export Orders Card */}
+              <div className="p-5 rounded-2xl bg-zinc-950/70 border border-zinc-800/80 flex flex-col justify-between gap-4">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400">
+                      <Download className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h5 className="text-sm font-bold text-white">Export Orders to CSV</h5>
+                      <p className="text-[11px] text-zinc-400">তারিখ ফিল্টার অনুযায়ী এক্সপোর্ট করুন</p>
+                    </div>
+                  </div>
+
+                  {/* Export Date Range Inputs */}
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div>
+                      <span className="text-[11px] text-zinc-400 font-medium block mb-1">From Date:</span>
+                      <input
+                        type="date"
+                        value={exportFromDate}
+                        onChange={(e) => setExportFromDate(e.target.value)}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-[11px] text-zinc-400 font-medium block mb-1">To Date:</span>
+                      <input
+                        type="date"
+                        value={exportToDate}
+                        onChange={(e) => setExportToDate(e.target.value)}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-zinc-800/60 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExportFromDate(dashboardFromDate);
+                      setExportToDate(dashboardToDate);
+                    }}
+                    className="text-[11px] text-zinc-400 hover:text-amber-400 transition cursor-pointer flex items-center gap-1 font-medium"
+                    title="Dashboard এর তারিখ দিয়ে এক্সপোর্ট ফিল্টার সিঙ্ক করুন"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>Sync Dashboard Dates</span>
+                  </button>
+                  <button
+                    onClick={handleExportCsv}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 active:scale-95 transition cursor-pointer"
+                    title="Export active orders to CSV"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Download CSV</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       ) : (
         <>
@@ -1198,7 +1303,7 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
           <div className="flex items-center gap-1.5 overflow-x-auto w-full pb-1 md:pb-0 scrollbar-none">
             {[
               { id: 'All', label: 'All', count: statusCounts.all },
-              { id: 'Pending', label: 'Approve', count: statusCounts.pending },
+              { id: 'Pending', label: 'Pending', count: statusCounts.pending },
               { id: 'Approved', label: 'Approved', count: statusCounts.approved },
               { id: 'Dispatched', label: t('orders.dispatchedTab'), count: statusCounts.dispatched },
               { id: 'Delivered', label: t('orders.deliveredTab'), count: statusCounts.delivered },
@@ -1238,38 +1343,8 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
             })}
           </div>
 
-          {/* Channel Select & Filter Panel Button */}
+          {/* Excel Filter Panel Funnel Button */}
           <div className="flex items-center gap-2 ml-auto shrink-0">
-            <select
-              value={
-                filters.channels.length === 0
-                  ? 'All'
-                  : filters.channels.length === 1
-                  ? filters.channels[0]
-                  : 'Multiple'
-              }
-              onChange={(e) => {
-                const val = e.target.value;
-                if (val === 'All') {
-                  setFilters((prev) => ({ ...prev, channels: [] }));
-                } else if (val !== 'Multiple') {
-                  setFilters((prev) => ({ ...prev, channels: [val as OrderChannel] }));
-                }
-              }}
-              className="rounded-xl bg-zinc-900 border border-zinc-800 px-3 py-1.5 text-xs text-zinc-300 focus:outline-none focus:border-amber-500 cursor-pointer"
-            >
-              <option value="All">All Channels</option>
-              {filters.channels.length > 1 && (
-                <option value="Multiple">Multiple Channels ({filters.channels.length})</option>
-              )}
-              <option value="WhatsApp">WhatsApp</option>
-              <option value="Facebook">Facebook</option>
-              <option value="Instagram">Instagram</option>
-              <option value="Website">Website</option>
-              <option value="Showroom">Showroom</option>
-            </select>
-
-            {/* Excel Filter Panel Funnel Button */}
             <button
               id="btn-open-excel-filter-panel"
               onClick={() => setIsFilterPanelOpen(true)}
@@ -1510,7 +1585,7 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
 
         {/* Counter Readout & Selection Toolbar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-zinc-400 px-1">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={handleToggleSelectAll}
               className="flex items-center gap-2 px-2.5 py-1 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-200 hover:text-white hover:border-zinc-700 text-xs font-bold transition cursor-pointer"
@@ -1526,6 +1601,19 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
               Showing <strong className="text-amber-400 font-bold">{displayedOrders.length}</strong> of{' '}
               {viewMode === 'active' ? activeOrders.length : trashedOrders.length} {viewMode === 'active' ? 'active' : 'trashed'} orders
             </span>
+
+            {/* Sort Order Selector (Latest to Previous / Oldest First) */}
+            <button
+              type="button"
+              onClick={() => setSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-amber-500/50 text-zinc-300 hover:text-amber-300 text-xs font-medium transition cursor-pointer shadow-sm"
+              title="Click to toggle sorting order"
+            >
+              <ArrowUpDown className="w-3.5 h-3.5 text-amber-400" />
+              <span>
+                {sortOrder === 'desc' ? 'Sort: Latest to Previous (সর্বশেষ আগে)' : 'Sort: Oldest to Latest (পুরোনো আগে)'}
+              </span>
+            </button>
           </div>
 
           {activeFilterCount > 0 && viewMode === 'active' && (
@@ -1851,40 +1939,15 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                         )}
 
                         {order.status === 'Approved' && (
-                          <div className="flex gap-2">
-                            <CourierLabelButton
-                              buttonText="Print Label"
-                              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-white text-xs font-bold shadow-sm transition active:scale-95 cursor-pointer"
-                              order={{
-                                id: order.id,
-                                date: new Date(order.createdAt).toLocaleDateString("en-GB"),
-                                recipientName: order.customerName,
-                                phone: order.phone,
-                                address: order.address,
-                                courier: order.courier || "—",
-                                consignmentId: order.pathaoConsignmentId || "",
-                                weight: order.weight || "1 KG",
-                                products: (order.items || []).map(i => ({
-                                  name: i.productName,
-                                  size: i.size,
-                                  qty: i.quantity,
-                                  price: i.unitPrice
-                                })),
-                                deliveryCharge: order.deliveryCharge || order.deliveryFee || 0,
-                                discount: order.discount || 0,
-                                advance: order.advance || 0
-                              }}
-                            />
-                            <button
-                              id={`btn-dispatch-order-${order.id}`}
-                              onClick={() => onGoToDispatch(order.id)}
-                              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold shadow-sm transition active:scale-95 cursor-pointer"
-                            >
-                              <Layers className="w-3.5 h-3.5" />
-                              <span>Pack & Scan Barcode</span>
-                              <ChevronRight className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
+                          <button
+                            id={`btn-dispatch-order-${order.id}`}
+                            onClick={() => onGoToDispatch(order.id)}
+                            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold shadow-sm transition active:scale-95 cursor-pointer"
+                          >
+                            <Layers className="w-3.5 h-3.5" />
+                            <span>Pack & Scan Barcode</span>
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          </button>
                         )}
 
                         {order.status === 'Dispatched' && (

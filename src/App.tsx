@@ -190,7 +190,7 @@ export default function App() {
     } else {
       document.documentElement.classList.remove('dark');
       document.body.classList.remove('dark');
-      document.body.style.backgroundColor = '#f8fafc';
+      document.body.style.backgroundColor = '#f1f5f9';
       document.body.style.color = '#09090b';
     }
   }, [isDarkMode]);
@@ -754,7 +754,7 @@ export default function App() {
 
   return (
     <div
-      className={`min-h-screen ${isDarkMode ? 'dark bg-[#0f0f14] text-zinc-100' : 'bg-[#f8fafc] text-zinc-900'} flex flex-col font-sans transition-colors duration-300`}
+      className={`min-h-screen ${isDarkMode ? 'dark bg-[#0f0f14] text-zinc-100' : 'bg-[#f1f5f9] text-[#09090b]'} flex flex-col font-sans transition-colors duration-300`}
     >
       {/* Welcome Greeting Screen (Requirement 7) */}
       {welcomeUser && (

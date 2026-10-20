@@ -526,9 +526,56 @@ export default function App() {
     }
   };
 
+  // Play sound chime and trigger browser/audio notification for new incoming orders
+  const playNewOrderChime = (order: Order) => {
+    try {
+      // 1. Audio synthesis chime (pleasant double beep / ding)
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const playTone = (freq: number, start: number, duration: number) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime + start);
+        gain.gain.setValueAtTime(0.25, audioCtx.currentTime + start);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + start + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(audioCtx.currentTime + start);
+        osc.stop(audioCtx.currentTime + start + duration);
+      };
+      playTone(523.25, 0, 0.15); // C5
+      playTone(659.25, 0.15, 0.15); // E5
+      playTone(783.99, 0.3, 0.3); // G5
+    } catch (e) {
+      // ignore audio context restrictions if user hasn't interacted yet
+    }
+
+    // 2. Browser Web Notification (if permitted)
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'granted') {
+        new Notification(`নতুন অর্ডার এসেছে! (New Order #${order.id})`, {
+          body: `${order.customerName || 'Customer'} - ৳${order.totalAmount || 0} (${order.channel || 'Website'})`,
+          icon: '/api/brand/image/icon-192.png',
+        });
+      } else if (Notification.permission !== 'denied') {
+        Notification.requestPermission().then((permission) => {
+          if (permission === 'granted') {
+            new Notification(`নতুন অর্ডার এসেছে! (New Order #${order.id})`, {
+              body: `${order.customerName || 'Customer'} - ৳${order.totalAmount || 0} (${order.channel || 'Website'})`,
+              icon: '/api/brand/image/icon-192.png',
+            });
+          }
+        });
+      }
+    }
+  };
+
   const handleCreateOrder = (newOrder: Partial<Order>) => {
     const fullOrder = newOrder as Order;
     setOrders((prev) => [fullOrder, ...prev]);
+
+    // Trigger phone audio & browser notification
+    playNewOrderChime(fullOrder);
 
     // If created directly in approved state, reserve stock
     if (fullOrder.status === 'Approved') {

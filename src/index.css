@@ -104,11 +104,8 @@ html:not(.dark) .text-zinc-600 {
   font-weight: 500;
 }
 
-/* Status & Colored Text Adjustments for Light Mode Readability */
-html:not(.dark) .text-amber-500,
-html:not(.dark) .text-amber-400,
-html:not(.dark) .text-amber-300 {
-  color: #92400e !important; /* amber-800: sharp & high-contrast on light backgrounds */
+html:not(.dark) :is(.text-amber-500, .text-amber-400, .text-amber-300) {
+  color: var(--color-amber-600, #92400e) !important;
   font-weight: 600;
 }
 

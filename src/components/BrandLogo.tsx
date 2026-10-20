@@ -39,12 +39,19 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
     setHasError(false);
   }, [meta.version]);
 
-  const defaultLogo = isDark ? logoDark || logoLight : logoLight;
-
-  let logoSrc = defaultLogo;
-  if (meta.hasCustomLogo && !hasError) {
-    logoSrc = getLogoUrl(isDark);
+  if (!meta.hasCustomLogo || hasError) {
+    return (
+      <div 
+        className={`shrink-0 inline-flex items-center justify-center bg-transparent border border-dashed border-zinc-700/50 rounded-xl px-2 py-1 ${className}`}
+        style={{ height: `${computedHeight}px`, minWidth: `${computedHeight * 2.2}px` }}
+        title="Logo box (Upload your logo in Settings)"
+      >
+        <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-wider">Logo</span>
+      </div>
+    );
   }
+
+  let logoSrc = getLogoUrl(isDark);
 
   const needsWhiteTile = isDark && meta.hasCustomLogo && !meta.hasDarkLogo && !hasError;
 

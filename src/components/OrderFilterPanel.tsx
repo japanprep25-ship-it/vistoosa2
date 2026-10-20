@@ -49,7 +49,7 @@ export const initialFilterState: OrderFilterState = {
 
 export const countActiveFilters = (filters: OrderFilterState): number => {
   let count = 0;
-  if (filters.statuses.length > 0) count++;
+  // Note: filters.statuses is controlled via the main status tabs bar, so we don't count it as an "advanced" active filter chip here
   if (filters.districts.length > 0) count++;
   if (filters.channels.length > 0) count++;
   if (filters.paymentMethods.length > 0) count++;

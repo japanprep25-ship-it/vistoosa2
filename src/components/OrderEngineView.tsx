@@ -91,7 +91,7 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
   onRestoreOrders,
   onPermanentDeleteOrders,
 }) => {
-  const { t } = useLanguage();
+  const { t, isBangla } = useLanguage();
   const [filters, setFilters] = useState<OrderFilterState>(initialFilterState);
   const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -116,6 +116,7 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
 
   // Sort order: 'desc' = Latest to Previous (default), 'asc' = Oldest to Latest
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
+  const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
 
   // Helper function: Sort orders chronologically (latest date/ID first)
   const sortOrdersByDate = (a: Order, b: Order, direction: 'desc' | 'asc' = 'desc'): number => {
@@ -1366,6 +1367,34 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
           </div>
         </div>
 
+        {/* Sort Order Selector */}
+        <div className="relative mt-2">
+          <button
+            type="button"
+            onClick={() => setIsSortMenuOpen(!isSortMenuOpen)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-amber-500/50 text-zinc-300 hover:text-amber-300 text-xs font-medium transition cursor-pointer shadow-sm"
+          >
+            <ArrowUpDown className="w-3.5 h-3.5 text-amber-400" />
+            <span>Sort</span>
+          </button>
+          {isSortMenuOpen && (
+            <div className="absolute left-0 top-full mt-2 w-48 bg-zinc-900 border border-zinc-800 rounded-xl shadow-xl z-20 overflow-hidden">
+              <button
+                onClick={() => { setSortOrder('desc'); setIsSortMenuOpen(false); }}
+                className="w-full text-left px-4 py-2.5 text-xs text-zinc-200 hover:bg-zinc-800 cursor-pointer"
+              >
+                Latest to Previous
+              </button>
+              <button
+                onClick={() => { setSortOrder('asc'); setIsSortMenuOpen(false); }}
+                className="w-full text-left px-4 py-2.5 text-xs text-zinc-200 hover:bg-zinc-800 cursor-pointer"
+              >
+                Previous to Latest
+              </button>
+            </div>
+          )}
+        </div>
+
         {/* Return Sub-Tabs Bar (Shown when Return status is selected) */}
         {filters.statuses.includes('Return' as OrderStatus) && (
           <div className="flex items-center gap-2 p-2 rounded-2xl bg-rose-950/20 border border-rose-500/30 text-xs animate-fade-in">
@@ -1583,45 +1612,38 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
           </div>
         )}
 
-        {/* Counter Readout & Selection Toolbar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-zinc-400 px-1">
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              onClick={handleToggleSelectAll}
-              className="flex items-center gap-2 px-2.5 py-1 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-200 hover:text-white hover:border-zinc-700 text-xs font-bold transition cursor-pointer"
-            >
-              {isAllSelected ? (
-                <CheckSquare className="w-4 h-4 text-amber-400" />
-              ) : (
-                <Square className="w-4 h-4 text-zinc-500" />
-              )}
-              <span>Select All ({displayedOrders.length})</span>
-            </button>
-            <span className="font-mono">
-              Showing <strong className="text-amber-400 font-bold">{displayedOrders.length}</strong> of{' '}
-              {viewMode === 'active' ? activeOrders.length : trashedOrders.length} {viewMode === 'active' ? 'active' : 'trashed'} orders
-            </span>
 
-            {/* Sort Order Selector (Latest to Previous / Oldest First) */}
-            <button
-              type="button"
-              onClick={() => setSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-amber-500/50 text-zinc-300 hover:text-amber-300 text-xs font-medium transition cursor-pointer shadow-sm"
-              title="Click to toggle sorting order"
-            >
-              <ArrowUpDown className="w-3.5 h-3.5 text-amber-400" />
-              <span>
-                {sortOrder === 'desc' ? 'Sort: Latest to Previous (সর্বশেষ আগে)' : 'Sort: Oldest to Latest (পুরোনো আগে)'}
-              </span>
-            </button>
-          </div>
 
-          {activeFilterCount > 0 && viewMode === 'active' && (
+        {/* Selection Toolbar */}
+        {selectedOrderIds.length > 0 && (
+           <div className="flex items-center gap-3 px-1 mt-2">
+             {/* Select All (Double Tap) */}
+             <button
+                onClick={(e) => {
+                  if (e.detail === 2) {
+                    handleToggleSelectAll();
+                  }
+                }}
+                className="flex items-center gap-2 px-2.5 py-1 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white text-xs font-bold transition cursor-pointer"
+                title="Double tap to Select All"
+              >
+                {isAllSelected ? (
+                  <CheckSquare className="w-4 h-4 text-amber-400" />
+                ) : (
+                  <Square className="w-4 h-4 text-zinc-500" />
+                )}
+                <span>Select All</span>
+              </button>
+           </div>
+        )}
+        
+        {activeFilterCount > 0 && viewMode === 'active' && (
+          <div className="px-1 pt-2">
             <span className="text-[11px] text-amber-400 font-sans font-semibold">
               ({activeFilterCount} active filter criteria)
             </span>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Floating Bulk Action Bar when items are selected */}
         {selectedOrderIds.length > 0 && (
@@ -1631,7 +1653,7 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                 {selectedOrderIds.length}
               </span>
               <span className="text-xs font-bold text-amber-200">
-                {selectedOrderIds.length}টি অর্ডার সিলেক্ট করা হয়েছে
+                {selectedOrderIds.length} {isBangla ? 'টি অর্ডার সিলেক্ট করা হয়েছে' : 'orders selected'}
               </span>
             </div>
 
@@ -1926,7 +1948,7 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                               title="Trigger automated Pathao pickup and move to Approved"
                             >
                               <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span>Approve & Pathao Pickup</span>
+                              <span>Approve</span>
                             </button>
 
                             <button
@@ -1945,7 +1967,7 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                             className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold shadow-sm transition active:scale-95 cursor-pointer"
                           >
                             <Layers className="w-3.5 h-3.5" />
-                            <span>Pack & Scan Barcode</span>
+                            <span>Scan</span>
                             <ChevronRight className="w-3.5 h-3.5" />
                           </button>
                         )}

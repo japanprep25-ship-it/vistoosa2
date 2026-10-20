@@ -560,6 +560,8 @@ export function mountMetaIntegrationRoutes(app: Express) {
     const config = await loadMetaConfig();
     const expectedToken = config.metaVerifyToken || DEFAULT_VERIFY_TOKEN;
 
+    console.log(`[Meta Webhook GET]: Params=`, JSON.stringify(req.query));
+
     if (mode === 'subscribe' && token === expectedToken) {
       console.log('[Meta Webhook Verified]: Challenge accepted from Meta Graph API.');
       return res.status(200).send(challenge);
@@ -577,6 +579,7 @@ export function mountMetaIntegrationRoutes(app: Express) {
 
   // Incoming Meta Webhook Messages (POST /webhook/meta and /api/webhook/meta)
   const handleIncomingMetaWebhook = async (req: Request, res: Response) => {
+    console.log(`[Meta Webhook POST]: Path=${req.path}, Body=`, JSON.stringify(req.body));
     const config = await loadMetaConfig();
 
     // Verify HMAC signature if secret is present
@@ -587,13 +590,15 @@ export function mountMetaIntegrationRoutes(app: Express) {
 
     const payload = req.body || {};
 
-    // 1. Respond 200 OK immediately so Meta does not timeout or retry
+    // 1. Respond 200 OK immediately
     res.status(200).json({ status: 'EVENT_RECEIVED' });
 
     // 2. Process message asynchronously in background job
     setImmediate(async () => {
       try {
+        console.log('[Meta Webhook]: Processing payload asynchronously');
         await processIncomingMetaPayload(payload);
+        console.log('[Meta Webhook]: Processing completed');
       } catch (err) {
         console.error('[Meta Webhook Background Processing Error]:', err);
       }

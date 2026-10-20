@@ -16,6 +16,9 @@ export default defineConfig(() => {
         devOptions: {
           enabled: false,
         },
+        workbox: {
+          maximumFileSizeToCacheInBytes: 5000000,
+        },
       }),
     ],
     resolve: {

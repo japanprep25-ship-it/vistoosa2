@@ -1,9 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { db } from '../firebase';
 
 export interface BrandMeta {
-  version: number;
-  hasCustomLogo: boolean;
-  hasDarkLogo: boolean;
+  logoUrl?: string;
+  darkLogoUrl?: string;
+  faviconUrl?: string;
+  appIconUrl?: string;
+  updatedAt: number;
 }
 
 interface BrandContextType {
@@ -14,153 +18,64 @@ interface BrandContextType {
 }
 
 const DEFAULT_META: BrandMeta = {
-  version: Date.now(),
-  hasCustomLogo: false,
-  hasDarkLogo: false,
+  updatedAt: Date.now(),
 };
-
-const LOCAL_STORAGE_KEY = 'vistoosa_brand_meta';
 
 const BrandContext = createContext<BrandContextType | undefined>(undefined);
 
 export const BrandProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [meta, setMeta] = useState<BrandMeta>(() => {
-    try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed.version === 'number') {
-          return {
-            version: parsed.version,
-            hasCustomLogo: Boolean(parsed.hasCustomLogo),
-            hasDarkLogo: Boolean(parsed.hasDarkLogo),
-          };
-        }
-      }
-    } catch {
-      // Speed hint fallback
-    }
-    return DEFAULT_META;
-  });
-
+  const [meta, setMeta] = useState<BrandMeta>(DEFAULT_META);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   // Helper to sync DOM head link tags
   const syncDomHeadTags = useCallback((currentMeta: BrandMeta) => {
-    const v = currentMeta.version;
-
     // Update Favicon links
     const favIco = document.querySelector<HTMLLinkElement>('link[rel="icon"][type="image/x-icon"]');
-    if (favIco) favIco.href = `/api/brand/favicon.ico?v=${v}`;
-
-    const fav16 = document.querySelector<HTMLLinkElement>('link[rel="icon"][sizes="16x16"]');
-    if (fav16) fav16.href = `/api/brand/image/icon-16.png?v=${v}`;
-
-    const fav32 = document.querySelector<HTMLLinkElement>('link[rel="icon"][sizes="32x32"]');
-    if (fav32) fav32.href = `/api/brand/image/icon-32.png?v=${v}`;
-
-    const fav48 = document.querySelector<HTMLLinkElement>('link[rel="icon"][sizes="48x48"]');
-    if (fav48) fav48.href = `/api/brand/image/icon-48.png?v=${v}`;
+    if (favIco && currentMeta.faviconUrl) favIco.href = currentMeta.faviconUrl;
 
     // Update Apple Touch Icon
     const appleIcon = document.querySelector<HTMLLinkElement>('link[rel="apple-touch-icon"]');
-    if (appleIcon) appleIcon.href = `/api/brand/image/icon-180.png?v=${v}`;
-
-    // Update Manifest Link
-    const manifest = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
-    if (manifest) manifest.href = `/api/brand/manifest.webmanifest?v=${v}`;
+    if (appleIcon && currentMeta.appIconUrl) appleIcon.href = currentMeta.appIconUrl;
 
     // Update OG Image
     const ogImage = document.querySelector<HTMLMetaElement>('meta[property="og:image"]');
-    if (ogImage) ogImage.content = `/api/brand/image/logo-512.png?v=${v}`;
+    if (ogImage && currentMeta.logoUrl) ogImage.content = currentMeta.logoUrl;
   }, []);
 
   const fetchMeta = useCallback(async () => {
     try {
-      const rawToken = typeof window !== 'undefined' ? localStorage.getItem('vistoosa_auth_token') || '' : '';
-      const token = rawToken.replace(/^"|"$/g, '');
-      const res = await fetch('/api/brand/meta', {
-        cache: 'no-store',
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      });
-
-      const text = await res.text();
-      let data: any = null;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        data = {
-          success: false,
-          message: `Server returned non-JSON response (HTTP ${res.status}): ${text.slice(0, 120)}`,
-        };
-      }
-
-      if (res.ok && data && data.success && typeof data.version === 'number') {
-        const newMeta: BrandMeta = {
-          version: data.version,
-          hasCustomLogo: Boolean(data.hasCustomLogo),
-          hasDarkLogo: Boolean(data.hasDarkLogo),
-        };
-
-        setMeta((prev) => {
-          if (
-            prev.version !== newMeta.version ||
-            prev.hasCustomLogo !== newMeta.hasCustomLogo ||
-            prev.hasDarkLogo !== newMeta.hasDarkLogo
-          ) {
-            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(newMeta));
-            syncDomHeadTags(newMeta);
-            return newMeta;
-          }
-          return prev;
-        });
+      const docRef = doc(db, 'settings', 'branding');
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const data = docSnap.data() as BrandMeta;
+        setMeta(data);
+        syncDomHeadTags(data);
       }
     } catch (err) {
-      console.warn('[BrandContext]: Unable to poll brand metadata:', err);
+      console.warn('[BrandContext]: Unable to fetch brand metadata:', err);
     } finally {
       setIsLoading(false);
     }
   }, [syncDomHeadTags]);
 
   useEffect(() => {
-    fetchMeta();
-
-    // Re-fetch when window gains focus or tab becomes visible
-    const handleFocus = () => {
-      fetchMeta();
-    };
-
-    window.addEventListener('focus', handleFocus);
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') {
-        fetchMeta();
-      }
+    const docRef = doc(db, 'settings', 'branding');
+    const unsub = onSnapshot(docRef, (doc) => {
+        if (doc.exists()) {
+            const data = doc.data() as BrandMeta;
+            setMeta(data);
+            syncDomHeadTags(data);
+        }
+        setIsLoading(false);
     });
-
-    // Poll every 5 minutes (300,000 ms)
-    const interval = setInterval(fetchMeta, 300000);
-
-    return () => {
-      window.removeEventListener('focus', handleFocus);
-      document.removeEventListener('visibilitychange', handleFocus);
-      clearInterval(interval);
-    };
-  }, [fetchMeta]);
-
-  useEffect(() => {
-    syncDomHeadTags(meta);
-  }, [meta, syncDomHeadTags]);
+    return unsub;
+  }, [syncDomHeadTags]);
 
   const getLogoUrl = useCallback((isDark = true) => {
-    if (!meta.hasCustomLogo) {
-      return '';
+    if (isDark && meta.darkLogoUrl) {
+      return meta.darkLogoUrl;
     }
-    if (isDark && meta.hasDarkLogo) {
-      return `/api/brand/image/logo-dark-512.png?v=${meta.version}`;
-    }
-    return `/api/brand/image/logo-512.png?v=${meta.version}`;
+    return meta.logoUrl || '';
   }, [meta]);
 
   return (
@@ -169,6 +84,7 @@ export const BrandProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     </BrandContext.Provider>
   );
 };
+
 
 export const useBrand = () => {
   const ctx = useContext(BrandContext);

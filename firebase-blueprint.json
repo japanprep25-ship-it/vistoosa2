@@ -1,0 +1,22 @@
+{
+  "entities": {
+    "BrandingSettings": {
+      "title": "BrandingSettings",
+      "description": "Branding settings including logo, favicon, and app icon URLs",
+      "type": "object",
+      "properties": {
+        "logoUrl": { "type": "string" },
+        "darkLogoUrl": { "type": "string" },
+        "faviconUrl": { "type": "string" },
+        "appIconUrl": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "firestore": {
+    "/settings/branding": {
+      "schema": { "$ref": "BrandingSettings" },
+      "description": "Branding assets storage"
+    }
+  }
+}

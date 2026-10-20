@@ -47,6 +47,9 @@ app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 app.use(express.text({ limit: '15mb', type: ['text/plain', 'text/json', 'application/json-patch+json'] }));
 
+// Mount Meta Integration Routes FIRST to ensure it is not swallowed by other routes or middleware
+mountMetaIntegrationRoutes(app);
+
 // WooCommerce & Generic Webhook Handshake Interceptor
 app.use((req, res, next) => {
   const isWcPing =
@@ -81,7 +84,6 @@ app.use((req, res, next) => {
 mountPathaoConfigRoutes(app);
 mountWhatsappRoutes(app);
 mountIntegrationsConfigRoutes(app);
-mountMetaIntegrationRoutes(app);
 mountBrandRoutes(app);
 mountGlobalSettingsRoutes(app);
 

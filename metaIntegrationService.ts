@@ -491,19 +491,20 @@ export async function testMetaConnection(overrideConfig?: Partial<MetaConfig>) {
   };
 
   // Test Page Access Token
-  if (config.pageAccessToken && config.pageAccessToken !== '••••••••') {
+  if (config.pageAccessToken && config.pageAccessToken !== '••••••••' && config.pageId) {
     try {
-      const res = await fetch(`https://graph.facebook.com/v21.0/me?fields=id&access_token=${config.pageAccessToken}`);
+      const res = await fetch(`https://graph.facebook.com/v21.0/${config.pageId}?access_token=${config.pageAccessToken}`);
       const data = await res.json();
       if (res.ok && data.id) {
-        const warning = data.id !== config.pageId ? 'Token belongs to a different page than the saved Page ID' : undefined;
-        results.pageAccess = { ok: true, pageId: data.id, warning };
+        results.pageAccess = { ok: true, pageId: data.id };
       } else {
         results.pageAccess = { ok: false, error: data.error?.message || 'Meta API error' };
       }
     } catch (err: any) {
       results.pageAccess = { ok: false, error: 'Connection failed' };
     }
+  } else if (!config.pageId) {
+    results.pageAccess = { ok: false, error: 'Page ID not configured' };
   } else {
     results.pageAccess = { ok: false, error: 'Page Access Token not configured' };
   }

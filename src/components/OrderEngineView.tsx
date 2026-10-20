@@ -98,6 +98,7 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [selectedChatOrder, setSelectedChatOrder] = useState<Order | null>(null);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
+  const [orderFeedbackMessage, setOrderFeedbackMessage] = useState<string>('');
   const [previewOrders, setPreviewOrders] = useState<any[] | null>(null);
 
   // Trash & Bulk selection state
@@ -955,6 +956,23 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
         </div>
       </div>
 
+      {/* Success Notification Banner for Create / Edit Order */}
+      {orderFeedbackMessage && (
+        <div className="p-3.5 rounded-2xl bg-emerald-950/80 border border-emerald-500/50 text-emerald-200 text-xs font-bold flex items-center justify-between shadow-lg shadow-emerald-950/30 animate-fade-in">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{orderFeedbackMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setOrderFeedbackMessage('')}
+            className="p-1 rounded-lg text-emerald-400 hover:text-white hover:bg-emerald-900/40 transition cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Trash Mode Banner */}
       {viewMode === 'trash' && (
         <div className="p-4 rounded-2xl bg-rose-950/30 border border-rose-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-fade-in">
@@ -1740,9 +1758,18 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                     {/* Selection Indicator (No Checkbox) */}
                     <div className={`w-3 h-3 rounded-full ${selectedOrderIds.includes(order.id) ? 'bg-amber-500' : 'bg-zinc-700'}`} />
 
-                    <span className="font-mono text-xs font-bold text-amber-400 px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800">
-                      {order.id}
-                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenEditModal(order);
+                      }}
+                      className="font-mono text-xs font-bold text-amber-400 px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 hover:border-amber-500/60 hover:bg-amber-500/10 cursor-pointer transition flex items-center gap-1 active:scale-95"
+                      title="Click to Edit Order (অর্ডার এডিট করতে ক্লিক করুন)"
+                    >
+                      <span>{order.id}</span>
+                      <Edit2 className="w-2.5 h-2.5 opacity-60 text-amber-400" />
+                    </button>
                     {getStatusBadge(order.status, order)}
                     <span
                       className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${getChannelColor(
@@ -1929,18 +1956,19 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                       </>
                     ) : (
                       <>
+                        {/* Edit Button - Always accessible on any active order */}
+                        <button
+                          id={`btn-edit-order-${order.id}`}
+                          onClick={() => handleOpenEditModal(order)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-amber-500/20 text-amber-300 hover:text-amber-200 border border-zinc-700 hover:border-amber-500/40 text-xs font-semibold shadow-sm transition active:scale-95 cursor-pointer"
+                          title="Edit Customer Details, Phone, Address, Product, Size, Notes"
+                        >
+                          <Edit2 className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Edit</span>
+                        </button>
+
                         {order.status === 'Pending' && (
                           <>
-                            <button
-                              id={`btn-edit-order-${order.id}`}
-                              onClick={() => handleOpenEditModal(order)}
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-amber-500/20 text-amber-300 hover:text-amber-200 border border-zinc-700 hover:border-amber-500/40 text-xs font-semibold shadow-sm transition active:scale-95 cursor-pointer"
-                              title="Edit Customer Details, Phone, Address, Product, Size"
-                            >
-                              <Edit2 className="w-3.5 h-3.5 text-amber-400" />
-                              <span>Edit</span>
-                            </button>
-
                             <button
                               id={`btn-approve-order-${order.id}`}
                               onClick={() => onApproveOrder(order.id)}
@@ -2029,9 +2057,11 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
         onClose={() => setIsCreateModalOpen(false)}
         onSave={(newOrderData) => {
           if (onCreateOrder) {
-            onCreateOrder(newOrderData as Order);
+            onCreateOrder(newOrderData);
           }
           setIsCreateModalOpen(false);
+          setOrderFeedbackMessage(`✅ নতুন অর্ডার #${newOrderData.id} সফলভাবে তৈরি ও সেভ করা হয়েছে!`);
+          setTimeout(() => setOrderFeedbackMessage(''), 6000);
         }}
         initialOrder={null}
         products={products}
@@ -2043,9 +2073,11 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
         onClose={() => setEditingOrder(null)}
         onSave={(updatedOrderData) => {
           if (onUpdateOrder && editingOrder) {
-            onUpdateOrder(updatedOrderData as Order);
+            onUpdateOrder(updatedOrderData);
           }
           setEditingOrder(null);
+          setOrderFeedbackMessage(`✅ অর্ডার #${updatedOrderData.id} সফলভাবে আপডেট ও সেভ করা হয়েছে!`);
+          setTimeout(() => setOrderFeedbackMessage(''), 6000);
         }}
         initialOrder={editingOrder}
         products={products}

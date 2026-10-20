@@ -595,6 +595,19 @@ export default function App() {
         }))
       );
     }
+
+    // Persist full new order to backend server
+    const createToken = localStorage.getItem('vistoosa_auth_token') || '';
+    const createHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (createToken) createHeaders['Authorization'] = `Bearer ${createToken}`;
+
+    fetch('/api/orders/update', {
+      method: 'POST',
+      headers: createHeaders,
+      body: JSON.stringify(fullOrder),
+    }).catch((err) => {
+      console.warn('Failed to sync new order to server:', err);
+    });
   };
 
   // Handler to Update Order details (Customer name, phone, address, city, product, size, qty, notes, etc.)

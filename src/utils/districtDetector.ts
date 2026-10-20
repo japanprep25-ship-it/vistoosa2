@@ -256,12 +256,6 @@ export const BANGLADESH_DISTRICTS: DistrictInfo[] = [
     areas: ['sunamganj sadar', 'chhatak', 'jagannathpur', 'derai', 'tahirpur', 'dowarabazar', 'bishwamvarpur', 'jamalganj', 'shulla'],
   },
   {
-    name: 'Tangail',
-    bnName: 'টাঙ্গাইল',
-    aliases: ['tangail', 'টাঙ্গাইল'],
-    areas: ['tangail sadar', 'mirzapur', 'kalihati', 'ghatail', 'sakhipur', 'delduar', 'nagarpur', 'basail'],
-  },
-  {
     name: 'Faridpur',
     bnName: 'ফরিদপুর',
     aliases: ['faridpur', 'ফরিদপুর'],
@@ -601,4 +595,6 @@ export function detectDistrict(address: string, city: string): {
 }
 
 // Get all 64 district names for UI Dropdowns
-export const ALL_DISTRICT_NAMES: string[] = BANGLADESH_DISTRICTS.map((d) => d.name).sort();
+export const ALL_DISTRICT_NAMES: string[] = Array.from(
+  new Set(BANGLADESH_DISTRICTS.map((d) => d.name))
+).sort();

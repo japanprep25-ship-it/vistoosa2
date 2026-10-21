@@ -1000,8 +1000,7 @@ registerOrderCreationHook((order: any) => {
   );
 });
 
-// Mount Unified Meta Order Integration routes (Webhook verification, receiving, test-connection, simulator, settings)
-mountMetaIntegrationRoutes(app);
+// Unified Meta Order Integration routes already mounted above at server initialization
 
 // Helper to convert WooCommerce / Website JSON payload into Vistoosa Order format
 function parseWooCommerceOrderToVistoosa(payload: any): any {

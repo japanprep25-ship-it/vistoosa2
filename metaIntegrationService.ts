@@ -298,8 +298,33 @@ export async function parseOrderWithGemini(
 
   if (gemini) {
     try {
-      const prompt = `You are the AI Order Parser for Vistoosa Haute Couture, a luxury Bangladeshi male fashion brand (Polo shirts, Linen Panjabi, Oxford formal shirts, Stretch chinos, Italian blazers).
-Analyze the conversation below between a customer and our sales bot on Facebook Messenger, Instagram DM, or WhatsApp.
+      const prompt = `You are the AI Customer Support & Smart Order Assistant for Vistoosa Haute Couture, a luxury Bangladeshi fashion brand (Polo shirts, Linen Panjabi, Oxford shirts, Stretch chinos, Italian blazers).
+
+YOUR TWO PRIMARY RESPONSIBILITIES:
+1. READ & ANSWER CUSTOMER QUESTIONS:
+   - Carefully read the customer's message.
+   - If they ask any questions, answer them warmly, politely, and accurately in Bengali (or English if the customer asked in English).
+   - Brand & Store Policies:
+     * Cash on Delivery (COD) is available all across Bangladesh. No advance payment required for regular orders.
+     * Delivery Charges: Inside Dhaka ৳60, Sub-Dhaka (Gazipur, Savar, Narayanganj, Keraniganj) ৳100, Outside Dhaka ৳150.
+     * Delivery Time: 48 - 72 hours all over Bangladesh.
+     * Core Products & Prices:
+       - Supima Cotton Pique Polo: ৳1,650 (Sizes: S, M, L, XL, XXL)
+       - Luxury Linen Panjabi: ৳2,850 (Sizes: 38, 40, 42, 44, 46 / M, L, XL, XXL)
+       - Oxford Tailored Shirt: ৳1,850 (Sizes: 15, 15.5, 16, 16.5, 17 / M, L, XL, XXL)
+       - Stretch Tailored Chinos: ৳1,950 (Waist: 30, 32, 34, 36, 38)
+       - Italian Wool Blend Blazer: ৳6,500
+     * Quality: 100% premium luxury fabrics, durable stitching.
+     * Return/Exchange: 7-day hassle-free size exchange guarantee.
+
+2. ASK PROBABLE FOLLOW-UP QUESTIONS TO COMPLETE ORDER:
+   - Always guide the customer towards finalizing their order by asking missing details (probable questions):
+     * If product size is missing: Ask what size fits them best (M, L, XL, etc.).
+     * If color/item is missing: Ask which color/design they prefer.
+     * If phone number or delivery address is missing: Politely ask for their 11-digit mobile number and full delivery address so the order can be placed right away.
+   - If ALL details are present (complete order): Thank them, summarize their order (product, size, total with delivery charge), and confirm receipt.
+   - Respectful honorifics: Use polite Bengali ("আপনার", "আপনাকে", "স্যার").
+
 Extract all order information and return strictly valid JSON matching this schema:
 
 {
@@ -314,18 +339,18 @@ Extract all order information and return strictly valid JSON matching this schem
   "payment_method": "Cash on Delivery" | "bKash" | "Nagad",
   "confidence": "complete" | "incomplete",
   "missing_fields": ["array of missing critical fields from 'phone_number', 'address', 'customer_name', 'product_name', 'size'"],
-  "suggested_reply": "A courteous response in polite Bengali. If confidence is 'complete', warmly thank the customer, summarize the order details, and confirm that the order has been received. If confidence is 'incomplete', politely ask specifically for the missing details (e.g. phone number, full address, or preferred size)."
+  "suggested_reply": "A courteous and helpful response in natural Bengali. First answer any customer questions clearly. Then ask the probable follow-up questions to collect missing order details (size, color, phone number, delivery address) to finalize the purchase. If already complete, confirm the order gracefully."
 }
 
 CRITICAL RULES:
 1. An order is "complete" ONLY IF BOTH a valid Bangladeshi phone number AND a delivery address are present.
 2. If known customer sender name is "${knownSenderName || ''}", use it if customer didn't specify another name.
-3. If the customer sent an image attachment, note it in the suggested reply or product.
+3. If the customer sent an image attachment, acknowledge it politely in suggested_reply.
 4. Default quantity is 1 if unspecified. Default payment_method is "Cash on Delivery".
 5. For city:
-   - If within Dhaka city (Dhanmondi, Gulshan, Banani, Mirpur, Uttara, Mohammadpur, Badda, etc.), use "Inside Dhaka".
-   - If Gazipur, Savar, Narayanganj, Keraniganj, use "Sub-Dhaka".
-   - If Chittagong, Sylhet, Rajshahi, Khulna, Barisal, Rangpur, etc., use "Outside Dhaka".
+   - Inside Dhaka city (Dhanmondi, Gulshan, Banani, Mirpur, Uttara, Mohammadpur, Badda, Motijheel, etc.) -> "Inside Dhaka".
+   - Gazipur, Savar, Narayanganj, Keraniganj -> "Sub-Dhaka".
+   - Rest of Bangladesh -> "Outside Dhaka".
 
 CONVERSATION TRANSCRIPT:
 ${fullTranscript}
@@ -460,14 +485,37 @@ function fallbackHeuristicParser(transcript: string, knownSenderName?: string): 
   if (!size) missing_fields.push('size');
 
   let suggested_reply = '';
+  const lowerTranscript = transcript.toLowerCase();
+  
+  // Detect inquiries
+  const asksPrice = lowerTranscript.includes('price') || lowerTranscript.includes('দাম') || lowerTranscript.includes('koto') || lowerTranscript.includes('কত');
+  const asksDelivery = lowerTranscript.includes('delivery charge') || lowerTranscript.includes('ডেলিভারি চার্জ') || lowerTranscript.includes('charge') || lowerTranscript.includes('চার্জ');
+  const asksCod = lowerTranscript.includes('cod') || lowerTranscript.includes('cash on') || lowerTranscript.includes('ক্যাশ অন') || lowerTranscript.includes('advance') || lowerTranscript.includes('অগ্রিম');
+  const asksDeliveryTime = lowerTranscript.includes('kobe pabo') || lowerTranscript.includes('কবে পাব') || lowerTranscript.includes('time') || lowerTranscript.includes('সময়') || lowerTranscript.includes('din lagbe');
+
+  let answerPrefix = '';
+  if (asksPrice) {
+    answerPrefix += `আমাদের ${product_name || 'পণ্য'} এর মূল্য ৳${product_name?.includes('Panjabi') ? '২৮৫০' : product_name?.includes('Blazer') ? '৬৫০০' : product_name?.includes('Shirt') ? '১৮৫০' : '১৬৫০'}। `;
+  }
+  if (asksDelivery) {
+    answerPrefix += `ডেলিভারি চার্জ: ঢাকার ভেতরে ৳৬০, সাব-ঢাকা ৳১০০, ঢাকার বাইরে ৳১৫০। `;
+  }
+  if (asksCod) {
+    answerPrefix += `জি, সারা বাংলাদেশে ক্যাশ অন ডেলিভারি (COD) সুবিধা আছে, কোনো অগ্রিম পেমেন্ট লাগবে না। `;
+  }
+  if (asksDeliveryTime) {
+    answerPrefix += `ডেলিভারি সময় সাধারণত ৪৮ থেকে ৭২ ঘণ্টার মধ্যে সম্পন্ন হয়। `;
+  }
+
   if (isComplete) {
-    suggested_reply = `ধন্যবাদ ${customer_name || 'স্যার'}! আপনার ${product_name} (${size || 'M'} সাইজ) অর্ডারটি সফলভাবে রিসিভ করা হয়েছে ✅। আমাদের টিম খুব শীঘ্রই ডেলিভারির জন্য কল করে কনফার্ম করবে।`;
+    suggested_reply = `${answerPrefix ? answerPrefix + '\n\n' : ''}ধন্যবাদ ${customer_name || 'স্যার'}! আপনার ${product_name} (${size || 'M'} সাইজ) অর্ডারটি সফলভাবে রিসিভ করা হয়েছে ✅। আমাদের টিম খুব শীঘ্রই ডেলিভারির জন্য কল করে কনফার্ম করবে।`;
   } else {
     const missingBangla = [];
+    if (!size) missingBangla.push('পছন্দের সাইজ (M, L, XL, XXL)');
     if (!phone_number) missingBangla.push('মোবাইল নম্বর');
-    if (!address) missingBangla.push('ডেলিভারি ঠিকানা');
-    if (!size) missingBangla.push('সাইজ (M, L, XL)');
-    suggested_reply = `আসসালামু আলাইকুম! আপনার অর্ডারটি নিশ্চিত করতে অনুগ্রহ করে আপনার ${missingBangla.join(' ও ')} প্রদান করুন।`;
+    if (!address) missingBangla.push('পূর্ণ ডেলিভারি ঠিকানা');
+    
+    suggested_reply = `${answerPrefix ? answerPrefix + '\n\n' : 'আসসালামু আলাইকুম! '}আপনার অর্ডারটি নিশ্চিত করতে অনুগ্রহ করে আপনার ${missingBangla.join(', ')} জানিয়ে সহায়তা করুন।`;
   }
 
   return {
@@ -1182,12 +1230,18 @@ export function mountMetaIntegrationRoutes(app: Express) {
       }
     }
 
-    // Append bot reply to buffer
-    appendToConversationBuffer(cleanSenderId, cleanChannel, {
-      sender: 'bot',
-      text: parsed.suggested_reply,
-    });
-    await persistMessageToFirestore(cleanSenderId, buffer.senderName || 'Customer', cleanChannel, 'bot', parsed.suggested_reply);
+    // Check autoReplyEnabled before appending bot reply
+    const config = await loadMetaConfig();
+    let sentAutoReply: string | null = null;
+
+    if (config.autoReplyEnabled !== false && parsed.suggested_reply) {
+      appendToConversationBuffer(cleanSenderId, cleanChannel, {
+        sender: 'bot',
+        text: parsed.suggested_reply,
+      });
+      await persistMessageToFirestore(cleanSenderId, buffer.senderName || 'Customer', cleanChannel, 'bot', parsed.suggested_reply);
+      sentAutoReply = parsed.suggested_reply;
+    }
 
     return res.json({
       success: true,
@@ -1196,8 +1250,11 @@ export function mountMetaIntegrationRoutes(app: Express) {
       buffer: buffer.messages,
       extracted: parsed,
       createdOrder,
-      autoReply: parsed.suggested_reply,
-      message: parsed.confidence === 'complete'
+      autoReply: sentAutoReply,
+      autoReplyEnabled: config.autoReplyEnabled !== false,
+      message: config.autoReplyEnabled === false
+        ? 'Customer message received. AI Auto-Reply is turned OFF (manual agent reply required).'
+        : parsed.confidence === 'complete'
         ? `Order successfully extracted and placed in Pending Orders!`
         : `Information incomplete. Bot replied asking for missing details: ${parsed.missing_fields.join(', ')}`,
     });
@@ -1220,11 +1277,31 @@ export function mountMetaIntegrationRoutes(app: Express) {
         whatsappPhoneNumberId: config.whatsappPhoneNumberId,
         whatsappBusinessAccountId: config.whatsappBusinessAccountId,
         whatsappAccessToken: config.whatsappAccessToken || '',
+        autoReplyEnabled: config.autoReplyEnabled !== false,
       },
       webhookCallbackUrl: `${appUrl}/webhook/meta`,
       verifyToken: config.metaVerifyToken || DEFAULT_VERIFY_TOKEN,
       activeBuffersCount: conversationBuffers.size,
     });
+  });
+
+  // POST /api/meta/toggle-autoreply -> Toggle Auto Reply directly from Social Media Inbox
+  app.post(['/api/meta/toggle-autoreply', '/api/settings/meta/toggle-autoreply'], async (req: Request, res: Response) => {
+    try {
+      const { enabled } = req.body || {};
+      const current = await loadMetaConfig();
+      const nextVal = enabled !== undefined ? Boolean(enabled) : !current.autoReplyEnabled;
+      const updated = await saveMetaConfig({ autoReplyEnabled: nextVal });
+      return res.json({
+        success: true,
+        autoReplyEnabled: updated.autoReplyEnabled !== false,
+        message: updated.autoReplyEnabled !== false
+          ? 'AI Auto-Reply চালু করা হয়েছে (গ্রাহকের মেসেজ পড়ে অটোমেটিক উত্তর ও প্রশ্ন করা হবে)'
+          : 'AI Auto-Reply বন্ধ করা হয়েছে (গ্রাহকের কাছে কোনো অটো রিপ্লাই যাবে না)',
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err?.message || 'Failed to toggle Auto-Reply' });
+    }
   });
 
   // POST /api/settings/meta-order -> Save settings
@@ -1832,8 +1909,8 @@ async function processIncomingMetaPayload(payload: any) {
             console.log(`[WhatsApp Order Queued into Pending]: Order #${newOrder.id} for ${newOrder.customerName}`);
           }
 
-          // 4. Send reply back to customer
-          if (parsed.suggested_reply) {
+          // 4. Send reply back to customer (only if autoReplyEnabled is ON)
+          if (parsed.suggested_reply && config.autoReplyEnabled !== false) {
             appendToConversationBuffer(senderId, 'whatsapp', {
               sender: 'bot',
               text: parsed.suggested_reply,

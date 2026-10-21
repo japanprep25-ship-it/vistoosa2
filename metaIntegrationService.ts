@@ -148,7 +148,7 @@ export async function saveMetaConfig(config: Partial<MetaConfig>, docId: string 
 export function appendToConversationBuffer(
   senderId: string,
   channel: 'messenger' | 'instagram' | 'whatsapp',
-  message: { sender: 'customer' | 'bot' | 'agent' | 'user'; text: string; attachmentUrl?: string; timestamp?: string },
+  message: { sender: 'customer' | 'bot' | 'agent' | 'user'; text: string; attachmentUrl?: string; timestamp?: string; mid?: string; status?: 'sent' | 'delivered' | 'seen' },
   senderName?: string
 ): ConversationBuffer {
   let buffer = conversationBuffers.get(senderId);
@@ -167,11 +167,23 @@ export function appendToConversationBuffer(
     buffer.senderName = senderName;
   }
 
+  if (message.mid) {
+    const existingIndex = buffer.messages.findIndex(m => m.mid && m.mid === message.mid);
+    if (existingIndex !== -1) {
+      if (message.status) {
+        buffer.messages[existingIndex].status = message.status;
+      }
+      return buffer;
+    }
+  }
+
   buffer.messages.push({
     sender: message.sender,
     text: message.text,
     attachmentUrl: message.attachmentUrl,
-    timestamp: new Date().toISOString(),
+    mid: message.mid,
+    status: message.status || 'sent',
+    timestamp: message.timestamp || new Date().toISOString(),
   });
 
   // Keep last 15 messages in sliding window to avoid unbounded growth
@@ -193,7 +205,9 @@ async function persistMessageToFirestore(
   channel: string,
   senderType: 'customer' | 'bot' | 'agent' | 'user',
   text: string,
-  attachmentUrl?: string
+  attachmentUrl?: string,
+  mid?: string,
+  status: 'sent' | 'delivered' | 'seen' = 'sent'
 ) {
   if (isFirestoreQuotaExceeded()) return;
   try {
@@ -209,10 +223,21 @@ async function persistMessageToFirestore(
       },
       { merge: true }
     );
+
+    if (mid) {
+      const existingMsgQuery = await threadRef.collection('messages').where('mid', '==', mid).get();
+      if (!existingMsgQuery.empty) {
+        await existingMsgQuery.docs[0].ref.update({ status });
+        return;
+      }
+    }
+
     await threadRef.collection('messages').add({
       sender: senderType,
       text: text || '',
       attachmentUrl: attachmentUrl || null,
+      mid: mid || null,
+      status,
       timestamp: new Date().toISOString(),
     });
   } catch (err: any) {
@@ -1325,11 +1350,14 @@ export function mountMetaIntegrationRoutes(app: Express) {
         }
       }
 
+      const mid = metaResponse?.message_id;
       // Append outgoing message to thread buffer
       const newMsg: ConversationMessage = {
         sender: 'bot',
         text: message_text,
         timestamp: new Date().toISOString(),
+        mid,
+        status: 'sent',
       };
 
       const senderName = req.body.customer_name || req.body.customerName || req.body.senderName;
@@ -1351,11 +1379,7 @@ export function mountMetaIntegrationRoutes(app: Express) {
             { merge: true }
           );
 
-          await threadRef.collection('messages').add({
-            sender: newMsg.sender,
-            text: newMsg.text,
-            timestamp: newMsg.timestamp,
-          });
+          await persistMessageToFirestore(recipient_psid, senderName || updatedBuffer.senderName || 'Customer', channel, 'bot', newMsg.text, undefined, mid, 'sent');
         } catch (dbErr: any) {
           if (isQuotaExceededError(dbErr)) {
             markFirestoreQuotaExceeded();
@@ -1497,12 +1521,78 @@ async function processIncomingMetaPayload(payload: any) {
     for (const entry of entries) {
       const messagings = entry.messaging || [];
       for (const msgEvent of messagings) {
+        // 1. Handle Message Deliveries
+        if (msgEvent.delivery) {
+          const mids = msgEvent.delivery.mids || [];
+          for (const mid of mids) {
+            for (const buf of conversationBuffers.values()) {
+              const msg = buf.messages.find(m => m.mid === mid);
+              if (msg) {
+                msg.status = 'delivered';
+              }
+            }
+          }
+          continue;
+        }
+
+        // 2. Handle Message Reads
+        if (msgEvent.read) {
+          const watermark = msgEvent.read.watermark;
+          if (watermark) {
+            for (const buf of conversationBuffers.values()) {
+              for (const msg of buf.messages) {
+                if ((msg.sender === 'bot' || msg.sender === 'agent' || msg.sender === 'user') && new Date(msg.timestamp).getTime() <= watermark) {
+                  msg.status = 'seen';
+                }
+              }
+            }
+          }
+          continue;
+        }
+
+        // 3. Handle Message Echoes (message.is_echo === true)
+        if (msgEvent.message && msgEvent.message.is_echo === true) {
+          const recipientId = msgEvent.recipient?.id;
+          const message = msgEvent.message;
+          if (!recipientId || !message) continue;
+
+          const text = message.text || '';
+          const mid = message.mid;
+          let attachmentUrl: string | undefined;
+          if (Array.isArray(message.attachments) && message.attachments.length > 0) {
+            attachmentUrl = message.attachments[0]?.payload?.url;
+          }
+
+          console.log(`[Meta Echo ${channel.toUpperCase()}]: Page sent to recipient ${recipientId}: "${text}" (mid: ${mid})`);
+
+          const buffer = appendToConversationBuffer(recipientId, channel, {
+            sender: 'agent',
+            text,
+            attachmentUrl,
+            mid,
+            status: 'sent',
+          });
+
+          await persistMessageToFirestore(
+            recipientId,
+            buffer.senderName || 'Customer',
+            channel,
+            'agent',
+            text,
+            attachmentUrl,
+            mid,
+            'sent'
+          );
+          continue;
+        }
+
         const senderId = msgEvent.sender?.id;
         const message = msgEvent.message;
 
         if (!senderId || !message) continue;
 
         const text = message.text || '';
+        const mid = message.mid;
         let attachmentUrl: string | undefined;
 
         if (Array.isArray(message.attachments) && message.attachments.length > 0) {
@@ -1511,14 +1601,15 @@ async function processIncomingMetaPayload(payload: any) {
 
         console.log(`[Meta Inbound ${channel.toUpperCase()}]: Sender ${senderId} sent: "${text}"`);
 
-        // 1. Buffer conversation
+        // 1. Buffer conversation with mid deduplication
         const buffer = appendToConversationBuffer(senderId, channel, {
           sender: 'customer',
           text,
           attachmentUrl,
+          mid,
         });
 
-        await persistMessageToFirestore(senderId, buffer.senderName || 'Customer', channel, 'customer', text, attachmentUrl);
+        await persistMessageToFirestore(senderId, buffer.senderName || 'Customer', channel, 'customer', text, attachmentUrl, mid);
 
         // 2. Parse with Gemini AI
         const parsed = await parseOrderWithGemini(buffer.messages, buffer.senderName);
@@ -1573,13 +1664,16 @@ async function processIncomingMetaPayload(payload: any) {
 
         // 4. Send reply back to customer
         if (parsed.suggested_reply) {
+          const replyRes = await sendMetaReply(channel, senderId, parsed.suggested_reply);
+          const replyMid = replyRes.data?.message_id;
+
           appendToConversationBuffer(senderId, channel, {
             sender: 'bot',
             text: parsed.suggested_reply,
+            mid: replyMid,
           });
 
-          await persistMessageToFirestore(senderId, buffer.senderName || 'Customer', channel, 'bot', parsed.suggested_reply);
-          await sendMetaReply(channel, senderId, parsed.suggested_reply);
+          await persistMessageToFirestore(senderId, buffer.senderName || 'Customer', channel, 'bot', parsed.suggested_reply, undefined, replyMid);
         }
       }
     }

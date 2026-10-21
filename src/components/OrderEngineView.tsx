@@ -105,9 +105,27 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
   const [orderFeedbackMessage, setOrderFeedbackMessage] = useState<string>('');
   const [previewOrders, setPreviewOrders] = useState<any[] | null>(null);
 
-  const handleOpenOrderChat = (order: Order) => {
+  const handleOpenOrderChat = (order: Order, overrideChannel?: string) => {
+    const rawChan = overrideChannel || order.source || order.channel || 'messenger';
+    const chanLower = rawChan.toLowerCase();
+    const channel = chanLower.includes('insta') ? 'instagram' : chanLower.includes('whats') ? 'whatsapp' : 'messenger';
+    
+    const cleanId = order.senderId && order.senderId.trim().length > 0 
+      ? order.senderId.trim() 
+      : (order.phone ? order.phone.replace(/\D/g, '') : order.id);
+    const conversationId = `${channel}_${cleanId}`;
+
+    const targetData = {
+      customerId: order.id,
+      customerName: order.customerName,
+      phone: order.phone,
+      channel,
+      conversationId,
+      rawConversation: order.rawConversation || []
+    };
+
     try {
-      localStorage.setItem('vistoosa_target_order', JSON.stringify(order));
+      localStorage.setItem('vistoosa_target_order', JSON.stringify(targetData));
     } catch (e) {
       console.warn('Could not save target order', e);
     }
@@ -1804,7 +1822,7 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                     {getStatusBadge(order.status, order)}
                     <button
                       type="button"
-                      onClick={() => handleOpenOrderChat(order)}
+                      onClick={() => handleOpenOrderChat(order, order.channel)}
                       className={`inline-block text-[10px] px-2 py-0.5 rounded-full border font-medium ${getChannelColor(
                         order.channel
                       )} hover:opacity-80 transition cursor-pointer`}
@@ -1845,7 +1863,7 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                     {order.source && (
                       <button
                         type="button"
-                        onClick={() => handleOpenOrderChat(order)}
+                        onClick={() => handleOpenOrderChat(order, order.source)}
                         className="text-[10px] px-2.5 py-0.5 rounded-full bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 font-medium transition cursor-pointer"
                         title="Open In-App Chat"
                       >
@@ -1871,7 +1889,7 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                     {(order.channel?.toLowerCase() === 'facebook' || order.source === 'messenger' || (order.rawConversation && order.rawConversation.length > 0)) ? (
                       <button
                         type="button"
-                        onClick={() => handleOpenOrderChat(order)}
+                        onClick={() => handleOpenOrderChat(order, 'facebook')}
                         className="text-[10px] px-2.5 py-1 rounded-full bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-300 font-bold flex items-center gap-1.5 transition shadow-sm active:scale-95 cursor-pointer"
                         title={`Open In-App Facebook Messenger Chat with ${order.customerName}`}
                       >
@@ -1881,7 +1899,7 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                     ) : (order.channel === 'Instagram' || order.source === 'instagram') ? (
                       <button
                         type="button"
-                        onClick={() => handleOpenOrderChat(order)}
+                        onClick={() => handleOpenOrderChat(order, 'instagram')}
                         className="text-[10px] px-2.5 py-1 rounded-full bg-pink-600/20 hover:bg-pink-600/30 border border-pink-500/40 text-pink-300 font-bold flex items-center gap-1.5 transition shadow-sm active:scale-95 cursor-pointer"
                         title={`Open In-App Instagram Chat with ${order.customerName}`}
                       >
@@ -1891,7 +1909,7 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                     ) : (order.channel === 'WhatsApp' || order.source === 'whatsapp') ? (
                       <button
                         type="button"
-                        onClick={() => handleOpenOrderChat(order)}
+                        onClick={() => handleOpenOrderChat(order, 'whatsapp')}
                         className="text-[10px] px-2.5 py-1 rounded-full bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 font-bold flex items-center gap-1.5 transition shadow-sm active:scale-95 cursor-pointer"
                         title={`Open In-App WhatsApp Chat with ${order.customerName}`}
                       >

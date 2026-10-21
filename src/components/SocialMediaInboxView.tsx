@@ -650,7 +650,7 @@ export const SocialMediaInboxView: React.FC<SocialMediaInboxViewProps> = ({
               </div>
 
               {/* Chat Thread Messages Display */}
-              <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5">
+              <div key={selectedPsid || 'default'} ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5">
                 {isLoadingMessages && activeMessages.length === 0 ? (
                   <div className="flex items-center justify-center h-full">
                     <RefreshCw className="w-6 h-6 text-purple-400 animate-spin" />

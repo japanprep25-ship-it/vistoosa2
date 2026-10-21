@@ -100,7 +100,7 @@ export const SocialMediaInboxView: React.FC<SocialMediaInboxViewProps> = ({
   const [extractedDeliveryFee, setExtractedDeliveryFee] = useState(60);
   const [extractedPaymentMethod, setExtractedPaymentMethod] = useState<'Cash on Delivery' | 'bKash' | 'Nagad' | 'Prepaid'>('Cash on Delivery');
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLInputElement>(null);
 
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
@@ -108,9 +108,11 @@ export const SocialMediaInboxView: React.FC<SocialMediaInboxViewProps> = ({
     setTimeout(() => setToastMessage(null), 5000);
   };
 
-  // Scroll to bottom of message thread
+  // Scroll to bottom of message thread internally without scrolling window
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+    }
   };
 
   useEffect(() => {
@@ -612,7 +614,7 @@ export const SocialMediaInboxView: React.FC<SocialMediaInboxViewProps> = ({
               </div>
 
               {/* Chat Thread Messages Display */}
-              <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5">
+              <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5">
                 {isLoadingMessages && activeMessages.length === 0 ? (
                   <div className="flex items-center justify-center h-full">
                     <RefreshCw className="w-6 h-6 text-purple-400 animate-spin" />
@@ -665,7 +667,6 @@ export const SocialMediaInboxView: React.FC<SocialMediaInboxViewProps> = ({
                     );
                   })
                 )}
-                <div ref={messagesEndRef} />
               </div>
 
               {/* Quick Reply Template Chips */}

@@ -106,7 +106,7 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
   const [chatInputText, setChatInputText] = useState<string>('');
   const [isSendingChatMessage, setIsSendingChatMessage] = useState<boolean>(false);
   const [isLoadingChatHistory, setIsLoadingChatHistory] = useState<boolean>(false);
-  const chatMessagesEndRef = useRef<HTMLDivElement>(null);
+  const chatMessagesContainerRef = useRef<HTMLDivElement>(null);
   const chatInputFocusRef = useRef<HTMLInputElement>(null);
 
   // Helper: Derive clean Facebook PSID or customer identifier
@@ -163,10 +163,21 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
     return () => clearInterval(interval);
   }, [selectedChatOrder]);
 
-  // Auto-scroll chat history to bottom
+  // Prevent background page from scrolling when chat modal is open
   useEffect(() => {
     if (selectedChatOrder) {
-      chatMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [selectedChatOrder]);
+
+  // Scroll ONLY the message container inside the chatbox (no window scroll)
+  useEffect(() => {
+    if (selectedChatOrder && chatMessagesContainerRef.current) {
+      chatMessagesContainerRef.current.scrollTop = chatMessagesContainerRef.current.scrollHeight;
     }
   }, [chatMessages, selectedChatOrder]);
 
@@ -2270,83 +2281,87 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
           IN-APP LIVE CHAT MODAL FOR FACEBOOK MESSENGER & SOCIAL ORDERS
           =================================================================== */}
       {selectedChatOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="glass-card w-full max-w-2xl rounded-3xl border border-zinc-800 bg-zinc-950 shadow-2xl flex flex-col h-[650px] max-h-[92vh] overflow-hidden">
-            {/* 1. Modal Header */}
-            <div className="p-4 px-5 border-b border-zinc-800 bg-zinc-900/80 flex items-center justify-between gap-3 shrink-0">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="w-full h-full sm:h-[88vh] sm:max-h-[700px] sm:max-w-xl bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+            {/* 1. Simple Header */}
+            <div className="p-3.5 px-4 sm:px-5 border-b border-zinc-800 bg-zinc-900/90 flex items-center justify-between gap-3 shrink-0">
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-bold text-sm flex items-center justify-center shadow-md shadow-blue-900/30 shrink-0">
-                  {selectedChatOrder.customerName ? selectedChatOrder.customerName.charAt(0) : 'C'}
+                <div className="relative shrink-0">
+                  <div className="w-9 h-9 rounded-full bg-blue-600 text-white font-bold text-sm flex items-center justify-center shadow-sm">
+                    {selectedChatOrder.customerName ? selectedChatOrder.customerName.charAt(0) : 'C'}
+                  </div>
+                  <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-zinc-900" />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2 truncate">
-                    <span>{selectedChatOrder.customerName}</span>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-mono font-bold border border-blue-500/30">
-                      Facebook Messenger
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-semibold text-white truncate">
+                      {selectedChatOrder.customerName}
+                    </h3>
+                    <span className="text-[10px] text-zinc-400 font-mono">
+                      #{selectedChatOrder.id}
                     </span>
-                    <span className="text-[10px] text-amber-400 font-mono">#{selectedChatOrder.id}</span>
-                  </h3>
-                  <p className="text-[11px] text-zinc-400 font-mono mt-0.5 flex items-center gap-2 truncate">
-                    <span>Phone: {selectedChatOrder.phone}</span>
+                  </div>
+                  <p className="text-[11px] text-zinc-400 flex items-center gap-1.5 truncate">
+                    <span className="text-blue-400 font-medium">Facebook Messenger</span>
                     <span>•</span>
-                    <span>PSID: {getOrderPsid(selectedChatOrder)}</span>
+                    <span>{selectedChatOrder.phone}</span>
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1 shrink-0">
                 <button
                   type="button"
                   onClick={() => fetchOrderChatHistory(selectedChatOrder)}
-                  className="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition cursor-pointer"
-                  title="Refresh chat history"
+                  className="p-2 rounded-xl hover:bg-zinc-800 text-zinc-400 hover:text-white transition cursor-pointer"
+                  title="Refresh chat"
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingChatHistory ? 'animate-spin text-blue-400' : ''}`} />
+                  <RefreshCw className={`w-4 h-4 ${isLoadingChatHistory ? 'animate-spin text-blue-400' : ''}`} />
                 </button>
                 <button
                   type="button"
                   onClick={() => setSelectedChatOrder(null)}
-                  className="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition cursor-pointer"
-                  title="Close chatbox"
+                  className="p-2 rounded-xl hover:bg-zinc-800 text-zinc-400 hover:text-white transition cursor-pointer"
+                  title="Close"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-5 h-5" />
                 </button>
               </div>
             </div>
 
-            {/* 2. Order Context Quick-Card */}
-            <div className="p-2.5 px-5 bg-zinc-900/40 border-b border-zinc-850 flex items-center justify-between text-xs text-zinc-300 gap-2 shrink-0 overflow-x-auto">
-              <div className="flex items-center gap-2 truncate">
-                <Package className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span className="font-semibold text-zinc-200 truncate">
+            {/* 2. Compact Order Context */}
+            <div className="px-4 py-2 bg-zinc-900/40 border-b border-zinc-850 flex items-center justify-between text-xs text-zinc-400 gap-2 shrink-0">
+              <div className="flex items-center gap-1.5 truncate">
+                <Package className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                <span className="text-zinc-200 truncate">
                   {selectedChatOrder.items.map((i) => `${i.productName} (${i.size}) x${i.quantity}`).join(', ')}
                 </span>
-                <span className="text-amber-400 font-mono font-bold">
+              </div>
+              <div className="flex items-center gap-2 shrink-0 font-medium">
+                <span className="text-emerald-400 font-mono font-bold">
                   ৳{selectedChatOrder.totalAmount.toLocaleString()}
                 </span>
-              </div>
-              <div className="flex items-center gap-2 shrink-0 text-[11px]">
-                <span className="px-2 py-0.5 rounded-md bg-zinc-800 text-zinc-300 font-medium">
-                  {selectedChatOrder.status}
-                </span>
-                <span className="text-zinc-500">•</span>
-                <span className="text-zinc-400 truncate max-w-[160px]">{selectedChatOrder.address}</span>
+                <span className="text-zinc-600">•</span>
+                <span className="text-zinc-400 text-[11px]">{selectedChatOrder.status}</span>
               </div>
             </div>
 
-            {/* 3. Chat History Stream (Scrollable) */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5 bg-zinc-950/60">
+            {/* 3. Chat History Stream (Scrollable Container) */}
+            <div
+              ref={chatMessagesContainerRef}
+              className="flex-1 overflow-y-auto p-4 space-y-3 bg-zinc-950 min-h-0"
+            >
               {isLoadingChatHistory && chatMessages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-zinc-500 space-y-2">
-                  <RefreshCw className="w-6 h-6 text-blue-400 animate-spin" />
-                  <p className="text-xs">Connecting to Facebook Messenger history...</p>
+                  <RefreshCw className="w-5 h-5 text-blue-400 animate-spin" />
+                  <p className="text-xs">লোড হচ্ছে...</p>
                 </div>
               ) : chatMessages.length === 0 ? (
-                <div className="py-16 text-center text-zinc-500 space-y-2">
-                  <MessageSquare className="w-10 h-10 text-zinc-700 mx-auto" />
-                  <p className="text-xs font-semibold text-zinc-400">No chat history found for this PSID.</p>
-                  <p className="text-[11px] text-zinc-600 max-w-xs mx-auto">
-                    Type a message below to send an outbound message to {selectedChatOrder.customerName} on Messenger!
+                <div className="py-12 text-center text-zinc-500 space-y-2">
+                  <MessageSquare className="w-8 h-8 text-zinc-700 mx-auto" />
+                  <p className="text-xs text-zinc-400">মেসেঞ্জার হিস্ট্রি পাওয়া যায়নি</p>
+                  <p className="text-[11px] text-zinc-500">
+                    নিচে মেসেজ লিখে সেন্ড করুন
                   </p>
                 </div>
               ) : (
@@ -2357,63 +2372,47 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                       key={index}
                       className={`flex flex-col ${isOutgoing ? 'items-end' : 'items-start'} space-y-1`}
                     >
-                      <div className="flex items-center gap-1.5 px-1">
-                        <span className="text-[9px] font-bold text-zinc-400 uppercase font-mono">
-                          {isOutgoing ? 'You (Merchant)' : selectedChatOrder.customerName || 'Customer'}
-                        </span>
-                        {msg.timestamp && (
-                          <span className="text-[9px] text-zinc-500 font-mono">
-                            {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        )}
-                      </div>
                       <div
-                        className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-xs leading-relaxed shadow-md ${
+                        className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-xs leading-relaxed ${
                           isOutgoing
-                            ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-br-none shadow-blue-900/20'
-                            : 'bg-zinc-850 text-zinc-100 border border-zinc-700/60 rounded-bl-none'
+                            ? 'bg-blue-600 text-white rounded-br-xs'
+                            : 'bg-zinc-800 text-zinc-100 rounded-bl-xs'
                         }`}
                       >
                         <p className="whitespace-pre-wrap select-text">{msg.text}</p>
                       </div>
-                      {isOutgoing && (
-                        <div className="flex items-center gap-1 text-[9px] text-blue-400 font-mono px-1">
-                          <CheckCheck className="w-3 h-3" />
-                          <span>Delivered via Graph API</span>
-                        </div>
+                      {msg.timestamp && (
+                        <span className="text-[10px] text-zinc-500 px-1 font-mono">
+                          {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
                       )}
                     </div>
                   );
                 })
               )}
-              <div ref={chatMessagesEndRef} />
             </div>
 
-            {/* 4. Quick Reply Suggestions */}
-            <div className="px-4 py-2 border-t border-zinc-850 bg-zinc-900/40 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
-              <span className="text-[10px] text-zinc-500 font-mono uppercase font-bold shrink-0">
-                Quick Reply:
-              </span>
+            {/* 4. Simple Quick Replies */}
+            <div className="px-3.5 py-2 border-t border-zinc-850 bg-zinc-900/40 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
               {[
-                `আসসালামু আলাইকুম ${selectedChatOrder.customerName}! আপনার অর্ডার #${selectedChatOrder.id} কনফার্ম করা হয়েছে।`,
-                'আপনার পার্সেলটি প্যাক করা হচ্ছে, আজকেই পাঠাও কুরিয়ারে হ্যান্ডওভার করা হবে।',
-                'ডেলিভারির সময় ক্যাশ অন ডেলিভারিতে মূল্য পরিশোধ করতে পারবেন।',
-                'আপনার ডেলিভারি ঠিকানা বা ফোনে কোনো পরিবর্তন থাকলে দ্রুত জানান।',
+                `অর্ডার #${selectedChatOrder.id} কনফার্ম করা হয়েছে ✅`,
+                'আপনার পার্সেলটি আজকে পাঠানো হবে 📦',
+                'ক্যাশ অন ডেলিভারিতে নিতে পারবেন 💵',
+                'ঠিকানা ও ফোন নম্বর ঠিক আছে কি? 📍',
               ].map((template, idx) => (
                 <button
                   key={idx}
                   type="button"
                   onClick={() => setChatInputText(template)}
-                  className="shrink-0 text-[10px] px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-blue-900/40 border border-zinc-700 hover:border-blue-500/40 text-zinc-300 hover:text-blue-200 transition cursor-pointer max-w-[210px] truncate"
-                  title={template}
+                  className="shrink-0 text-[11px] px-2.5 py-1 rounded-full bg-zinc-850 hover:bg-zinc-800 border border-zinc-750 text-zinc-300 hover:text-white transition cursor-pointer"
                 >
                   {template}
                 </button>
               ))}
             </div>
 
-            {/* 5. Direct Messaging Input Bar */}
-            <div className="p-3 sm:p-4 border-t border-zinc-800 bg-zinc-950 shrink-0">
+            {/* 5. Simple Input Bar */}
+            <div className="p-3 border-t border-zinc-800 bg-zinc-950 shrink-0">
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -2424,31 +2423,27 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                 <input
                   ref={chatInputFocusRef}
                   type="text"
-                  placeholder={`Type your reply to ${selectedChatOrder.customerName} on Messenger... (Press Enter)`}
+                  placeholder="মেসেজ লিখুন..."
                   value={chatInputText}
                   onChange={(e) => setChatInputText(e.target.value)}
                   disabled={isSendingChatMessage}
-                  className="flex-1 bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500 transition"
+                  className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500 transition"
                 />
                 <button
                   type="submit"
                   disabled={isSendingChatMessage || !chatInputText.trim()}
-                  className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs shadow-md shadow-blue-900/40 transition active:scale-95 disabled:opacity-50 disabled:pointer-events-none flex items-center gap-1.5 cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs transition active:scale-95 disabled:opacity-50 disabled:pointer-events-none flex items-center gap-1.5 cursor-pointer shrink-0"
                 >
                   {isSendingChatMessage ? (
                     <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                   ) : (
                     <>
-                      <span>Send</span>
+                      <span>পাঠান</span>
                       <Send className="w-3.5 h-3.5" />
                     </>
                   )}
                 </button>
               </form>
-              <div className="flex items-center justify-between text-[10px] text-zinc-500 mt-2 font-mono">
-                <span>Direct Meta Graph API endpoint: POST /api/messages/send</span>
-                <span className="text-emerald-400">● Live 3.5s auto-polling</span>
-              </div>
             </div>
           </div>
         </div>

@@ -187,6 +187,41 @@ export function getConversationBuffer(senderId: string): ConversationBuffer | un
   return conversationBuffers.get(senderId);
 }
 
+async function persistMessageToFirestore(
+  senderId: string,
+  senderName: string,
+  channel: string,
+  senderType: 'customer' | 'bot' | 'agent' | 'user',
+  text: string,
+  attachmentUrl?: string
+) {
+  if (isFirestoreQuotaExceeded()) return;
+  try {
+    const threadRef = db.collection('conversations').doc(senderId);
+    await threadRef.set(
+      {
+        senderId,
+        senderName: senderName || 'Customer',
+        channel,
+        lastUpdated: new Date().toISOString(),
+        lastMessage: text || (attachmentUrl ? '[Image Attachment]' : ''),
+        lastMessageSender: senderType,
+      },
+      { merge: true }
+    );
+    await threadRef.collection('messages').add({
+      sender: senderType,
+      text: text || '',
+      attachmentUrl: attachmentUrl || null,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    if (isQuotaExceededError(err)) {
+      markFirestoreQuotaExceeded();
+    }
+  }
+}
+
 // -----------------------------------------------------------------------
 // 3. AI Order Parser with Gemini (@google/genai)
 // -----------------------------------------------------------------------
@@ -1006,6 +1041,8 @@ export function mountMetaIntegrationRoutes(app: Express) {
       senderName
     );
 
+    await persistMessageToFirestore(cleanSenderId, buffer.senderName || 'Customer', cleanChannel, 'customer', cleanText, attachmentUrl);
+
     // Run AI Order Parser
     const parsed = await parseOrderWithGemini(buffer.messages, buffer.senderName);
 
@@ -1064,6 +1101,7 @@ export function mountMetaIntegrationRoutes(app: Express) {
       sender: 'bot',
       text: parsed.suggested_reply,
     });
+    await persistMessageToFirestore(cleanSenderId, buffer.senderName || 'Customer', cleanChannel, 'bot', parsed.suggested_reply);
 
     return res.json({
       success: true,
@@ -1480,6 +1518,8 @@ async function processIncomingMetaPayload(payload: any) {
           attachmentUrl,
         });
 
+        await persistMessageToFirestore(senderId, buffer.senderName || 'Customer', channel, 'customer', text, attachmentUrl);
+
         // 2. Parse with Gemini AI
         const parsed = await parseOrderWithGemini(buffer.messages, buffer.senderName);
 
@@ -1538,6 +1578,7 @@ async function processIncomingMetaPayload(payload: any) {
             text: parsed.suggested_reply,
           });
 
+          await persistMessageToFirestore(senderId, buffer.senderName || 'Customer', channel, 'bot', parsed.suggested_reply);
           await sendMetaReply(channel, senderId, parsed.suggested_reply);
         }
       }
@@ -1581,6 +1622,8 @@ async function processIncomingMetaPayload(payload: any) {
             { sender: 'customer', text, attachmentUrl },
             senderName
           );
+
+          await persistMessageToFirestore(senderId, senderName || buffer.senderName || 'Customer', 'whatsapp', 'customer', text, attachmentUrl);
 
           // 2. Parse with Gemini AI
           const parsed = await parseOrderWithGemini(buffer.messages, buffer.senderName);
@@ -1640,6 +1683,7 @@ async function processIncomingMetaPayload(payload: any) {
               text: parsed.suggested_reply,
             });
 
+            await persistMessageToFirestore(senderId, senderName || buffer.senderName || 'Customer', 'whatsapp', 'bot', parsed.suggested_reply);
             await sendMetaReply('whatsapp', senderId, parsed.suggested_reply);
           }
         }

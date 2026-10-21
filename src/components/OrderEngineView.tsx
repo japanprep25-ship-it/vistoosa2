@@ -200,7 +200,7 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
       text,
       timestamp: new Date().toISOString(),
     };
-    setActiveMessages: setChatMessages((prev) => [...prev, optimisticMsg]);
+    setChatMessages((prev) => [...prev, optimisticMsg]);
 
     try {
       const res = await fetch('/api/messages/send', {
@@ -2281,8 +2281,8 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
           IN-APP LIVE CHAT MODAL FOR FACEBOOK MESSENGER & SOCIAL ORDERS
           =================================================================== */}
       {selectedChatOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="w-full h-full sm:h-[88vh] sm:max-h-[700px] sm:max-w-xl bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="w-full h-full sm:h-[88vh] sm:max-h-[750px] sm:max-w-2xl bg-zinc-950 border-0 sm:border border-zinc-800 rounded-none sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden">
             {/* 1. Simple Header */}
             <div className="p-3.5 px-4 sm:px-5 border-b border-zinc-800 bg-zinc-900/90 flex items-center justify-between gap-3 shrink-0">
               <div className="flex items-center gap-3 min-w-0">

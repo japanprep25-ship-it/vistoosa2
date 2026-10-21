@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   Share2,
   Settings,
+  MessageSquare,
   X,
 } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
@@ -22,6 +23,7 @@ import { AuthUser } from '../types';
 export type ActiveTab =
   | 'dashboard'
   | 'orders'
+  | 'social'
   | 'dispatch'
   | 'inventory'
   | 'reconciliation'
@@ -105,6 +107,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: ShoppingBag,
       badge: pendingOrdersCount > 0 ? `${pendingOrdersCount}` : undefined,
       badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+    },
+    {
+      id: 'social' as ActiveTab,
+      label: 'Social Media Inbox',
+      description: 'Messenger & WhatsApp Chats',
+      icon: MessageSquare,
+      badge: 'Live',
+      badgeColor: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
     },
     {
       id: 'cogs' as ActiveTab,

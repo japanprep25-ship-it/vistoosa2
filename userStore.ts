@@ -41,6 +41,7 @@ export interface UserProfile {
 export const ALL_PAGES = [
   { key: 'dashboard', label: 'Business Dashboard' },
   { key: 'orders', label: 'Order Engine' },
+  { key: 'social', label: 'Social Media Inbox' },
   { key: 'cogs', label: 'Cash & Balance' },
   { key: 'integrations', label: 'Connect Channels' },
   { key: 'dispatch', label: 'Barcode Dispatch' },
@@ -55,6 +56,7 @@ export const ALL_PAGES = [
 const DEFAULT_PERMISSIONS: Record<string, boolean> = {
   dashboard: true,
   orders: true,
+  social: true,
   cogs: true,
   integrations: true,
   dispatch: true,

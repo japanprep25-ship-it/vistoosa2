@@ -1882,9 +1882,9 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                         />
                       </a>
                     )}
-                    {order.items.map((item) => (
+                    {order.items.map((item, idx) => (
                       <div
-                        key={item.id}
+                        key={item.id || idx}
                         className="inline-flex items-center gap-1.5 text-xs bg-zinc-900/80 px-2.5 py-1 rounded-xl border border-zinc-800"
                       >
                         <span className="font-medium text-zinc-200">{item.productName}</span>

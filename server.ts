@@ -924,6 +924,12 @@ registerOrderCreationHook((order: any) => {
   } else {
     inboundWebsiteOrders.unshift(order);
   }
+
+  // Persist inbound Meta order to workspace store / Firestore so it appears instantly in web app pending queue
+  addOrUpdateUserOrder('usr_admin_default', order).catch((err) => {
+    console.error('[Meta Order Firestore Save Error]:', err);
+  });
+
   console.log(
     `[Unified Engine]: Inbound Meta Order #${order.id} (${order.channel}) queued into Pending orders. Customer: ${order.customerName}`
   );

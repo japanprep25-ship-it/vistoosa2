@@ -820,7 +820,7 @@ export const OrderFormModal: React.FC<OrderFormModalProps> = ({
             <div className="space-y-3">
               {items.map((item, idx) => (
                 <div
-                  key={item.id}
+                  key={item.id || idx}
                   className={`p-3.5 rounded-2xl border transition ${
                     item.matched
                       ? 'bg-zinc-950/80 border-emerald-500/30'

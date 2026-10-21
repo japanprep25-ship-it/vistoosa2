@@ -1759,9 +1759,9 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                 }
               }}
               onDoubleClick={() => handleToggleSelectOrder(order.id)}
-              className={`glass-card rounded-2xl p-4 transition-all duration-200 relative overflow-hidden border-2 cursor-pointer ${
+              className={`glass-card rounded-2xl p-4 transition-all duration-300 relative overflow-hidden border-2 cursor-pointer ${
                 selectedOrderIds.includes(order.id)
-                  ? 'border-blue-500 bg-blue-500/5'
+                  ? 'border-blue-500 bg-blue-500/10 shadow-lg shadow-blue-500/10'
                   : 'border-transparent hover:border-zinc-700'
               }`}
             >
@@ -1780,11 +1780,10 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                       className="font-mono text-xs font-bold text-amber-400 hover:text-amber-300 cursor-pointer transition flex items-center gap-1 active:scale-95"
                       title="Click to Edit Order (অর্ডার এডিট করতে ক্লিক করুন)"
                     >
-                      <span>{order.id}</span>
                       {selectedOrderIds.includes(order.id) && (
                         <CheckCircle2 className="w-3 h-3 text-blue-500" />
                       )}
-                      <Edit2 className="w-2.5 h-2.5 opacity-60 text-amber-400" />
+                      <span>{order.id}</span>
                     </button>
                     {getStatusBadge(order.status, order)}
                     {order.channel === 'Facebook' ? (
@@ -2453,34 +2452,34 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
         </div>
       )}
 
-      {/* Soft Delete Confirmation Full-Screen View */}
+      {/* Soft Delete Confirmation Modal */}
       {isSoftDeleteConfirmOpen && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-zinc-950 p-6 animate-in fade-in duration-200">
-          <div className="w-full max-w-4xl mx-auto h-full flex flex-col justify-center space-y-6">
-            <div className="flex items-center gap-4">
-              <div className="p-4 rounded-3xl bg-rose-500/15 text-rose-400 border border-rose-500/30">
-                <Trash2 className="w-8 h-8" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-md rounded-3xl bg-zinc-900 border border-zinc-700 p-6 shadow-2xl relative space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-2xl bg-rose-500/15 text-rose-400 border border-rose-500/30">
+                <Trash2 className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-2xl font-bold text-white">Move to Trash / ট্র্যাশে পাঠান</h3>
-                <p className="text-sm text-zinc-400">Soft Delete Confirmation</p>
+                <h3 className="text-base font-bold text-white">Move to Trash / ট্র্যাশে পাঠান</h3>
+                <p className="text-xs text-zinc-400">Soft Delete Confirmation</p>
               </div>
             </div>
 
-            <p className="text-lg text-zinc-300 leading-relaxed bg-zinc-900 p-8 rounded-3xl border border-zinc-700">
+            <p className="text-xs text-zinc-300 leading-relaxed bg-zinc-950/80 p-3.5 rounded-2xl border border-zinc-800">
               আপনি কি নিশ্চিত এই <strong className="text-amber-400 font-bold">{selectedOrderIds.length}</strong> টি অর্ডার Trash-এ পাঠাতে চান? (পরবর্তীতে Trash থেকে রিস্টোর করা যাবে)
             </p>
 
-            <div className="flex items-center gap-4 pt-4">
+            <div className="flex items-center justify-end gap-2.5 pt-2">
               <button
                 onClick={() => setIsSoftDeleteConfirmOpen(false)}
-                className="px-8 py-4 rounded-2xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold text-sm transition cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold text-xs transition cursor-pointer"
               >
                 Cancel (বাতিল)
               </button>
               <button
                 onClick={handleConfirmSoftDelete}
-                className="px-10 py-4 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-sm shadow-lg shadow-rose-600/20 active:scale-95 transition cursor-pointer"
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg shadow-rose-600/20 active:scale-95 transition cursor-pointer"
               >
                 Move to Trash (ট্র্যাশে পাঠান)
               </button>

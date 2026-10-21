@@ -1678,7 +1678,7 @@ async function processIncomingMetaPayload(payload: any) {
         }
 
         // 4. Send reply back to customer
-        if (parsed.suggested_reply) {
+        if (parsed.suggested_reply && config.meta?.autoReplyEnabled !== false) {
           const replyRes = await sendMetaReply(channel, senderId, parsed.suggested_reply);
           const replyMid = replyRes.data?.message_id;
 

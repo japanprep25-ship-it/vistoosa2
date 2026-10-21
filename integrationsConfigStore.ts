@@ -42,6 +42,7 @@ export interface FullIntegrationsConfig {
     conversionsApiToken: string;
     syncMessengerLeads: boolean;
     trackAdSpend: boolean;
+    autoReplyEnabled: boolean;
     status: 'connected' | 'disconnected';
     lastSync: string;
   };

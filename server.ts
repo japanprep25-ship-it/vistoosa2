@@ -132,6 +132,35 @@ app.get('/data-deletion', (req, res) => {
   `));
 });
 
+import { getPathaoOrderStatus } from './pathaoOrderService';
+import { addOrUpdateUserOrder, getUserOrders } from './userWorkspaceStore';
+
+// ... (existing code)
+
+app.get('/api/pathao/status/:consignmentId', extractOptionalAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const { consignmentId } = req.params;
+  const userId = req.userId || 'usr_admin_default';
+
+  try {
+    const statusData = await getPathaoOrderStatus(userId, consignmentId);
+    if (!statusData || !statusData.order_status) {
+      return res.status(404).json({ success: false, message: 'Status not found' });
+    }
+
+    // Find order by consignmentId
+    const orders = await getUserOrders(userId);
+    const order = orders.find(o => o.pathaoConsignmentId === consignmentId);
+
+    if (order) {
+      await addOrUpdateUserOrder(userId, { ...order, status: statusData.order_status });
+    }
+
+    return res.json({ success: true, status: statusData.order_status });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err?.message });
+  }
+});
+
 // WooCommerce & Generic Webhook Handshake Interceptor
 app.use((req, res, next) => {
   const isWcPing =

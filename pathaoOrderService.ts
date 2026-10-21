@@ -192,7 +192,7 @@ export async function createPathaoOrder(userId: string, order: PathaoOrderInput)
     }
   }
 
-  // Fallback: Return simulated consignment if live API is unavailable or rejected
+    // Fallback: Return simulated consignment if live API is unavailable or rejected
   const simConsignment = `PTH-${Math.floor(7820000 + Math.random() * 90000)}`;
   return {
     consignment_id: simConsignment,
@@ -202,6 +202,31 @@ export async function createPathaoOrder(userId: string, order: PathaoOrderInput)
     is_simulated: true,
   };
 }
+
+export async function getPathaoOrderStatus(userId: string, consignmentId: string) {
+  const creds = await getCredentials(userId);
+  const token = await getAccessToken(userId);
+
+  try {
+    const res = await fetch(`${creds.baseUrl}/aladdin/api/v1/orders/${consignmentId}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    const data = await res.json();
+    if (res.ok && data?.data) {
+      return data.data;
+    }
+    console.warn('[Pathao Status API Returned Error]:', res.status, data);
+    return null;
+  } catch (apiErr: any) {
+    console.error('[Pathao Status Exception]:', apiErr?.message || apiErr);
+    return null;
+  }
+}
+
 
 // Fallback Cities Dataset for Pathao Integration
 const DEFAULT_PATHAO_CITIES = [

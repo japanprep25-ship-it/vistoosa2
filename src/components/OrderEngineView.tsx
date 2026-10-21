@@ -217,7 +217,7 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
   }, [activeOrders]);
 
   // Handle opening Pathao tracking URL in new tab
-  const handleOpenTrackingUrl = (order?: Order) => {
+  const handleOpenTrackingUrl = async (order?: Order) => {
     if (!order) return;
     if (order.channel === 'Showroom') {
       alert('Showroom Direct Sale: In-store order — No courier tracking URL available.');
@@ -225,7 +225,12 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
     }
     const trackingId = order.pathaoConsignmentId || order.pathaoTrackingId;
     if (trackingId) {
-      window.open(`https://pathao.com/courier/tracking/?consignment_id=${trackingId}`, '_blank');
+      try {
+        await fetch(`/api/pathao/status/${trackingId}`);
+      } catch (e) {
+        console.error('Failed to update status', e);
+      }
+      window.open(`https://merchant.pathao.com/tracking?consignment_id=${trackingId}&phone=${order.phone}`, '_blank');
     } else {
       alert('No Pathao tracking ID found for this order.');
     }

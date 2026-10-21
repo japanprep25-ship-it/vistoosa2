@@ -1,56 +1,46 @@
 import { getApps, initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
-import firebaseConfig from './firebase-applet-config.json';
+import fs from 'fs';
+import path from 'path';
+
+// Read config explicitly
+const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+const firebaseConfig = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, 'utf8')) : {};
+
+const TARGET_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || firebaseConfig.projectId || 'master-focus-d98sv';
+const TARGET_DB_ID = process.env.FIRESTORE_DATABASE_ID || firebaseConfig.firestoreDatabaseId || '(default)';
+
+console.log(`[Firebase Admin Startup]: Initializing with ProjectID: "${TARGET_PROJECT_ID}", DatabaseID: "${TARGET_DB_ID}"`);
 
 let app;
-const TARGET_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || (firebaseConfig as any).projectId || 'master-focus-d98sv';
-const TARGET_DB_ID = process.env.FIREBASE_DATABASE_ID || (firebaseConfig as any).firestoreDatabaseId || '(default)';
-
 if (!getApps().length) {
-  const serviceAccountEnv = process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (serviceAccountEnv) {
+  const serviceAccountRaw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT;
+  if (serviceAccountRaw) {
     try {
-      let serviceAccount = typeof serviceAccountEnv === 'string' ? JSON.parse(serviceAccountEnv) : serviceAccountEnv;
+      let serviceAccount = JSON.parse(serviceAccountRaw);
       if (serviceAccount && typeof serviceAccount.private_key === 'string') {
         serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
       }
-      const projectId = serviceAccount.project_id || TARGET_PROJECT_ID;
-
       app = initializeApp({
         credential: cert(serviceAccount),
-        projectId: projectId,
+        projectId: serviceAccount.project_id || TARGET_PROJECT_ID,
       });
-      console.log(`[Firebase Admin]: Initialized successfully for project_id: "${projectId}".`);
     } catch (err: any) {
-      console.error('[Firebase Admin Error]: Failed to parse FIREBASE_SERVICE_ACCOUNT JSON string:', err?.message || err, err);
-      try {
-        app = initializeApp({ projectId: TARGET_PROJECT_ID });
-      } catch (e) {
-        // Fallback initialized
-      }
+      console.error('[Firebase Admin Error]: Failed to parse service account JSON from environment variables.');
+      app = initializeApp({ projectId: TARGET_PROJECT_ID });
     }
   } else {
-    try {
-      app = initializeApp({
-        projectId: TARGET_PROJECT_ID,
-      });
-      console.log(`[Firebase Admin]: Initialized via default credentials for project_id: "${TARGET_PROJECT_ID}".`);
-    } catch (err: any) {
-      console.warn('[Firebase Admin Warning]: No service account found; initializeApp default attempted:', err?.message || err);
-    }
+    app = initializeApp({ projectId: TARGET_PROJECT_ID });
   }
 } else {
   app = getApps()[0];
 }
 
-// Target the designated Firestore database ID
 export const db = getFirestore(app, TARGET_DB_ID);
 
 try {
   db.settings({ ignoreUndefinedProperties: true });
-} catch (err) {
-  // Ignore if settings already initialized
-}
+} catch (err) {}
 
 let firestoreQuotaExceeded = false;
 
@@ -87,32 +77,19 @@ export function markFirestoreQuotaExceeded(): void {
 }
 
 export async function testFirestoreConnection(): Promise<boolean> {
-  if (firestoreQuotaExceeded) {
-    return false;
-  }
-
+  if (firestoreQuotaExceeded) return false;
   try {
-    // Test ping query against Firestore database TARGET_DB_ID
-    await db.collection('_healthcheck').doc('ping').get();
-    console.log(`Firebase Firestore connected successfully to database "${TARGET_DB_ID}" in project "${TARGET_PROJECT_ID}"`);
+    const docRef = db.collection('_healthcheck').doc('ping');
+    await docRef.set({ timestamp: new Date().toISOString() });
+    await docRef.get();
+    console.log(`[Firebase Admin Startup]: Firestore OK`);
     return true;
   } catch (err: any) {
-    if (isQuotaExceededError(err)) {
-      markFirestoreQuotaExceeded();
-      return false;
-    }
-
-    if (isPermissionDeniedError(err)) {
-      console.info(`[Firestore Status]: Operating in resilient local memory mode (Firestore permission restricted in project "${TARGET_PROJECT_ID}").`);
-      return false;
-    }
-
-    console.info('[Firestore Status]: Operating in resilient local memory mode:', err?.message || err);
+    console.error(`[Firebase Admin Startup]: Firestore Error:`, err.message || err);
+    if (isQuotaExceededError(err)) firestoreQuotaExceeded = true;
     return false;
   }
 }
 
-// Perform initial connection test on module load
 testFirestoreConnection();
-
 export default app;

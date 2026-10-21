@@ -101,8 +101,8 @@ export async function loadMetaConfig(docId: string = 'global'): Promise<MetaConf
     metaAppId: dbConfig.metaAppId || process.env.META_APP_ID || '',
     metaAppSecret: dbConfig.metaAppSecret || process.env.META_APP_SECRET || '',
     metaVerifyToken: dbConfig.metaVerifyToken || process.env.META_VERIFY_TOKEN || DEFAULT_VERIFY_TOKEN,
-    pageAccessToken: dbConfig.pageAccessToken || process.env.PAGE_ACCESS_TOKEN || '',
-    pageId: dbConfig.pageId || process.env.PAGE_ID || '',
+    pageAccessToken: dbConfig.pageAccessToken || process.env.META_PAGE_ACCESS_TOKEN || '',
+    pageId: dbConfig.pageId || process.env.META_PAGE_ID || '',
     instagramBusinessAccountId: dbConfig.instagramBusinessAccountId || process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID || '',
     whatsappPhoneNumberId: dbConfig.whatsappPhoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID || '',
     whatsappBusinessAccountId: dbConfig.whatsappBusinessAccountId || process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || '',
@@ -477,20 +477,25 @@ export async function sendMetaReply(
   const config = await loadMetaConfig();
 
   try {
+    const isSimulation = recipientId.startsWith('psid_tanvir_');
+
     if (channel === 'whatsapp') {
       const phoneNumberId = config.whatsappPhoneNumberId;
       const token = config.whatsappAccessToken;
 
       if (!phoneNumberId || !token) {
-        console.log(`[Meta Reply Simulation]: WhatsApp token not configured. Logged reply for ${recipientId}: "${messageText}"`);
+        return { success: false, error: 'WhatsApp configuration missing.' };
+      }
+
+      if (isSimulation) {
+        console.log(`[Meta Reply Simulation]: WhatsApp reply for ${recipientId}: "${messageText}"`);
         return { success: true, data: { simulated: true, channel: 'whatsapp', text: messageText } };
       }
 
-      // Format recipient phone number
       const cleanPhone = recipientId.replace(/\D/g, '');
       const formattedPhone = cleanPhone.startsWith('88') ? cleanPhone : `88${cleanPhone.replace(/^0/, '')}`;
 
-      const res = await fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/messages`, {
+      const res = await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -506,16 +511,22 @@ export async function sendMetaReply(
       });
 
       const data = await res.json();
-      return { success: res.ok, data };
+      if (!res.ok) {
+        return { success: false, error: data.error?.message || 'Failed to send WhatsApp message' };
+      }
+      return { success: true, data };
     } else {
-      // Messenger & Instagram DM use Facebook Page Access Token
       const token = config.pageAccessToken;
       if (!token) {
-        console.log(`[Meta Reply Simulation]: Page Access Token not configured. Logged reply for ${recipientId}: "${messageText}"`);
+        return { success: false, error: 'Page Access Token missing.' };
+      }
+
+      if (isSimulation) {
+        console.log(`[Meta Reply Simulation]: ${channel} reply for ${recipientId}: "${messageText}"`);
         return { success: true, data: { simulated: true, channel, text: messageText } };
       }
 
-      const res = await fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${token}`, {
+      const res = await fetch(`https://graph.facebook.com/v21.0/me/messages?access_token=${token}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -525,12 +536,16 @@ export async function sendMetaReply(
       });
 
       const data = await res.json();
-      return { success: res.ok, data };
+      if (!res.ok) {
+        return { success: false, error: data.error?.message || 'Failed to send Meta message' };
+      }
+      return { success: true, data };
     }
   } catch (err: any) {
     console.error(`[Meta Reply Error]: Failed to send reply to ${recipientId} via ${channel}:`, err?.message || err);
     return { success: false, error: err?.message || err };
   }
+
 }
 
 // -----------------------------------------------------------------------

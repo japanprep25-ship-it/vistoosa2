@@ -173,7 +173,6 @@ export const SocialMediaInboxView: React.FC<SocialMediaInboxViewProps> = ({
           const phoneDigits = target.phone ? target.phone.replace(/\D/g, '') : '';
           const targetPsid = target.senderId || (phoneDigits ? `psid_${phoneDigits}` : `psid_${target.id}`);
           setTimeout(() => {
-            setSelectedPsid(targetPsid);
             setActiveCustomerName(target.customerName || 'Customer');
             setActiveChannel(
               target.channel?.toLowerCase() === 'instagram' || target.source === 'instagram'
@@ -182,6 +181,8 @@ export const SocialMediaInboxView: React.FC<SocialMediaInboxViewProps> = ({
                 ? 'whatsapp'
                 : 'messenger'
             );
+            // Ensure selectedPsid matches the conversationId if provided, or the derived targetPsid
+            setSelectedPsid(target.conversationId || targetPsid);
           }, 250);
         }
       } catch (e) {

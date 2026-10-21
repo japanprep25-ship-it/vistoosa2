@@ -928,6 +928,7 @@ export default function App() {
                 onGoToDispatch={(orderId) => {
                   navigateTo('dispatch');
                 }}
+                onNavigateToSocial={() => navigateTo('social')}
                 onCreateOrder={handleCreateOrder}
                 onUpdateOrder={handleUpdateOrder}
                 onSoftDeleteOrders={handleSoftDeleteOrders}

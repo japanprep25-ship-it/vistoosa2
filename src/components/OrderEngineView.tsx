@@ -75,6 +75,7 @@ interface OrderEngineViewProps {
   onApproveOrder: (orderId: string) => void;
   onCancelOrder: (orderId: string) => void;
   onGoToDispatch: (orderId: string) => void;
+  onNavigateToSocial?: () => void;
   onCreateOrder: (newOrder: Partial<Order>) => void;
   onUpdateOrder?: (updatedOrder: Order) => void;
   onSoftDeleteOrders?: (orderIds: string[]) => void;
@@ -88,6 +89,7 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
   onApproveOrder,
   onCancelOrder,
   onGoToDispatch,
+  onNavigateToSocial,
   onCreateOrder,
   onUpdateOrder,
   onSoftDeleteOrders,
@@ -99,135 +101,6 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
   const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [selectedChatOrder, setSelectedChatOrder] = useState<Order | null>(null);
-  const [chatMessages, setChatMessages] = useState<
-    Array<{ sender: 'customer' | 'bot' | 'agent' | 'user'; text: string; timestamp: string }>
-  >([]);
-  const [chatInputText, setChatInputText] = useState<string>('');
-  const [isSendingChatMessage, setIsSendingChatMessage] = useState<boolean>(false);
-  const [isLoadingChatHistory, setIsLoadingChatHistory] = useState<boolean>(false);
-  const chatMessagesContainerRef = useRef<HTMLDivElement>(null);
-  const chatInputFocusRef = useRef<HTMLInputElement>(null);
-
-  // Helper: Derive clean Facebook PSID or customer identifier
-  const getOrderPsid = (order: Order): string => {
-    if (order.senderId && order.senderId.trim().length > 0) return order.senderId.trim();
-    if (order.phone && order.phone.trim().length >= 10) return `psid_${order.phone.replace(/\D/g, '')}`;
-    return `psid_${order.id}`;
-  };
-
-  // Fetch chat history from GET /api/messages/:psid
-  const fetchOrderChatHistory = async (order: Order, silent = false) => {
-    const psid = getOrderPsid(order);
-    if (!silent) setIsLoadingChatHistory(true);
-    try {
-      const channelParam =
-        order.source ||
-        (order.channel === 'Instagram' ? 'instagram' : order.channel === 'WhatsApp' ? 'whatsapp' : 'messenger');
-      const res = await fetch(
-        `/api/messages/${encodeURIComponent(psid)}?customerName=${encodeURIComponent(order.customerName)}&channel=${channelParam}`
-      );
-      const data = await res.json();
-      if (data && data.success && Array.isArray(data.messages)) {
-        if (data.messages.length === 0 && order.rawConversation && order.rawConversation.length > 0) {
-          const formatted = order.rawConversation.map((m: any) => ({
-            sender: (m.sender || 'customer') as any,
-            text: m.text || '',
-            timestamp: m.timestamp || new Date().toISOString(),
-          }));
-          setChatMessages(formatted);
-        } else {
-          setChatMessages(data.messages);
-        }
-      }
-    } catch (err) {
-      console.warn('[In-App Chat]: Failed to fetch chat history:', err);
-    } finally {
-      if (!silent) setIsLoadingChatHistory(false);
-    }
-  };
-
-  // Open the In-App Chat Modal for a specific order
-  const handleOpenInAppChat = (order: Order) => {
-    setSelectedChatOrder(order);
-    setChatInputText('');
-    fetchOrderChatHistory(order);
-  };
-
-  // Poll for live customer messages while modal is active (every 3.5s)
-  useEffect(() => {
-    if (!selectedChatOrder) return;
-    const interval = setInterval(() => {
-      fetchOrderChatHistory(selectedChatOrder, true);
-    }, 3500);
-    return () => clearInterval(interval);
-  }, [selectedChatOrder]);
-
-  // Prevent background page from scrolling when chat modal is open
-  useEffect(() => {
-    if (selectedChatOrder) {
-      const originalOverflow = document.body.style.overflow;
-      document.body.style.overflow = 'hidden';
-      return () => {
-        document.body.style.overflow = originalOverflow;
-      };
-    }
-  }, [selectedChatOrder]);
-
-  // Scroll ONLY the message container inside the chatbox (no window scroll)
-  useEffect(() => {
-    if (selectedChatOrder && chatMessagesContainerRef.current) {
-      chatMessagesContainerRef.current.scrollTop = chatMessagesContainerRef.current.scrollHeight;
-    }
-  }, [chatMessages, selectedChatOrder]);
-
-  // Send message to Facebook Messenger via POST /api/messages/send
-  const handleSendChatMessage = async (textToSend?: string) => {
-    const text = (textToSend !== undefined ? textToSend : chatInputText).trim();
-    if (!text || !selectedChatOrder || isSendingChatMessage) return;
-
-    const psid = getOrderPsid(selectedChatOrder);
-    const channelParam =
-      selectedChatOrder.source ||
-      (selectedChatOrder.channel === 'Instagram' ? 'instagram' : selectedChatOrder.channel === 'WhatsApp' ? 'whatsapp' : 'messenger');
-
-    setIsSendingChatMessage(true);
-    setChatInputText('');
-
-    // Instant optimistic update
-    const optimisticMsg = {
-      sender: 'bot' as const,
-      text,
-      timestamp: new Date().toISOString(),
-    };
-    setChatMessages((prev) => [...prev, optimisticMsg]);
-
-    try {
-      const res = await fetch('/api/messages/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          recipient_psid: psid,
-          message_text: text,
-          customer_name: selectedChatOrder.customerName,
-          channel: channelParam,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to dispatch message via Meta Graph API');
-      }
-
-      fetchOrderChatHistory(selectedChatOrder, true);
-    } catch (err: any) {
-      console.error('[In-App Chat Send Error]:', err);
-      alert(`Could not send message: ${err.message || 'Meta API error'}`);
-    } finally {
-      setIsSendingChatMessage(false);
-      chatInputFocusRef.current?.focus();
-    }
-  };
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [orderFeedbackMessage, setOrderFeedbackMessage] = useState<string>('');
   const [previewOrders, setPreviewOrders] = useState<any[] | null>(null);
@@ -1918,10 +1791,12 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                       <Edit2 className="w-2.5 h-2.5 opacity-60 text-amber-400" />
                     </button>
                     {getStatusBadge(order.status, order)}
-                    {order.channel === 'Facebook' ? (
+                    {order.channel?.toLowerCase() === 'facebook' ? (
                       <button
                         type="button"
-                        onClick={() => handleOpenInAppChat(order)}
+                        onClick={() => {
+                          if (onNavigateToSocial) onNavigateToSocial();
+                        }}
                         className={`inline-block text-[10px] px-2 py-0.5 rounded-full border font-medium ${getChannelColor(
                           order.channel
                         )} hover:opacity-80 transition cursor-pointer`}
@@ -1989,10 +1864,12 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                     )}
 
                     {/* Chat on Facebook / Messenger In-App Trigger */}
-                    {(order.channel === 'Facebook' || order.source === 'messenger' || order.rawConversation?.length) ? (
+                    {(order.channel?.toLowerCase() === 'facebook' || order.source === 'messenger' || (order.rawConversation && order.rawConversation.length > 0)) ? (
                       <button
                         type="button"
-                        onClick={() => handleOpenInAppChat(order)}
+                        onClick={() => {
+                          if (onNavigateToSocial) onNavigateToSocial();
+                        }}
                         className="text-[10px] px-2.5 py-1 rounded-full bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-300 font-bold flex items-center gap-1.5 transition shadow-sm active:scale-95 cursor-pointer"
                         title={`Open In-App Facebook Messenger Chat with ${order.customerName}`}
                       >
@@ -2002,7 +1879,9 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                     ) : (order.channel === 'Instagram' || order.source === 'instagram') ? (
                       <button
                         type="button"
-                        onClick={() => handleOpenInAppChat(order)}
+                        onClick={() => {
+                          if (onNavigateToSocial) onNavigateToSocial();
+                        }}
                         className="text-[10px] px-2.5 py-1 rounded-full bg-pink-600/20 hover:bg-pink-600/30 border border-pink-500/40 text-pink-300 font-bold flex items-center gap-1.5 transition shadow-sm active:scale-95 cursor-pointer"
                         title={`Open In-App Instagram Chat with ${order.customerName}`}
                       >
@@ -2012,7 +1891,9 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                     ) : (order.channel === 'WhatsApp' || order.source === 'whatsapp') ? (
                       <button
                         type="button"
-                        onClick={() => handleOpenInAppChat(order)}
+                        onClick={() => {
+                          if (onNavigateToSocial) onNavigateToSocial();
+                        }}
                         className="text-[10px] px-2.5 py-1 rounded-full bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 font-bold flex items-center gap-1.5 transition shadow-sm active:scale-95 cursor-pointer"
                         title={`Open In-App WhatsApp Chat with ${order.customerName}`}
                       >
@@ -2137,18 +2018,20 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                       </>
                     ) : (
                       <>
-                        {/* Chat on Facebook Button */}
-                        {(order.channel === 'Facebook' || order.source === 'messenger' || order.senderId) && (
-                          <button
-                            type="button"
-                            onClick={() => handleOpenInAppChat(order)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold shadow-md shadow-blue-900/30 transition active:scale-95 cursor-pointer"
-                            title={`Chat directly with ${order.customerName} on Facebook Messenger`}
-                          >
-                            <MessageSquare className="w-3.5 h-3.5 text-blue-100" />
-                            <span>Chat on Facebook</span>
-                          </button>
-                        )}
+                        {/* Chat on Facebook Button - Navigates to Social Media Inbox page */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (onNavigateToSocial) {
+                              onNavigateToSocial();
+                            }
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-sm transition active:scale-95 cursor-pointer"
+                          title="Open Facebook Messenger / Social Inbox Page"
+                        >
+                          <MessageSquare className="w-3.5 h-3.5" />
+                          <span>Chat on Facebook</span>
+                        </button>
 
                         {/* Edit Button - Always accessible on any active order */}
                         <button
@@ -2277,177 +2160,7 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
         products={products}
       />
 
-      {/* ===================================================================
-          IN-APP LIVE CHAT MODAL FOR FACEBOOK MESSENGER & SOCIAL ORDERS
-          =================================================================== */}
-      {selectedChatOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="w-full h-full sm:h-[88vh] sm:max-h-[750px] sm:max-w-2xl bg-zinc-950 border-0 sm:border border-zinc-800 rounded-none sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden">
-            {/* 1. Simple Header */}
-            <div className="p-3.5 px-4 sm:px-5 border-b border-zinc-800 bg-zinc-900/90 flex items-center justify-between gap-3 shrink-0">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="relative shrink-0">
-                  <div className="w-9 h-9 rounded-full bg-blue-600 text-white font-bold text-sm flex items-center justify-center shadow-sm">
-                    {selectedChatOrder.customerName ? selectedChatOrder.customerName.charAt(0) : 'C'}
-                  </div>
-                  <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-zinc-900" />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-semibold text-white truncate">
-                      {selectedChatOrder.customerName}
-                    </h3>
-                    <span className="text-[10px] text-zinc-400 font-mono">
-                      #{selectedChatOrder.id}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-zinc-400 flex items-center gap-1.5 truncate">
-                    <span className="text-blue-400 font-medium">Facebook Messenger</span>
-                    <span>•</span>
-                    <span>{selectedChatOrder.phone}</span>
-                  </p>
-                </div>
-              </div>
 
-              <div className="flex items-center gap-1 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => fetchOrderChatHistory(selectedChatOrder)}
-                  className="p-2 rounded-xl hover:bg-zinc-800 text-zinc-400 hover:text-white transition cursor-pointer"
-                  title="Refresh chat"
-                >
-                  <RefreshCw className={`w-4 h-4 ${isLoadingChatHistory ? 'animate-spin text-blue-400' : ''}`} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedChatOrder(null)}
-                  className="p-2 rounded-xl hover:bg-zinc-800 text-zinc-400 hover:text-white transition cursor-pointer"
-                  title="Close"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            {/* 2. Compact Order Context */}
-            <div className="px-4 py-2 bg-zinc-900/40 border-b border-zinc-850 flex items-center justify-between text-xs text-zinc-400 gap-2 shrink-0">
-              <div className="flex items-center gap-1.5 truncate">
-                <Package className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                <span className="text-zinc-200 truncate">
-                  {selectedChatOrder.items.map((i) => `${i.productName} (${i.size}) x${i.quantity}`).join(', ')}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 shrink-0 font-medium">
-                <span className="text-emerald-400 font-mono font-bold">
-                  ৳{selectedChatOrder.totalAmount.toLocaleString()}
-                </span>
-                <span className="text-zinc-600">•</span>
-                <span className="text-zinc-400 text-[11px]">{selectedChatOrder.status}</span>
-              </div>
-            </div>
-
-            {/* 3. Chat History Stream (Scrollable Container) */}
-            <div
-              ref={chatMessagesContainerRef}
-              className="flex-1 overflow-y-auto p-4 space-y-3 bg-zinc-950 min-h-0"
-            >
-              {isLoadingChatHistory && chatMessages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-zinc-500 space-y-2">
-                  <RefreshCw className="w-5 h-5 text-blue-400 animate-spin" />
-                  <p className="text-xs">লোড হচ্ছে...</p>
-                </div>
-              ) : chatMessages.length === 0 ? (
-                <div className="py-12 text-center text-zinc-500 space-y-2">
-                  <MessageSquare className="w-8 h-8 text-zinc-700 mx-auto" />
-                  <p className="text-xs text-zinc-400">মেসেঞ্জার হিস্ট্রি পাওয়া যায়নি</p>
-                  <p className="text-[11px] text-zinc-500">
-                    নিচে মেসেজ লিখে সেন্ড করুন
-                  </p>
-                </div>
-              ) : (
-                chatMessages.map((msg, index) => {
-                  const isOutgoing = msg.sender === 'bot' || msg.sender === 'agent' || msg.sender === 'user';
-                  return (
-                    <div
-                      key={index}
-                      className={`flex flex-col ${isOutgoing ? 'items-end' : 'items-start'} space-y-1`}
-                    >
-                      <div
-                        className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-xs leading-relaxed ${
-                          isOutgoing
-                            ? 'bg-blue-600 text-white rounded-br-xs'
-                            : 'bg-zinc-800 text-zinc-100 rounded-bl-xs'
-                        }`}
-                      >
-                        <p className="whitespace-pre-wrap select-text">{msg.text}</p>
-                      </div>
-                      {msg.timestamp && (
-                        <span className="text-[10px] text-zinc-500 px-1 font-mono">
-                          {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            {/* 4. Simple Quick Replies */}
-            <div className="px-3.5 py-2 border-t border-zinc-850 bg-zinc-900/40 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
-              {[
-                `অর্ডার #${selectedChatOrder.id} কনফার্ম করা হয়েছে ✅`,
-                'আপনার পার্সেলটি আজকে পাঠানো হবে 📦',
-                'ক্যাশ অন ডেলিভারিতে নিতে পারবেন 💵',
-                'ঠিকানা ও ফোন নম্বর ঠিক আছে কি? 📍',
-              ].map((template, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => setChatInputText(template)}
-                  className="shrink-0 text-[11px] px-2.5 py-1 rounded-full bg-zinc-850 hover:bg-zinc-800 border border-zinc-750 text-zinc-300 hover:text-white transition cursor-pointer"
-                >
-                  {template}
-                </button>
-              ))}
-            </div>
-
-            {/* 5. Simple Input Bar */}
-            <div className="p-3 border-t border-zinc-800 bg-zinc-950 shrink-0">
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSendChatMessage();
-                }}
-                className="flex items-center gap-2"
-              >
-                <input
-                  ref={chatInputFocusRef}
-                  type="text"
-                  placeholder="মেসেজ লিখুন..."
-                  value={chatInputText}
-                  onChange={(e) => setChatInputText(e.target.value)}
-                  disabled={isSendingChatMessage}
-                  className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500 transition"
-                />
-                <button
-                  type="submit"
-                  disabled={isSendingChatMessage || !chatInputText.trim()}
-                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs transition active:scale-95 disabled:opacity-50 disabled:pointer-events-none flex items-center gap-1.5 cursor-pointer shrink-0"
-                >
-                  {isSendingChatMessage ? (
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <>
-                      <span>পাঠান</span>
-                      <Send className="w-3.5 h-3.5" />
-                    </>
-                  )}
-                </button>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* CSV Import Modal */}
       {isImportModalOpen && (

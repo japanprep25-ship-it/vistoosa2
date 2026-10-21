@@ -438,7 +438,7 @@ export const SocialMediaInboxView: React.FC<SocialMediaInboxViewProps> = ({
         {/* ===================================================================
             COLUMN 1: Conversation List (Left, 4 or 5 columns on desktop)
             =================================================================== */}
-        <div className="lg:col-span-4 xl:col-span-4 glass-panel rounded-3xl border border-zinc-800/80 flex flex-col overflow-hidden shadow-xl">
+        <div className={`lg:col-span-4 xl:col-span-4 glass-panel rounded-3xl border border-zinc-800/80 flex-col overflow-hidden shadow-xl ${selectedPsid ? 'hidden lg:flex' : 'flex'}`}>
           {/* List Header: Search & Channel Tabs */}
           <div className="p-3.5 border-b border-zinc-800 space-y-2.5 shrink-0 bg-zinc-950/40">
             {/* Search Input */}
@@ -566,12 +566,20 @@ export const SocialMediaInboxView: React.FC<SocialMediaInboxViewProps> = ({
         {/* ===================================================================
             COLUMN 2: Active Chat Window (Right, 8 columns on desktop)
             =================================================================== */}
-        <div className="lg:col-span-8 xl:col-span-8 glass-panel rounded-3xl border border-zinc-800/80 flex flex-col overflow-hidden shadow-xl relative bg-zinc-950/40">
+        <div className={`lg:col-span-8 xl:col-span-8 glass-panel rounded-3xl border border-zinc-800/80 flex-col overflow-hidden shadow-xl relative bg-zinc-950/40 ${!selectedPsid ? 'hidden lg:flex' : 'flex'}`}>
           {selectedConv ? (
             <>
               {/* Chat Window Header */}
               <div className="p-3.5 px-5 border-b border-zinc-800/80 flex items-center justify-between gap-3 bg-zinc-950/80 shrink-0">
                 <div className="flex items-center gap-3 min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPsid(null)}
+                    className="lg:hidden p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 transition shrink-0 cursor-pointer"
+                    title="Back to conversations"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
                   <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-purple-700 to-indigo-600 text-white font-bold text-sm flex items-center justify-center shrink-0 shadow-md">
                     {activeCustomerName ? activeCustomerName.charAt(0) : 'C'}
                   </div>

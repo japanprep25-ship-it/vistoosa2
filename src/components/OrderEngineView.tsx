@@ -105,6 +105,17 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
   const [orderFeedbackMessage, setOrderFeedbackMessage] = useState<string>('');
   const [previewOrders, setPreviewOrders] = useState<any[] | null>(null);
 
+  const handleOpenOrderChat = (order: Order) => {
+    try {
+      localStorage.setItem('vistoosa_target_order', JSON.stringify(order));
+    } catch (e) {
+      console.warn('Could not save target order', e);
+    }
+    if (onNavigateToSocial) {
+      onNavigateToSocial();
+    }
+  };
+
   // Trash & Bulk selection state
   const [viewMode, setViewMode] = useState<'active' | 'trash'>('active');
   const [engineViewMode, setEngineViewMode] = useState<'queue' | 'dashboard'>('queue');
@@ -1791,28 +1802,16 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                       <Edit2 className="w-2.5 h-2.5 opacity-60 text-amber-400" />
                     </button>
                     {getStatusBadge(order.status, order)}
-                    {order.channel?.toLowerCase() === 'facebook' ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (onNavigateToSocial) onNavigateToSocial();
-                        }}
-                        className={`inline-block text-[10px] px-2 py-0.5 rounded-full border font-medium ${getChannelColor(
-                          order.channel
-                        )} hover:opacity-80 transition cursor-pointer`}
-                        title="Open In-App Facebook Messenger Chat"
-                      >
-                        {order.channel}
-                      </button>
-                    ) : (
-                      <span
-                        className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${getChannelColor(
-                          order.channel
-                        )}`}
-                      >
-                        {order.channel}
-                      </span>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleOpenOrderChat(order)}
+                      className={`inline-block text-[10px] px-2 py-0.5 rounded-full border font-medium ${getChannelColor(
+                        order.channel
+                      )} hover:opacity-80 transition cursor-pointer`}
+                      title={`Open In-App Chat for ${order.channel || 'Order'}`}
+                    >
+                      {order.channel}
+                    </button>
 
                     {/* Pathao Pickup Disabled Badge */}
                     {order.disablePathaoPickup && (
@@ -1844,7 +1843,12 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
 
                     {/* Meta / Inbound Source Tag */}
                     {order.source && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-800/80 border border-zinc-700 text-zinc-300 font-medium">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenOrderChat(order)}
+                        className="text-[10px] px-2.5 py-0.5 rounded-full bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 font-medium transition cursor-pointer"
+                        title="Open In-App Chat"
+                      >
                         {order.source === 'messenger'
                           ? 'Messenger DM'
                           : order.source === 'instagram'
@@ -1852,7 +1856,7 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                           : order.source === 'whatsapp'
                           ? 'WhatsApp Chat'
                           : order.source}
-                      </span>
+                      </button>
                     )}
 
                     {/* AI Verified Badge */}
@@ -1867,9 +1871,7 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                     {(order.channel?.toLowerCase() === 'facebook' || order.source === 'messenger' || (order.rawConversation && order.rawConversation.length > 0)) ? (
                       <button
                         type="button"
-                        onClick={() => {
-                          if (onNavigateToSocial) onNavigateToSocial();
-                        }}
+                        onClick={() => handleOpenOrderChat(order)}
                         className="text-[10px] px-2.5 py-1 rounded-full bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-300 font-bold flex items-center gap-1.5 transition shadow-sm active:scale-95 cursor-pointer"
                         title={`Open In-App Facebook Messenger Chat with ${order.customerName}`}
                       >
@@ -1879,9 +1881,7 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                     ) : (order.channel === 'Instagram' || order.source === 'instagram') ? (
                       <button
                         type="button"
-                        onClick={() => {
-                          if (onNavigateToSocial) onNavigateToSocial();
-                        }}
+                        onClick={() => handleOpenOrderChat(order)}
                         className="text-[10px] px-2.5 py-1 rounded-full bg-pink-600/20 hover:bg-pink-600/30 border border-pink-500/40 text-pink-300 font-bold flex items-center gap-1.5 transition shadow-sm active:scale-95 cursor-pointer"
                         title={`Open In-App Instagram Chat with ${order.customerName}`}
                       >
@@ -1891,9 +1891,7 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                     ) : (order.channel === 'WhatsApp' || order.source === 'whatsapp') ? (
                       <button
                         type="button"
-                        onClick={() => {
-                          if (onNavigateToSocial) onNavigateToSocial();
-                        }}
+                        onClick={() => handleOpenOrderChat(order)}
                         className="text-[10px] px-2.5 py-1 rounded-full bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 font-bold flex items-center gap-1.5 transition shadow-sm active:scale-95 cursor-pointer"
                         title={`Open In-App WhatsApp Chat with ${order.customerName}`}
                       >

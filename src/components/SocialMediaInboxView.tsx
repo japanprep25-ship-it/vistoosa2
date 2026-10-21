@@ -162,6 +162,34 @@ export const SocialMediaInboxView: React.FC<SocialMediaInboxViewProps> = ({
     fetchConversations();
   }, []);
 
+  // Check if a specific target order was requested from Order Engine
+  useEffect(() => {
+    const rawTarget = localStorage.getItem('vistoosa_target_order');
+    if (rawTarget) {
+      try {
+        const target = JSON.parse(rawTarget);
+        localStorage.removeItem('vistoosa_target_order');
+        if (target) {
+          const phoneDigits = target.phone ? target.phone.replace(/\D/g, '') : '';
+          const targetPsid = target.senderId || (phoneDigits ? `psid_${phoneDigits}` : `psid_${target.id}`);
+          setTimeout(() => {
+            setSelectedPsid(targetPsid);
+            setActiveCustomerName(target.customerName || 'Customer');
+            setActiveChannel(
+              target.channel?.toLowerCase() === 'instagram' || target.source === 'instagram'
+                ? 'instagram'
+                : target.channel?.toLowerCase() === 'whatsapp' || target.source === 'whatsapp'
+                ? 'whatsapp'
+                : 'messenger'
+            );
+          }, 250);
+        }
+      } catch (e) {
+        console.warn('Failed to parse target order from localStorage', e);
+      }
+    }
+  }, []);
+
   // Poll conversations & active chat every 4 seconds for real-time responsiveness
   useEffect(() => {
     if (!autoRefreshEnabled) return;

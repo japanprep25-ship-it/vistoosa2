@@ -212,17 +212,33 @@ async function persistMessageToFirestore(
   if (isFirestoreQuotaExceeded()) return;
   try {
     const threadRef = db.collection('conversations').doc(senderId);
-    await threadRef.set(
-      {
-        senderId,
-        senderName: senderName || 'Customer',
-        channel,
-        lastUpdated: new Date().toISOString(),
-        lastMessage: text || (attachmentUrl ? '[Image Attachment]' : ''),
-        lastMessageSender: senderType,
-      },
-      { merge: true }
-    );
+    
+    // Fetch real name if we don't have it yet
+    let finalSenderName = senderName;
+    let profilePic: string | undefined;
+    
+    if (!finalSenderName || finalSenderName.startsWith('Customer #')) {
+      const metaInfo = await fetchMetaUserInfo(senderId);
+      if (metaInfo) {
+        finalSenderName = metaInfo.name;
+        profilePic = metaInfo.profilePic;
+      }
+    }
+
+    const updateData: any = {
+      senderId,
+      senderName: finalSenderName || 'Customer',
+      channel,
+      lastUpdated: new Date().toISOString(),
+      lastMessage: text || (attachmentUrl ? '[Image Attachment]' : ''),
+      lastMessageSender: senderType,
+    };
+    
+    if (profilePic) {
+      updateData.profilePic = profilePic;
+    }
+
+    await threadRef.set(updateData, { merge: true });
 
     if (mid) {
       const existingMsgQuery = await threadRef.collection('messages').where('mid', '==', mid).get();
@@ -463,6 +479,31 @@ function fallbackHeuristicParser(transcript: string, knownSenderName?: string): 
     missing_fields,
     suggested_reply,
   };
+}
+
+// Helper to fetch real name and profile picture from Meta
+export async function fetchMetaUserInfo(psid: string): Promise<{name: string, profilePic: string} | null> {
+  const config = await loadMetaConfig();
+  if (!config.pageAccessToken) return null;
+
+  try {
+    const url = `https://graph.facebook.com/v21.0/${psid}?fields=first_name,last_name,profile_pic&access_token=${config.pageAccessToken}`;
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (!res.ok || data.error) {
+      console.warn(`[Meta API]: Failed to fetch user info for ${psid}:`, data.error?.message || 'Unknown error');
+      return null;
+    }
+
+    const name = `${data.first_name || ''} ${data.last_name || ''}`.trim();
+    const profilePic = data.profile_pic?.data?.url || '';
+
+    return { name: name || 'Customer', profilePic };
+  } catch (err) {
+    console.error(`[Meta API]: Exception fetching user info for ${psid}:`, err);
+    return null;
+  }
 }
 
 // -----------------------------------------------------------------------

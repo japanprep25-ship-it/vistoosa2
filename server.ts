@@ -134,31 +134,40 @@ app.get('/data-deletion', (req, res) => {
 
 import { getPathaoOrderStatus } from './pathaoOrderService';
 import { addOrUpdateUserOrder, getUserOrders } from './userWorkspaceStore';
+import { getAllUsers } from './userStore';
 
 // ... (existing code)
 
-app.get('/api/pathao/status/:consignmentId', extractOptionalAuth, async (req: AuthenticatedRequest, res: Response) => {
-  const { consignmentId } = req.params;
-  const userId = req.userId || 'usr_admin_default';
+// Pathao Webhook for automatic status updates
+app.post('/api/webhooks/pathao', async (req: Request, res: Response) => {
+  const { consignment_id, order_status } = req.body;
 
-  try {
-    const statusData = await getPathaoOrderStatus(userId, consignmentId);
-    if (!statusData || !statusData.order_status) {
-      return res.status(404).json({ success: false, message: 'Status not found' });
-    }
-
-    // Find order by consignmentId
-    const orders = await getUserOrders(userId);
-    const order = orders.find(o => o.pathaoConsignmentId === consignmentId);
-
-    if (order) {
-      await addOrUpdateUserOrder(userId, { ...order, status: statusData.order_status });
-    }
-
-    return res.json({ success: true, status: statusData.order_status });
-  } catch (err: any) {
-    return res.status(500).json({ success: false, message: err?.message });
+  if (!consignment_id || !order_status) {
+    return res.status(400).json({ success: false, message: 'Invalid payload' });
   }
+
+  // Acknowledge receipt immediately
+  res.status(200).send('OK');
+
+  // Process asynchronously
+  setImmediate(async () => {
+    try {
+      console.log(`[Pathao Webhook]: Processing update for ${consignment_id} to status: ${order_status}`);
+      const users = await getAllUsers();
+      for (const user of users) {
+        const orders = await getUserOrders(user.id);
+        const order = orders.find(o => o.pathaoConsignmentId === consignment_id);
+        
+        if (order) {
+          await addOrUpdateUserOrder(user.id, { ...order, status: order_status });
+          console.log(`[Pathao Webhook]: Successfully updated order ${order.id} for user ${user.id} to ${order_status}`);
+          break;
+        }
+      }
+    } catch (err: any) {
+      console.error('[Pathao Webhook Error]:', err?.message || err);
+    }
+  });
 });
 
 // WooCommerce & Generic Webhook Handshake Interceptor

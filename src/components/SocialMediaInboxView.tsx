@@ -34,6 +34,7 @@ export interface ConversationItem {
   psid: string;
   senderId: string;
   senderName?: string;
+  profilePic?: string;
   channel: 'messenger' | 'instagram' | 'whatsapp' | 'Facebook' | 'Instagram' | 'WhatsApp';
   lastMessage: string;
   lastMessageSender?: 'customer' | 'bot' | 'agent' | 'user';
@@ -66,6 +67,7 @@ export const SocialMediaInboxView: React.FC<SocialMediaInboxViewProps> = ({
   const [selectedPsid, setSelectedPsid] = useState<string | null>(null);
   const [activeMessages, setActiveMessages] = useState<ChatMessage[]>([]);
   const [activeCustomerName, setActiveCustomerName] = useState<string>('');
+  const [activeProfilePic, setActiveProfilePic] = useState<string | null>(null);
   const [activeChannel, setActiveChannel] = useState<'messenger' | 'instagram' | 'whatsapp'>('messenger');
 
   const [isLoadingConversations, setIsLoadingConversations] = useState<boolean>(true);
@@ -148,6 +150,7 @@ export const SocialMediaInboxView: React.FC<SocialMediaInboxViewProps> = ({
       if (data && data.success && Array.isArray(data.messages)) {
         setActiveMessages(data.messages);
         setActiveCustomerName(data.senderName || `Customer #${psid.slice(-4)}`);
+        setActiveProfilePic(data.profilePic || null);
         setActiveChannel(data.channel || 'messenger');
       }
     } catch (err) {
@@ -542,8 +545,12 @@ export const SocialMediaInboxView: React.FC<SocialMediaInboxViewProps> = ({
                   >
                     {/* Avatar with Channel Badge */}
                     <div className="relative shrink-0">
-                      <div className="w-10 h-10 rounded-2xl bg-zinc-800 border border-zinc-700 flex items-center justify-center font-bold text-sm text-purple-300 uppercase shadow-inner">
-                        {conv.senderName ? conv.senderName.charAt(0) : 'C'}
+                      <div className="w-10 h-10 rounded-2xl bg-zinc-800 border border-zinc-700 flex items-center justify-center font-bold text-sm text-purple-300 uppercase shadow-inner overflow-hidden">
+                        {conv.profilePic ? (
+                          <img src={conv.profilePic} alt={conv.senderName} className="w-full h-full object-cover" />
+                        ) : (
+                          conv.senderName ? conv.senderName.charAt(0) : 'C'
+                        )}
                       </div>
                       <span
                         className={`absolute -bottom-1 -right-1 text-[9px] px-1 py-0.2 rounded-md font-bold uppercase border ${channelColor}`}
@@ -609,8 +616,12 @@ export const SocialMediaInboxView: React.FC<SocialMediaInboxViewProps> = ({
                   >
                     <ChevronLeft className="w-4 h-4" />
                   </button>
-                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-purple-700 to-indigo-600 text-white font-bold text-sm flex items-center justify-center shrink-0 shadow-md">
-                    {activeCustomerName ? activeCustomerName.charAt(0) : 'C'}
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-purple-700 to-indigo-600 text-white font-bold text-sm flex items-center justify-center shrink-0 shadow-md overflow-hidden">
+                    {activeProfilePic ? (
+                      <img src={activeProfilePic} alt={activeCustomerName} className="w-full h-full object-cover" />
+                    ) : (
+                      activeCustomerName ? activeCustomerName.charAt(0) : 'C'
+                    )}
                   </div>
                   <div className="min-w-0">
                     <h3 className="text-sm font-bold text-white truncate flex items-center gap-2">

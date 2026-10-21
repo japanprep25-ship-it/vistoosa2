@@ -872,7 +872,6 @@ export default function App() {
         user={currentUser}
         onLogout={handleLogout}
         onOpenGasModal={() => setIsGasModalOpen(true)}
-        onOpenAiDrawer={() => navigateTo('ai')}
         onGoHome={() => navigateTo('dashboard')}
         pendingOrdersCount={pendingOrdersCount}
         approvedDispatchCount={approvedDispatchCount}

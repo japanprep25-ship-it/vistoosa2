@@ -1,8 +1,10 @@
 import { getApps, initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
+import firebaseConfig from './firebase-applet-config.json';
 
 let app;
-const TARGET_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || 'vistoosa-8ce3f';
+const TARGET_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || (firebaseConfig as any).projectId || 'master-focus-d98sv';
+const TARGET_DB_ID = process.env.FIREBASE_DATABASE_ID || (firebaseConfig as any).firestoreDatabaseId || '(default)';
 
 if (!getApps().length) {
   const serviceAccountEnv = process.env.FIREBASE_SERVICE_ACCOUNT;
@@ -41,8 +43,8 @@ if (!getApps().length) {
   app = getApps()[0];
 }
 
-// Explicitly target the "(default)" database ID in Native mode
-export const db = getFirestore(app, '(default)');
+// Target the designated Firestore database ID
+export const db = getFirestore(app, TARGET_DB_ID);
 
 try {
   db.settings({ ignoreUndefinedProperties: true });
@@ -90,9 +92,9 @@ export async function testFirestoreConnection(): Promise<boolean> {
   }
 
   try {
-    // Test ping query against Firestore database "(default)"
+    // Test ping query against Firestore database TARGET_DB_ID
     await db.collection('_healthcheck').doc('ping').get();
-    console.log(`Firebase Firestore connected successfully to database "(default)" in project "${TARGET_PROJECT_ID}"`);
+    console.log(`Firebase Firestore connected successfully to database "${TARGET_DB_ID}" in project "${TARGET_PROJECT_ID}"`);
     return true;
   } catch (err: any) {
     if (isQuotaExceededError(err)) {

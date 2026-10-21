@@ -3,11 +3,14 @@ import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 
 export interface BrandMeta {
+  version?: number;
+  hasCustomLogo?: boolean;
+  hasDarkLogo?: boolean;
   logoUrl?: string;
   darkLogoUrl?: string;
   faviconUrl?: string;
   appIconUrl?: string;
-  updatedAt: number;
+  updatedAt?: number;
 }
 
 interface BrandContextType {
@@ -18,6 +21,9 @@ interface BrandContextType {
 }
 
 const DEFAULT_META: BrandMeta = {
+  version: Date.now(),
+  hasCustomLogo: false,
+  hasDarkLogo: false,
   updatedAt: Date.now(),
 };
 
@@ -44,12 +50,42 @@ export const BrandProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const fetchMeta = useCallback(async () => {
     try {
-      const docRef = doc(db, 'settings', 'branding');
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        const data = docSnap.data() as BrandMeta;
-        setMeta(data);
-        syncDomHeadTags(data);
+      // 1. Fetch from backend server API (resilient, backed by in-memory/disk/admin SDK)
+      try {
+        const res = await fetch('/api/brand/meta');
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.success) {
+            const v = data.version || Date.now();
+            const serverMeta: BrandMeta = {
+              version: v,
+              hasCustomLogo: Boolean(data.hasCustomLogo),
+              hasDarkLogo: Boolean(data.hasDarkLogo),
+              logoUrl: data.hasCustomLogo ? `/api/brand/image/logo-512.png?v=${v}` : '/vistoosa-logo.png',
+              darkLogoUrl: data.hasDarkLogo ? `/api/brand/image/logo-dark-512.png?v=${v}` : undefined,
+              faviconUrl: `/api/brand/favicon.ico?v=${v}`,
+              appIconUrl: `/api/brand/image/icon-192.png?v=${v}`,
+              updatedAt: v,
+            };
+            setMeta((prev) => ({ ...prev, ...serverMeta }));
+            syncDomHeadTags(serverMeta);
+          }
+        }
+      } catch (apiErr) {
+        // Fallback silently
+      }
+
+      // 2. Fetch from Firestore doc if available
+      try {
+        const docRef = doc(db, 'settings', 'branding');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data() as BrandMeta;
+          setMeta((prev) => ({ ...prev, ...data }));
+          syncDomHeadTags(data);
+        }
+      } catch (firestoreErr) {
+        // Firestore read restricted or offline; handled gracefully
       }
     } catch (err) {
       console.warn('[BrandContext]: Unable to fetch brand metadata:', err);
@@ -59,24 +95,51 @@ export const BrandProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   }, [syncDomHeadTags]);
 
   useEffect(() => {
+    // Initial fetch via API & Firestore
+    fetchMeta();
+
+    // Listen to real-time changes with mandatory error handler callback
     const docRef = doc(db, 'settings', 'branding');
-    const unsub = onSnapshot(docRef, (doc) => {
-        if (doc.exists()) {
-            const data = doc.data() as BrandMeta;
-            setMeta(data);
-            syncDomHeadTags(data);
+    const unsub = onSnapshot(
+      docRef,
+      (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data() as BrandMeta;
+          setMeta((prev) => ({ ...prev, ...data }));
+          syncDomHeadTags(data);
         }
         setIsLoading(false);
-    });
-    return unsub;
-  }, [syncDomHeadTags]);
+      },
+      (error) => {
+        // CRITICAL error callback: catches permission-denied without throwing uncaught errors
+        console.info('[BrandContext]: Firestore real-time snapshot restricted:', error.message);
+        setIsLoading(false);
+      }
+    );
 
-  const getLogoUrl = useCallback((isDark = true) => {
-    if (isDark && meta.darkLogoUrl) {
-      return meta.darkLogoUrl;
-    }
-    return meta.logoUrl || '';
-  }, [meta]);
+    return () => {
+      unsub();
+    };
+  }, [fetchMeta, syncDomHeadTags]);
+
+  const getLogoUrl = useCallback(
+    (isDark = true) => {
+      if (isDark && meta.darkLogoUrl) {
+        return meta.darkLogoUrl;
+      }
+      if (isDark && meta.hasDarkLogo) {
+        return `/api/brand/image/logo-dark-512.png?v=${meta.version || Date.now()}`;
+      }
+      if (meta.logoUrl) {
+        return meta.logoUrl;
+      }
+      if (meta.hasCustomLogo) {
+        return `/api/brand/image/logo-512.png?v=${meta.version || Date.now()}`;
+      }
+      return '/vistoosa-logo.png';
+    },
+    [meta]
+  );
 
   return (
     <BrandContext.Provider value={{ meta, isLoading, refetchBrandMeta: fetchMeta, getLogoUrl }}>
@@ -84,7 +147,6 @@ export const BrandProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     </BrandContext.Provider>
   );
 };
-
 
 export const useBrand = () => {
   const ctx = useContext(BrandContext);

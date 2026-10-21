@@ -21,13 +21,13 @@ export interface NavigationState {
 export const CANONICAL_SLUGS: Record<ActiveTab, string> = {
   dashboard: 'dashboard',
   orders: 'order-engine',
+  social: 'social-inbox',
   cogs: 'cash-balance',
   integrations: 'connect-channels',
   dispatch: 'barcode-dispatch',
   inventory: 'dual-inventory',
   reconciliation: 'pathao-courier',
   crm: 'crm',
-  ai: 'veer-ai',
   gas: 'gas-schema',
   settings: 'settings',
 };
@@ -44,6 +44,12 @@ export const TAB_ALIASES: Record<string, ActiveTab> = {
   'order-engine': 'orders',
   'orders': 'orders',
   'order': 'orders',
+
+  // Social Media Inbox
+  'social': 'social',
+  'social-inbox': 'social',
+  'inbox': 'social',
+  'messages': 'social',
 
   // Cash & Balance (COGS)
   'cash-balance': 'cogs',
@@ -84,11 +90,11 @@ export const TAB_ALIASES: Record<string, ActiveTab> = {
   'crm-whatsapp': 'crm',
   'customers': 'crm',
 
-  // Veer AI
-  'veer-ai': 'ai',
-  'ai': 'ai',
-  'assistant': 'ai',
-  'veer': 'ai',
+  // Legacy AI Aliases
+  'veer-ai': 'dashboard',
+  'ai': 'dashboard',
+  'assistant': 'dashboard',
+  'veer': 'dashboard',
 
   // GAS & DB Schema
   'gas-schema': 'gas',

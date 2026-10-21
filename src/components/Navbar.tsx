@@ -10,7 +10,7 @@ interface NavbarProps {
   user: AuthUser;
   onLogout: () => void;
   onOpenGasModal: () => void;
-  onOpenAiDrawer: () => void;
+  onOpenAiDrawer?: () => void;
   onGoHome?: () => void;
   pendingOrdersCount: number;
   approvedDispatchCount: number;

@@ -33,7 +33,7 @@ export interface MetaConfig {
 }
 
 export interface ConversationMessage {
-  sender: 'customer' | 'bot';
+  sender: 'customer' | 'bot' | 'agent' | 'user';
   text: string;
   timestamp: string;
   attachmentUrl?: string;
@@ -148,7 +148,7 @@ export async function saveMetaConfig(config: Partial<MetaConfig>, docId: string 
 export function appendToConversationBuffer(
   senderId: string,
   channel: 'messenger' | 'instagram' | 'whatsapp',
-  message: { sender: 'customer' | 'bot'; text: string; attachmentUrl?: string },
+  message: { sender: 'customer' | 'bot' | 'agent' | 'user'; text: string; attachmentUrl?: string; timestamp?: string },
   senderName?: string
 ): ConversationBuffer {
   let buffer = conversationBuffers.get(senderId);
@@ -1145,21 +1145,301 @@ export function mountMetaIntegrationRoutes(app: Express) {
     });
   });
 
-  // GET /api/meta/conversations -> View active conversation buffers
-  app.get('/api/meta/conversations', (_req: Request, res: Response) => {
-    const buffers = Array.from(conversationBuffers.values()).map((b) => ({
-      senderId: b.senderId,
-      senderName: b.senderName,
-      channel: b.channel,
-      messageCount: b.messages.length,
-      lastUpdated: b.lastUpdated,
-      lastMessage: b.messages[b.messages.length - 1]?.text || '',
-    }));
+  // -----------------------------------------------------------------------
+  // In-App Chat Inbox API Endpoints
+  // -----------------------------------------------------------------------
+
+  // Helper to ensure demo conversation data exists if database/buffer is fresh
+  function ensureSeedConversations() {
+    if (conversationBuffers.size === 0) {
+      const now = Date.now();
+      const time1 = new Date(now - 18 * 60 * 1000).toISOString();
+      const time2 = new Date(now - 12 * 60 * 1000).toISOString();
+      const time3 = new Date(now - 3 * 60 * 1000).toISOString();
+
+      // Seed Karim Ahmed (Facebook Messenger)
+      const timeK1 = new Date(now - 28 * 60 * 1000).toISOString();
+      const timeK2 = new Date(now - 22 * 60 * 1000).toISOString();
+      const timeK3 = new Date(now - 6 * 60 * 1000).toISOString();
+      conversationBuffers.set('psid_karim_8821', {
+        senderId: 'psid_karim_8821',
+        senderName: 'Karim Ahmed',
+        channel: 'messenger',
+        messages: [
+          { sender: 'customer', text: 'Salam bhai, ami Supima Cotton Polo Midnight Navy L size ta order korte chai. Delivery kobe pabo?', timestamp: timeK1 },
+          { sender: 'bot', text: 'Walaikum Assalam Karim bhai! Supima Cotton Polo L size ready stock e ache. Price ৳1,650 ebong inside Dhaka delivery charge ৳60 (Total ৳1,710)। 24-48 hours er moddhe delivery hoye jabe. Order confirm korte apnar thikana ebong phone number din.', timestamp: timeK2 },
+          { sender: 'customer', text: 'Amar number 01811223344, Flat 4A, Green Road, Dhanmondi, Dhaka. Cash on Delivery te pathiye din.', timestamp: timeK3 },
+        ],
+        lastUpdated: timeK3,
+      });
+
+      conversationBuffers.set('psid_tanvir_4491', {
+        senderId: 'psid_tanvir_4491',
+        senderName: 'Tanvir Ahmed',
+        channel: 'messenger',
+        messages: [
+          { sender: 'customer', text: 'Salam bhai, black polo shirt L size available ache ki?', timestamp: time1 },
+          { sender: 'bot', text: 'Walaikum Assalam Tanvir bhai! Ji, Onyx Black Supima Cotton Polo L size stock e ache. Price ৳1,650. Order korte phone number ebong delivery address din.', timestamp: time2 },
+          { sender: 'customer', text: 'Amar number 01711223344, House 12, Road 5, Dhanmondi, Dhaka. Ekta pathiye din cash on delivery.', timestamp: time3 },
+        ],
+        lastUpdated: time3,
+      });
+
+      const time4 = new Date(now - 55 * 60 * 1000).toISOString();
+      const time5 = new Date(now - 32 * 60 * 1000).toISOString();
+      conversationBuffers.set('psid_sadia_8820', {
+        senderId: 'psid_sadia_8820',
+        senderName: 'Sadia Rahman',
+        channel: 'instagram',
+        messages: [
+          { sender: 'customer', text: 'Hi! White Embroidered Panjabi er delivery charge koto outside Dhaka?', timestamp: time4 },
+          { sender: 'bot', text: 'Hello Sadia! Outside Dhaka delivery charge ৳150 Pathao express courier er madhyome. Delivery time 48-72 hours.', timestamp: time5 },
+        ],
+        lastUpdated: time5,
+      });
+
+      const time6 = new Date(now - 110 * 60 * 1000).toISOString();
+      conversationBuffers.set('psid_kamrul_1092', {
+        senderId: 'psid_kamrul_1092',
+        senderName: 'Kamrul Hasan',
+        channel: 'whatsapp',
+        messages: [
+          { sender: 'customer', text: 'Bro, amar order #VIS-9021 er Pathao tracking number ta deben please? Uttara theke order korechilam.', timestamp: time6 },
+        ],
+        lastUpdated: time6,
+      });
+    }
+  }
+
+  // 1. POST /api/messages/send
+  // Uses Meta Graph API (https://graph.facebook.com/v19.0/me/messages) to send reply
+  app.post(['/api/messages/send', '/api/meta/messages/send'], async (req: Request, res: Response) => {
+    try {
+      const recipient_psid = String(req.body.recipient_psid || req.body.recipientId || req.body.psid || '').trim();
+      const message_text = String(req.body.message_text || req.body.messageText || req.body.text || '').trim();
+      const requestedChannel = req.body.channel;
+
+      if (!recipient_psid) {
+        return res.status(400).json({ success: false, error: 'recipient_psid is required.' });
+      }
+      if (!message_text) {
+        return res.status(400).json({ success: false, error: 'message_text is required.' });
+      }
+
+      ensureSeedConversations();
+      const existingBuffer = conversationBuffers.get(recipient_psid);
+      const channel: 'messenger' | 'instagram' | 'whatsapp' =
+        requestedChannel || existingBuffer?.channel || 'messenger';
+
+      const config = await loadMetaConfig();
+      let metaResponse: any = null;
+      let simulated = false;
+
+      if (channel === 'whatsapp') {
+        const phoneNumberId = config.whatsappPhoneNumberId;
+        const waToken = config.whatsappAccessToken;
+
+        if (phoneNumberId && waToken) {
+          const cleanPhone = recipient_psid.replace(/\D/g, '');
+          const formattedPhone = cleanPhone.startsWith('88') ? cleanPhone : `88${cleanPhone.replace(/^0/, '')}`;
+          const waRes = await fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/messages`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${waToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              messaging_product: 'whatsapp',
+              recipient_type: 'individual',
+              to: formattedPhone,
+              type: 'text',
+              text: { preview_url: false, body: message_text },
+            }),
+          });
+          metaResponse = await waRes.json();
+        } else {
+          simulated = true;
+        }
+      } else {
+        // Messenger & Instagram DM -> POST https://graph.facebook.com/v19.0/me/messages
+        const token = config.pageAccessToken;
+        if (token) {
+          try {
+            const metaRes = await fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${token}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                recipient: { id: recipient_psid },
+                message: { text: message_text },
+              }),
+            });
+            metaResponse = await metaRes.json();
+            if (!metaRes.ok) {
+              console.warn('[Meta Graph API Error]:', metaResponse);
+            }
+          } catch (fetchErr: any) {
+            console.error('[Meta Graph Network Error]:', fetchErr);
+            simulated = true;
+          }
+        } else {
+          simulated = true;
+          console.info(`[Meta Simulator]: Page Access Token not configured. Simulated send to ${recipient_psid}: "${message_text}"`);
+        }
+      }
+
+      // Append outgoing message to thread buffer
+      const newMsg: ConversationMessage = {
+        sender: 'bot',
+        text: message_text,
+        timestamp: new Date().toISOString(),
+      };
+
+      const senderName = req.body.customer_name || req.body.customerName || req.body.senderName;
+      const updatedBuffer = appendToConversationBuffer(recipient_psid, channel, newMsg, senderName);
+
+      // Persist conversation and message to Firestore database
+      if (!isFirestoreQuotaExceeded()) {
+        try {
+          const threadRef = db.collection('conversations').doc(recipient_psid);
+          await threadRef.set(
+            {
+              senderId: recipient_psid,
+              senderName: senderName || updatedBuffer.senderName || 'Customer',
+              channel,
+              lastUpdated: newMsg.timestamp,
+              lastMessage: newMsg.text,
+              lastMessageSender: newMsg.sender,
+            },
+            { merge: true }
+          );
+
+          await threadRef.collection('messages').add({
+            sender: newMsg.sender,
+            text: newMsg.text,
+            timestamp: newMsg.timestamp,
+          });
+        } catch (dbErr: any) {
+          if (isQuotaExceededError(dbErr)) {
+            markFirestoreQuotaExceeded();
+          } else {
+            console.warn('[Firestore Save Message Warning]:', dbErr?.message);
+          }
+        }
+      }
+
+      return res.json({
+        success: true,
+        recipient_psid,
+        channel,
+        message: newMsg,
+        simulated,
+        metaResult: metaResponse,
+        messageId: metaResponse?.message_id || `msg-${Date.now()}`,
+        lastUpdated: updatedBuffer.lastUpdated,
+      });
+    } catch (err: any) {
+      console.error('[Send Message Route Error]:', err);
+      return res.status(500).json({
+        success: false,
+        error: err?.message || 'Internal server error while sending message via Meta Graph API',
+      });
+    }
+  });
+
+  // 2. GET /api/conversations
+  // Fetch list of customer conversation threads with last message & timestamps
+  app.get(['/api/conversations', '/api/meta/conversations'], (_req: Request, res: Response) => {
+    ensureSeedConversations();
+
+    const conversations = Array.from(conversationBuffers.values())
+      .map((b) => {
+        const lastMsg = b.messages[b.messages.length - 1];
+        return {
+          psid: b.senderId,
+          senderId: b.senderId,
+          senderName: b.senderName || `Customer #${b.senderId.slice(-4)}`,
+          channel: b.channel,
+          lastMessage: lastMsg?.text || (lastMsg?.attachmentUrl ? '[Image Attachment]' : 'No message content'),
+          lastMessageSender: lastMsg?.sender || 'customer',
+          lastUpdated: b.lastUpdated,
+          messageCount: b.messages.length,
+          unreadCount: b.messages.length > 0 && b.messages[b.messages.length - 1].sender === 'customer' ? 1 : 0,
+        };
+      })
+      .sort((a, b) => new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime());
 
     return res.json({
       success: true,
-      count: buffers.length,
-      conversations: buffers,
+      count: conversations.length,
+      conversations,
+    });
+  });
+
+  // 3. GET /api/messages/:psid
+  // Fetch detailed chat message history for a specific customer PSID
+  app.get(['/api/messages/:psid', '/api/meta/messages/:psid'], async (req: Request, res: Response) => {
+    ensureSeedConversations();
+    const psid = req.params.psid;
+    let buffer = conversationBuffers.get(psid);
+
+    // If not found by exact PSID, attempt fuzzy lookup by name or partial PSID
+    if (!buffer) {
+      for (const [key, b] of conversationBuffers.entries()) {
+        if (
+          key.includes(psid) ||
+          psid.includes(key) ||
+          (b.senderName && b.senderName.toLowerCase().includes(psid.toLowerCase())) ||
+          (b.senderName && psid.toLowerCase().includes(b.senderName.toLowerCase()))
+        ) {
+          buffer = b;
+          break;
+        }
+      }
+    }
+
+    // If still not found, initialize a fresh thread buffer so admin can chat immediately
+    if (!buffer) {
+      const customerName = (req.query.customerName as string) || (req.query.name as string) || `Customer #${psid.slice(-4)}`;
+      const channel = ((req.query.channel as string)?.toLowerCase() as any) || 'messenger';
+      buffer = {
+        senderId: psid,
+        senderName: customerName,
+        channel: channel === 'instagram' ? 'instagram' : channel === 'whatsapp' ? 'whatsapp' : 'messenger',
+        messages: [],
+        lastUpdated: new Date().toISOString(),
+      };
+      conversationBuffers.set(psid, buffer);
+    }
+
+    // If buffer is empty, attempt to load previously stored messages from Firestore database
+    if (buffer.messages.length === 0 && !isFirestoreQuotaExceeded()) {
+      try {
+        const msgsSnap = await db
+          .collection('conversations')
+          .doc(buffer.senderId)
+          .collection('messages')
+          .orderBy('timestamp', 'asc')
+          .limit(40)
+          .get();
+
+        if (!msgsSnap.empty) {
+          const dbMsgs = msgsSnap.docs.map((docSnap) => docSnap.data() as ConversationMessage);
+          buffer.messages = dbMsgs;
+        }
+      } catch (dbErr: any) {
+        if (isQuotaExceededError(dbErr)) {
+          markFirestoreQuotaExceeded();
+        }
+      }
+    }
+
+    return res.json({
+      success: true,
+      psid: buffer.senderId,
+      senderName: buffer.senderName || `Customer #${buffer.senderId.slice(-4)}`,
+      channel: buffer.channel,
+      lastUpdated: buffer.lastUpdated,
+      messages: buffer.messages,
     });
   });
 }

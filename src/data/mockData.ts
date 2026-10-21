@@ -80,6 +80,33 @@ export const INITIAL_PRODUCTS: Product[] = [
 
 export const INITIAL_ORDERS: Order[] = [
   {
+    id: 'VIS-2040',
+    customerName: 'Karim Ahmed',
+    phone: '01811223344',
+    address: 'Flat 4A, Green Road, Dhanmondi, Dhaka',
+    city: 'Inside Dhaka',
+    channel: 'Facebook',
+    source: 'messenger',
+    senderId: 'psid_karim_8821',
+    items: [
+      {
+        id: 'item-karim-1',
+        productName: 'Supima Cotton Pique Polo',
+        sku: 'POLO-NVY-L',
+        color: 'Midnight Navy',
+        size: 'L',
+        quantity: 1,
+        unitPrice: 1650,
+      },
+    ],
+    totalAmount: 1710,
+    deliveryFee: 60,
+    paymentMethod: 'Cash on Delivery',
+    status: 'Pending',
+    createdAt: new Date().toISOString(),
+    notes: 'Order placed via Facebook Messenger conversation.',
+  },
+  {
     id: 'VIS-2041',
     customerName: 'Tanvir Hossain',
     phone: '01712345678',

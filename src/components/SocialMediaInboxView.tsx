@@ -43,6 +43,53 @@ export const SocialMediaInboxView: React.FC<SocialMediaInboxViewProps> = ({
   const [isSortingModalOpen, setIsSortingModalOpen] = useState<boolean>(false);
   const [isTrainModalOpen, setIsTrainModalOpen] = useState<boolean>(false);
   const [successMsg, setSuccessMsg] = useState<string>('');
+  const [chatMessages, setChatMessages] = useState<Array<{ role: 'user' | 'assistant', text: string }>>([
+    { role: 'assistant', text: 'আমি আপনার অর্ডার প্রসেসিং সহকারী। আমি কি ভুল করেছি দয়া করে জানাবেন?' }
+  ]);
+  const [chatInput, setChatInput] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const [activeTab, setActiveTab] = useState<'chat' | 'memory'>('chat');
+
+  const handleSendMessage = async () => {
+    if (!chatInput.trim() || !selectedConversation) return;
+    const newMessages = [...chatMessages, { role: 'user', text: chatInput }];
+    setChatMessages(newMessages as any);
+    setChatInput('');
+    setIsSending(true);
+
+    try {
+      const res = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          messages: newMessages,
+          context: `Customer: ${selectedConversation.senderName}, Message: ${selectedConversation.lastMessage}`,
+          orderData: {
+            customer_info: {
+              name: extractedCustomerName,
+              phone: extractedPhone,
+              address: extractedAddress,
+              district: extractedDistrict,
+              channel: extractedChannel
+            },
+            items: extractedItems,
+            financials: {
+              delivery_charge: extractedDeliveryFee,
+              payment_method: extractedPaymentMethod
+            }
+          }
+        }),
+      });
+      const data = await res.json();
+      if (data.response) {
+        setChatMessages([...newMessages, { role: 'assistant', text: data.response }] as any);
+      }
+    } catch (err) {
+      console.error('Chat error:', err);
+    } finally {
+      setIsSending(false);
+    }
+  };
 
   // Extracted Sorting Form State
   const [extractedCustomerName, setExtractedCustomerName] = useState('');
@@ -556,6 +603,18 @@ export const SocialMediaInboxView: React.FC<SocialMediaInboxViewProps> = ({
         </div>
       )}
 
+      {/* Floating Train AI Button */}
+      {selectedConversation && (
+        <button
+          type="button"
+          onClick={() => setIsTrainModalOpen(true)}
+          className="fixed bottom-8 right-8 z-40 flex items-center gap-2 px-6 py-4 rounded-full bg-blue-600 hover:bg-blue-500 text-white font-bold shadow-2xl shadow-blue-500/30 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+        >
+          <Bot className="w-5 h-5" />
+          <span>Train AI Agent</span>
+        </button>
+      )}
+
       {/* Train AI Modal */}
       {isTrainModalOpen && selectedConversation && (
         <div className="fixed inset-0 z-50 bg-zinc-950/95 backdrop-blur-xl flex flex-col p-4 sm:p-6 animate-in fade-in duration-200 overflow-hidden">
@@ -574,66 +633,61 @@ export const SocialMediaInboxView: React.FC<SocialMediaInboxViewProps> = ({
                 ✕ Close
               </button>
             </div>
-            {/* Chat Content */}
-            <div className="flex-1 overflow-y-auto py-4 space-y-4">
-              {(() => {
-                const [chatMessages, setChatMessages] = useState<Array<{ role: 'user' | 'assistant', text: string }>>([
-                  { role: 'assistant', text: 'আমি আপনার অর্ডার প্রসেসিং সহকারী। আমি কি ভুল করেছি দয়া করে জানাবেন?' }
-                ]);
-                const [input, setInput] = useState('');
-                const [isSending, setIsSending] = useState(false);
+            {/* Modal Navigation */}
+            <div className="flex items-center gap-4 pb-4 border-b border-zinc-800 shrink-0">
+              <button
+                type="button"
+                onClick={() => setActiveTab('chat')}
+                className={`text-sm font-bold transition ${activeTab === 'chat' ? 'text-white border-b-2 border-blue-500 pb-1' : 'text-zinc-500'}`}
+              >
+                Chat
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('memory')}
+                className={`text-sm font-bold transition ${activeTab === 'memory' ? 'text-white border-b-2 border-blue-500 pb-1' : 'text-zinc-500'}`}
+              >
+                Learned Rules & Memory
+              </button>
+            </div>
 
-                const handleSendMessage = async () => {
-                  if (!input.trim()) return;
-                  const newMessages = [...chatMessages, { role: 'user', text: input }];
-                  setChatMessages(newMessages as any);
-                  setInput('');
-                  setIsSending(true);
-
-                  try {
-                    const res = await fetch('/api/ai/chat', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ 
-                        messages: newMessages, 
-                        context: `Customer: ${selectedConversation.senderName}, Message: ${selectedConversation.lastMessage}`
-                      }),
-                    });
-                    const data = await res.json();
-                    if (data.success) {
-                      setChatMessages([...newMessages, { role: 'assistant', text: data.response }] as any);
-                    }
-                  } catch (e) {
-                    console.error(e);
-                  } finally {
-                    setIsSending(false);
-                  }
-                };
-
-                return (
-                  <>
-                    {chatMessages.map((msg, i) => (
-                      <div key={i} className={`p-3 rounded-2xl text-xs max-w-[80%] ${msg.role === 'user' ? 'bg-purple-600 ml-auto' : 'bg-zinc-800'}`}>
+            {/* Modal Content */}
+            {activeTab === 'chat' ? (
+              <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="flex-1 overflow-y-auto py-4 space-y-4">
+                  {chatMessages.map((msg, i) => (
+                    <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`p-3 rounded-2xl text-xs max-w-[80%] ${msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-zinc-800 text-zinc-200'}`}>
                         {msg.text}
                       </div>
-                    ))}
-                    <div className="pt-4 border-t border-zinc-800">
-                      <input
-                        type="text"
-                        placeholder="AI-কে ভুল ধরিয়ে দিন..."
-                        className="w-full rounded-xl bg-zinc-900 border border-zinc-700 px-4 py-3 text-white text-xs focus:outline-none"
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleSendMessage();
-                        }}
-                        disabled={isSending}
-                      />
                     </div>
-                  </>
-                );
-              })()}
-            </div>
+                  ))}
+                </div>
+                <div className="pt-4 border-t border-zinc-800 flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="Type your message..."
+                    className="flex-1 rounded-xl bg-zinc-900 border border-zinc-700 px-4 py-3 text-white text-xs focus:outline-none"
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                    disabled={isSending}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSendMessage}
+                    className="p-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition disabled:opacity-50"
+                    disabled={isSending || !chatInput.trim()}
+                  >
+                    <Send className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto py-4 text-zinc-400 text-xs">
+                <p>No custom rules learned yet.</p>
+              </div>
+            )}
           </div>
         </div>
       )}

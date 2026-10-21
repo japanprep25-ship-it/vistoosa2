@@ -1690,13 +1690,18 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                   </button>
                   <button
                     onClick={() => setIsSoftDeleteConfirmOpen(true)}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-lg shadow-rose-600/20 active:scale-95 transition cursor-pointer"
+                    disabled={selectedOrderIds.length === 0}
+                    className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-xs font-bold shadow-lg shadow-rose-600/20 active:scale-95 transition cursor-pointer ${
+                      selectedOrderIds.length === 0
+                        ? 'bg-zinc-700 cursor-not-allowed opacity-50'
+                        : 'bg-rose-600 hover:bg-rose-500'
+                    }`}
                   >
                     <Trash2 className="w-4 h-4" />
                     <span>Delete Selected ({selectedOrderIds.length})</span>
                   </button>
                 </>
-              ) : (
+              ) : viewMode === 'trash' ? (
                 <>
                   <button
                     onClick={handleConfirmRestore}
@@ -1707,13 +1712,18 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                   </button>
                   <button
                     onClick={() => setIsPermanentDeleteConfirmOpen(true)}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-700 hover:bg-rose-600 text-white text-xs font-bold shadow-lg shadow-rose-700/20 active:scale-95 transition cursor-pointer"
+                    disabled={selectedOrderIds.length === 0}
+                    className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-xs font-bold shadow-lg shadow-rose-700/20 active:scale-95 transition cursor-pointer ${
+                      selectedOrderIds.length === 0
+                        ? 'bg-zinc-700 cursor-not-allowed opacity-50'
+                        : 'bg-rose-700 hover:bg-rose-600'
+                    }`}
                   >
                     <Trash2 className="w-4 h-4" />
                     <span>Delete Permanently ({selectedOrderIds.length})</span>
                   </button>
                 </>
-              )}
+              ) : null}
               <button
                 onClick={() => setSelectedOrderIds([])}
                 className="px-3 py-2 rounded-xl text-xs text-zinc-400 hover:text-white hover:bg-zinc-800 transition cursor-pointer"
@@ -1756,7 +1766,12 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                   <div className="flex flex-wrap items-center gap-2">
                     {/* Select Row Checkbox */}
                     {/* Selection Indicator (No Checkbox) */}
-                    <div className={`w-3 h-3 rounded-full ${selectedOrderIds.includes(order.id) ? 'bg-amber-500' : 'bg-zinc-700'}`} />
+                    <input
+                      type="checkbox"
+                      checked={selectedOrderIds.includes(order.id)}
+                      onChange={() => handleToggleSelectOrder(order.id)}
+                      className="w-4 h-4 rounded border-zinc-600 text-amber-500 focus:ring-amber-500 cursor-pointer"
+                    />
 
                     <button
                       type="button"
@@ -1771,13 +1786,26 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
                       <Edit2 className="w-2.5 h-2.5 opacity-60 text-amber-400" />
                     </button>
                     {getStatusBadge(order.status, order)}
-                    <span
-                      className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${getChannelColor(
-                        order.channel
-                      )}`}
-                    >
-                      {order.channel}
-                    </span>
+                    {order.channel === 'Facebook' ? (
+                      <a
+                        href="https://business.facebook.com/latest/inbox/all"
+                        target="_blank"
+                        rel="noreferrer"
+                        className={`inline-block text-[10px] px-2 py-0.5 rounded-full border font-medium ${getChannelColor(
+                          order.channel
+                        )} hover:opacity-80 transition`}
+                      >
+                        {order.channel}
+                      </a>
+                    ) : (
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${getChannelColor(
+                          order.channel
+                        )}`}
+                      >
+                        {order.channel}
+                      </span>
+                    )}
 
                     {/* Pathao Pickup Disabled Badge */}
                     {order.disablePathaoPickup && (

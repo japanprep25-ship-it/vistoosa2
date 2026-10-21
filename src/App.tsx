@@ -35,6 +35,7 @@ import { CRMView } from './components/CRMView';
 import { CashRegisterView } from './components/CashRegisterView';
 import { GoogleSheetsIntegrationModal } from './components/GoogleSheetsIntegrationModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
+import { FullScreenToggle } from './components/FullScreenToggle';
 import { SettingsView } from './components/SettingsView';
 import { SocialMediaInboxView } from './components/SocialMediaInboxView';
 import { LoginWelcomeModal } from './components/LoginWelcomeModal';
@@ -1077,6 +1078,9 @@ export default function App() {
 
       {/* Non-intrusive Offline Indicator */}
       <OfflineIndicator />
+
+      {/* Desktop Full-Screen Toggle Button */}
+      <FullScreenToggle />
     </div>
   );
 }

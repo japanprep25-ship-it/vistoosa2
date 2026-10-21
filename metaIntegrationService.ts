@@ -30,6 +30,7 @@ export interface MetaConfig {
   whatsappPhoneNumberId: string;
   whatsappBusinessAccountId: string;
   whatsappAccessToken: string;
+  autoReplyEnabled?: boolean;
 }
 
 export interface ConversationMessage {
@@ -37,6 +38,8 @@ export interface ConversationMessage {
   text: string;
   timestamp: string;
   attachmentUrl?: string;
+  mid?: string;
+  status?: 'sent' | 'delivered' | 'seen';
 }
 
 export interface ConversationBuffer {
@@ -107,6 +110,7 @@ export async function loadMetaConfig(docId: string = 'global'): Promise<MetaConf
     whatsappPhoneNumberId: dbConfig.whatsappPhoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID || '',
     whatsappBusinessAccountId: dbConfig.whatsappBusinessAccountId || process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || '',
     whatsappAccessToken: dbConfig.whatsappAccessToken || process.env.WHATSAPP_ACCESS_TOKEN || '',
+    autoReplyEnabled: dbConfig.autoReplyEnabled !== undefined ? dbConfig.autoReplyEnabled : true,
   };
 }
 
@@ -124,6 +128,7 @@ export async function saveMetaConfig(config: Partial<MetaConfig>, docId: string 
     whatsappPhoneNumberId: config.whatsappPhoneNumberId !== undefined ? String(config.whatsappPhoneNumberId).trim() : current.whatsappPhoneNumberId,
     whatsappBusinessAccountId: config.whatsappBusinessAccountId !== undefined ? String(config.whatsappBusinessAccountId).trim() : current.whatsappBusinessAccountId,
     whatsappAccessToken: config.whatsappAccessToken !== undefined ? String(config.whatsappAccessToken).trim() : current.whatsappAccessToken,
+    autoReplyEnabled: config.autoReplyEnabled !== undefined ? config.autoReplyEnabled : current.autoReplyEnabled,
   };
 
   inMemoryMetaConfig.set(docId, merged);
@@ -1567,6 +1572,7 @@ export function mountMetaIntegrationRoutes(app: Express) {
 // -----------------------------------------------------------------------
 
 async function processIncomingMetaPayload(payload: any) {
+  const config = await loadMetaConfig();
   const objectType = payload.object;
 
   // Case A: Facebook Messenger or Instagram DM (object: 'page' or 'instagram')
@@ -1719,7 +1725,7 @@ async function processIncomingMetaPayload(payload: any) {
         }
 
         // 4. Send reply back to customer
-        if (parsed.suggested_reply && config.meta?.autoReplyEnabled !== false) {
+        if (parsed.suggested_reply && config.autoReplyEnabled !== false) {
           const replyRes = await sendMetaReply(channel, senderId, parsed.suggested_reply);
           const replyMid = replyRes.data?.message_id;
 

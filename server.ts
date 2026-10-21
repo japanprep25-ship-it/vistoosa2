@@ -2,7 +2,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
 import { GoogleGenAI } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
-import { createPathaoOrder, getPathaoCities, getPathaoZones } from './pathaoOrderService';
+import { createPathaoOrder, getPathaoCities, getPathaoZones, getPathaoOrderStatus } from './pathaoOrderService';
 import { detectDistrict } from './src/utils/districtDetector';
 import { mountPathaoConfigRoutes } from './pathaoConfigStore';
 import { mountWhatsappRoutes, sendTrackingWhatsapp } from './whatsappService';
@@ -131,12 +131,6 @@ app.get('/data-deletion', (req, res) => {
     </div>
   `));
 });
-
-import { getPathaoOrderStatus } from './pathaoOrderService';
-import { addOrUpdateUserOrder, getUserOrders } from './userWorkspaceStore';
-import { getAllUsers } from './userStore';
-
-// ... (existing code)
 
 // Pathao Webhook for automatic status updates
 app.post('/api/webhooks/pathao', async (req: Request, res: Response) => {

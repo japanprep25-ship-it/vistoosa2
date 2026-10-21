@@ -9,6 +9,7 @@ import { mountWhatsappRoutes, sendTrackingWhatsapp } from './whatsappService';
 import { mountIntegrationsConfigRoutes } from './integrationsConfigStore';
 import { mountMetaIntegrationRoutes, registerOrderCreationHook } from './metaIntegrationService';
 import { mountBrandRoutes } from './brandStore';
+import { mountAIKnowledgeRoutes } from './aiKnowledgeStore';
 import { mountGlobalSettingsRoutes, getMotherGmail, setMotherGmail } from './globalSettingsStore';
 import { testFirestoreConnection } from './firebaseAdmin';
 import {
@@ -49,6 +50,7 @@ app.use(express.text({ limit: '15mb', type: ['text/plain', 'text/json', 'applica
 
 // Mount Meta Integration Routes FIRST to ensure it is not swallowed by other routes or middleware
 mountMetaIntegrationRoutes(app);
+mountAIKnowledgeRoutes(app);
 
 // Public Routes (Privacy & Data Deletion)
 const htmlWrapper = (title: string, content: string) => `

@@ -31,8 +31,10 @@ import {
   RotateCcw,
   Loader2,
   ArrowRight,
+  BrainCircuit,
 } from 'lucide-react';
 import { AuthUser } from '../types';
+import { AITrainingModal } from './AITrainingModal';
 
 export const ALL_PAGES = [
   { key: 'dashboard', label: 'Business Dashboard' },
@@ -59,7 +61,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, token, 
   const { language, setLanguage, t } = useLanguage();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [saveToast, setSaveToast] = useState<string | null>(null);
-  const [activeSettingsTab, setActiveSettingsTab] = useState<'general' | 'access' | 'logo'>('general');
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'general' | 'access' | 'logo' | 'ai_knowledge'>('general');
+  const [isAITrainingModalOpen, setIsAITrainingModalOpen] = useState(false);
 
   const [formData, setFormData] = useState({
     appName: settings.appName,
@@ -418,6 +421,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, token, 
               >
                 <Shield className="w-3.5 h-3.5" /> Access & Team
               </button>
+              <button
+                onClick={() => setActiveSettingsTab('ai_knowledge')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
+                  activeSettingsTab === 'ai_knowledge'
+                    ? 'bg-purple-600 text-white shadow'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                <BrainCircuit className="w-3.5 h-3.5 text-purple-300" /> AI Knowledge Base
+              </button>
             </div>
           )}
           {activeSettingsTab === 'general' && (
@@ -581,6 +594,55 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, token, 
         </div>
       ) : activeSettingsTab === 'logo' ? (
         <BrandLogoManager />
+      ) : activeSettingsTab === 'ai_knowledge' ? (
+        <div className="space-y-6">
+          <div className="p-6 rounded-3xl glass-panel border border-purple-500/40 bg-gradient-to-r from-purple-950/40 via-zinc-900/90 to-zinc-900/90 space-y-5 shadow-2xl">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="p-3.5 rounded-2xl bg-purple-500/20 text-purple-300 border border-purple-500/40 shadow-lg shrink-0">
+                  <BrainCircuit className="w-7 h-7" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    <span>AI Training & Store Knowledge Base</span>
+                    <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 font-mono border border-purple-500/40">
+                      Gemini 3.8 Flash
+                    </span>
+                  </h3>
+                  <p className="text-xs text-zinc-400 mt-1 max-w-xl">
+                    কাস্টমারদের সাথে ফেসবুক মেসেঞ্জার, ইনস্টাগ্রাম ও হোয়াটসঅ্যাপে স্বয়ংক্রিয়ভাবে কথা বলার জন্য AI-কে ট্রেনিং দিন। ৫০টি ক্যাটাগরিভিত্তিক প্রশ্নোত্তর, প্রোডাক্ট ছবি ও অর্ডার কালেকশন ফরম্যাট এডিট করুন।
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsAITrainingModalOpen(true)}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs shadow-lg shadow-purple-900/40 flex items-center gap-2 transition cursor-pointer shrink-0"
+              >
+                <Sparkles className="w-4 h-4 text-amber-300" />
+                <span>Open Training Studio</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+              <div className="p-4 rounded-2xl bg-zinc-950/60 border border-zinc-800 space-y-1">
+                <span className="text-xs font-bold text-purple-300 block">📚 ৫০টি প্রিলোডেড প্রশ্নোত্তর</span>
+                <p className="text-[11px] text-zinc-400">ডেলিভারি, পেমেন্ট, সাইজ এক্সচেঞ্জ, অর্ডার ট্র্যাকিং ও অফার সংক্রান্ত সকল উত্তর প্রস্তুত।</p>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-zinc-950/60 border border-zinc-800 space-y-1">
+                <span className="text-xs font-bold text-emerald-300 block">📸 ছবি ও প্রোডাক্ট ট্রেনিং</span>
+                <p className="text-[11px] text-zinc-400">নতুন পণ্যের ছবি আপলোড ও দাম-সাইজ নির্ধারণ করে AI-কে "কন্টা কোন প্রোডাক্ট" তা শিখিয়ে দিন।</p>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-zinc-950/60 border border-zinc-800 space-y-1">
+                <span className="text-xs font-bold text-amber-300 block">📦 কাস্টম অর্ডার ফরম্যাট</span>
+                <p className="text-[11px] text-zinc-400">অর্ডার নেওয়ার ফলো-আপ প্রশ্ন ও অর্ডার কনফার্মেশন রিপ্লাই স্ক্রিপ্ট আপনার পছন্দমতো সাজান।</p>
+              </div>
+            </div>
+          </div>
+        </div>
       ) : (
         <div className="space-y-6">
           {/* Mother Gmail Master Ownership Card (Requirement 3 & 4) */}
@@ -1199,6 +1261,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, token, 
           </div>
         </div>
       )}
+
+      {/* AI Training & Knowledge Base Studio Modal */}
+      <AITrainingModal
+        isOpen={isAITrainingModalOpen}
+        onClose={() => setIsAITrainingModalOpen(false)}
+        onSaved={() => setSaveToast('AI Training & Knowledge Base সফলভাবে আপডেট হয়েছে!')}
+      />
     </div>
   );
 };

@@ -21,9 +21,11 @@ import {
   Bot,
   SlidersHorizontal,
   ChevronLeft,
+  BrainCircuit,
 } from 'lucide-react';
 import { Order, Product, OrderChannel } from '../types';
 import { detectDistrict } from '../utils/districtDetector';
+import { AITrainingModal } from './AITrainingModal';
 
 interface SocialMediaInboxViewProps {
   products: Product[];
@@ -85,6 +87,7 @@ export const SocialMediaInboxView: React.FC<SocialMediaInboxViewProps> = ({
   // Modals & Banners
   const [isSortingModalOpen, setIsSortingModalOpen] = useState<boolean>(false);
   const [isSimulateModalOpen, setIsSimulateModalOpen] = useState<boolean>(false);
+  const [isAITrainingModalOpen, setIsAITrainingModalOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   // Simulate Message Form State
@@ -514,6 +517,17 @@ export const SocialMediaInboxView: React.FC<SocialMediaInboxViewProps> = ({
                 }`}
               />
             </div>
+          </button>
+
+          {/* AI Training & Knowledge Base Editor Button */}
+          <button
+            type="button"
+            onClick={() => setIsAITrainingModalOpen(true)}
+            className="px-3 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-200 border border-purple-500/40 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm shadow-purple-950/40 hover:border-purple-400"
+            title="৫০টি প্রশ্নোত্তর, প্রোডাক্ট ছবি ও তথ্য দিয়ে AI-কে ট্রেন করুন (Edit FAQs, Products & Picture Training)"
+          >
+            <BrainCircuit className="w-3.5 h-3.5 text-purple-400" />
+            <span>AI Training & Knowledge</span>
           </button>
 
           <button
@@ -1223,6 +1237,17 @@ export const SocialMediaInboxView: React.FC<SocialMediaInboxViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* ===================================================================
+          MODAL 3: AI Training & Knowledge Base Editor Modal
+          =================================================================== */}
+      <AITrainingModal
+        isOpen={isAITrainingModalOpen}
+        onClose={() => setIsAITrainingModalOpen(false)}
+        onSaved={() => {
+          showToast('AI ট্রেনিং ও নলেজ বেস সফলভাবে আপডেট হয়েছে! চ্যাটে কার্যকর হবে।', 'success');
+        }}
+      />
     </div>
   );
 };

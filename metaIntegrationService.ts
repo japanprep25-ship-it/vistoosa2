@@ -16,6 +16,7 @@ import {
   markFirestoreQuotaExceeded,
   isQuotaExceededError,
 } from './firebaseAdmin';
+import { loadAIKnowledgeBase, AIKnowledgeBaseData } from './aiKnowledgeStore';
 
 const META_COLLECTION = 'metaConfig';
 const inMemoryMetaConfig = new Map<string, Partial<MetaConfig>>();
@@ -294,63 +295,103 @@ export async function parseOrderWithGemini(
     .map((m) => `${m.sender.toUpperCase()}: ${m.text}${m.attachmentUrl ? ` [Image: ${m.attachmentUrl}]` : ''}`)
     .join('\n');
 
+  // Load dynamic trained knowledge base, products, photos, FAQs & policies
+  const knowledge = await loadAIKnowledgeBase();
+
   const gemini = getGemini();
 
   if (gemini) {
     try {
-      const prompt = `You are the AI Customer Support & Smart Order Assistant for Vistoosa Haute Couture, a luxury Bangladeshi fashion brand (Polo shirts, Linen Panjabi, Oxford shirts, Stretch chinos, Italian blazers).
+      // Build dynamic product catalog representation
+      const productCatalogText = knowledge.products
+        .filter((p) => p.active !== false)
+        .map(
+          (p, i) =>
+            `${i + 1}. [PRODUCT: ${p.name}]
+   - Price: ৳${p.price}
+   - Category: ${p.category}
+   - Available Sizes: ${p.sizes.join(', ')}
+   - Available Colors: ${p.colors.join(', ')}
+   - Description & Fabric: ${p.description} ${p.fabricDetails ? `(${p.fabricDetails})` : ''}
+   - Keywords / Triggers: ${p.keywords.join(', ')}
+   ${p.imageUrl ? `- Reference Photo URL: ${p.imageUrl}` : ''}`
+        )
+        .join('\n\n');
+
+      // Build active FAQs list (up to 50 preloaded questions)
+      const faqsListText = knowledge.faqs
+        .filter((f) => f.active !== false)
+        .map((f, i) => `[Q${i + 1}]: ${f.question}\n[A${i + 1}]: ${f.answer}`)
+        .join('\n\n');
+
+      const prompt = `You are the AI Customer Support & Smart Order Assistant for Vistoosa Haute Couture, a luxury Bangladeshi fashion brand.
+You talk directly to customers on Facebook Messenger, Instagram DM, and WhatsApp in natural, polite Bengali (or English if the customer asked in English).
+
+CORE STORE POLICIES:
+- Inside Dhaka Delivery: ৳${knowledge.policies.insideDhakaDeliveryFee} (${knowledge.policies.deliveryTimeInsideDhaka})
+- Sub-Dhaka Delivery (Savar, Gazipur, Narayanganj, Keraniganj): ৳${knowledge.policies.subDhakaDeliveryFee}
+- Outside Dhaka Delivery (All Bangladesh): ৳${knowledge.policies.outsideDhakaDeliveryFee} (${knowledge.policies.deliveryTimeOutsideDhaka})
+- Cash on Delivery (COD): ${knowledge.policies.codAvailableAllBangladesh ? 'Available all across Bangladesh without advance payment' : 'Advance required'}
+- Size Exchange Guarantee: ${knowledge.policies.exchangePolicyDays} days easy replacement
+- Customer Hotline: ${knowledge.policies.hotlinePhone}
+- Support Hours: ${knowledge.policies.operatingHours}
+${knowledge.policies.currentPromoNotice ? `- Current Campaign/Offer: ${knowledge.policies.currentPromoNotice}` : ''}
+${knowledge.customSystemPromptExtra ? `- SPECIAL OWNER INSTRUCTIONS:\n${knowledge.customSystemPromptExtra}` : ''}
+
+STORE KNOWLEDGE BASE & OFFICIAL FAQS:
+Use the following official questions and answers as your knowledge base when answering customer queries:
+${faqsListText}
+
+TRAINED PRODUCT CATALOG (PRODUCT RECOGNITION):
+Match customer inquiries, descriptions, or attached images to this catalog to identify "konta kon product":
+${productCatalogText}
+
+ORDER COLLECTION FORMAT & GUIDELINES:
+- Order Format:
+${knowledge.orderFormat.formatTemplate}
+- Follow-up missing details template:
+${knowledge.orderFormat.followUpPromptTemplate}
+- Complete confirmation template:
+${knowledge.orderFormat.confirmationMessageTemplate}
 
 YOUR TWO PRIMARY RESPONSIBILITIES:
 1. READ & ANSWER CUSTOMER QUESTIONS:
-   - Carefully read the customer's message.
-   - If they ask any questions, answer them warmly, politely, and accurately in Bengali (or English if the customer asked in English).
-   - Brand & Store Policies:
-     * Cash on Delivery (COD) is available all across Bangladesh. No advance payment required for regular orders.
-     * Delivery Charges: Inside Dhaka ৳60, Sub-Dhaka (Gazipur, Savar, Narayanganj, Keraniganj) ৳100, Outside Dhaka ৳150.
-     * Delivery Time: 48 - 72 hours all over Bangladesh.
-     * Core Products & Prices:
-       - Supima Cotton Pique Polo: ৳1,650 (Sizes: S, M, L, XL, XXL)
-       - Luxury Linen Panjabi: ৳2,850 (Sizes: 38, 40, 42, 44, 46 / M, L, XL, XXL)
-       - Oxford Tailored Shirt: ৳1,850 (Sizes: 15, 15.5, 16, 16.5, 17 / M, L, XL, XXL)
-       - Stretch Tailored Chinos: ৳1,950 (Waist: 30, 32, 34, 36, 38)
-       - Italian Wool Blend Blazer: ৳6,500
-     * Quality: 100% premium luxury fabrics, durable stitching.
-     * Return/Exchange: 7-day hassle-free size exchange guarantee.
-
+   - Carefully read the customer's message and understand any questions (pricing, delivery time, delivery fee, COD, size chart, exchange, fabric quality).
+   - Answer their questions accurately based on the Knowledge Base and Product Catalog above.
+   - Use polite Bengali honorifics ("আপনার", "আপনাকে", "স্যার").
 2. ASK PROBABLE FOLLOW-UP QUESTIONS TO COMPLETE ORDER:
-   - Always guide the customer towards finalizing their order by asking missing details (probable questions):
-     * If product size is missing: Ask what size fits them best (M, L, XL, etc.).
-     * If color/item is missing: Ask which color/design they prefer.
-     * If phone number or delivery address is missing: Politely ask for their 11-digit mobile number and full delivery address so the order can be placed right away.
-   - If ALL details are present (complete order): Thank them, summarize their order (product, size, total with delivery charge), and confirm receipt.
-   - Respectful honorifics: Use polite Bengali ("আপনার", "আপনাকে", "স্যার").
+   - Always guide the customer towards finalizing their order by asking for missing critical details:
+     * Product size (S, M, L, XL, XXL)
+     * Color/Design preference
+     * 11-digit Bangladeshi mobile number (017..., 018..., 019..., 016..., 013..., 014...)
+     * Full delivery address (road, house, area, thana, district)
+   - If ALL details are present (complete order): Thank them, summarize the order, and confirm receipt.
 
 Extract all order information and return strictly valid JSON matching this schema:
-
 {
   "customer_name": "string or null",
-  "phone_number": "string or null (valid 11-digit Bangladeshi number like 017xxxxxxxx, 018..., 019..., 016..., 013..., 014...)",
+  "phone_number": "string or null (valid 11-digit Bangladeshi number)",
   "address": "string or null (delivery road, house, area, thana, district)",
   "city": "Inside Dhaka" | "Sub-Dhaka" | "Outside Dhaka",
-  "product_name": "string or null (e.g. Supima Cotton Pique Polo, Luxury Linen Panjabi, Oxford Shirt, etc.)",
+  "product_name": "string or null (matched from Trained Product Catalog)",
   "quantity": number,
   "size": "S" | "M" | "L" | "XL" | "XXL" or null,
   "color": "string or null",
   "payment_method": "Cash on Delivery" | "bKash" | "Nagad",
   "confidence": "complete" | "incomplete",
   "missing_fields": ["array of missing critical fields from 'phone_number', 'address', 'customer_name', 'product_name', 'size'"],
-  "suggested_reply": "A courteous and helpful response in natural Bengali. First answer any customer questions clearly. Then ask the probable follow-up questions to collect missing order details (size, color, phone number, delivery address) to finalize the purchase. If already complete, confirm the order gracefully."
+  "suggested_reply": "A courteous, helpful response in polite Bengali. First answer any customer questions clearly using the official FAQs/catalog. Then smoothly ask probable follow-up questions to collect missing order details (size, color, phone number, delivery address) to finalize the purchase. If already complete, confirm the order gracefully."
 }
 
 CRITICAL RULES:
 1. An order is "complete" ONLY IF BOTH a valid Bangladeshi phone number AND a delivery address are present.
 2. If known customer sender name is "${knownSenderName || ''}", use it if customer didn't specify another name.
-3. If the customer sent an image attachment, acknowledge it politely in suggested_reply.
+3. If the customer sent an image attachment, match it against the product catalog and acknowledge it in suggested_reply.
 4. Default quantity is 1 if unspecified. Default payment_method is "Cash on Delivery".
 5. For city:
-   - Inside Dhaka city (Dhanmondi, Gulshan, Banani, Mirpur, Uttara, Mohammadpur, Badda, Motijheel, etc.) -> "Inside Dhaka".
-   - Gazipur, Savar, Narayanganj, Keraniganj -> "Sub-Dhaka".
-   - Rest of Bangladesh -> "Outside Dhaka".
+   - Inside Dhaka city -> "Inside Dhaka"
+   - Gazipur, Savar, Narayanganj, Keraniganj -> "Sub-Dhaka"
+   - Rest of Bangladesh -> "Outside Dhaka"
 
 CONVERSATION TRANSCRIPT:
 ${fullTranscript}
@@ -392,11 +433,15 @@ ${fullTranscript}
     }
   }
 
-  // Fallback Rule-Based Parser (Works even without Gemini API key or on quota limits)
-  return fallbackHeuristicParser(fullTranscript, knownSenderName);
+  // Fallback Rule-Based Parser using dynamic knowledge
+  return fallbackHeuristicParser(fullTranscript, knownSenderName, knowledge);
 }
 
-function fallbackHeuristicParser(transcript: string, knownSenderName?: string): ExtractedOrderInfo {
+function fallbackHeuristicParser(
+  transcript: string,
+  knownSenderName?: string,
+  knowledge?: AIKnowledgeBaseData
+): ExtractedOrderInfo {
   // Extract Bangladeshi phone number (e.g. 01712345678 or +8801812345678)
   const phoneMatch = transcript.match(/(?:\+?88\s*)?(01[3-9]\d{8})\b/);
   const phone_number = phoneMatch ? phoneMatch[1] : null;
@@ -412,22 +457,20 @@ function fallbackHeuristicParser(transcript: string, knownSenderName?: string): 
   const qtyMatch = transcript.match(/\b(\d+)\s*(?:ta|piece|pcs|টি|টা)?\b/i);
   const quantity = qtyMatch && Number(qtyMatch[1]) > 0 && Number(qtyMatch[1]) < 20 ? Number(qtyMatch[1]) : 1;
 
-  // Extract Product keywords
-  let product_name: string | null = null;
+  // Match Product from dynamic trained products
+  let matchedProduct: any = null;
   const lower = transcript.toLowerCase();
-  if (lower.includes('polo') || lower.includes('পোলো') || lower.includes('t-shirt') || lower.includes('টি শার্ট')) {
-    product_name = 'Supima Cotton Pique Polo';
-  } else if (lower.includes('panjabi') || lower.includes('পাঞ্জাবি') || lower.includes('punjabi')) {
-    product_name = 'Luxury Linen Panjabi';
-  } else if (lower.includes('shirt') || lower.includes('শার্ট')) {
-    product_name = 'Oxford Tailored Shirt';
-  } else if (lower.includes('chino') || lower.includes('প্যান্ট')) {
-    product_name = 'Stretch Tailored Chinos';
-  } else if (lower.includes('blazer') || lower.includes('ব্লেজার')) {
-    product_name = 'Italian Wool Blend Blazer';
-  } else {
-    product_name = 'Supima Cotton Pique Polo';
+
+  const productsList = knowledge?.products?.filter((p) => p.active !== false) || [];
+  for (const prod of productsList) {
+    if (prod.keywords?.some((kw) => lower.includes(kw.toLowerCase())) || lower.includes(prod.name.toLowerCase())) {
+      matchedProduct = prod;
+      break;
+    }
   }
+
+  let product_name = matchedProduct?.name || 'Supima Cotton Pique Polo';
+  let unitPrice = matchedProduct?.price || 1650;
 
   // Extract Address clues
   let address: string | null = null;
@@ -485,36 +528,54 @@ function fallbackHeuristicParser(transcript: string, knownSenderName?: string): 
   if (!size) missing_fields.push('size');
 
   let suggested_reply = '';
-  const lowerTranscript = transcript.toLowerCase();
-  
-  // Detect inquiries
-  const asksPrice = lowerTranscript.includes('price') || lowerTranscript.includes('দাম') || lowerTranscript.includes('koto') || lowerTranscript.includes('কত');
-  const asksDelivery = lowerTranscript.includes('delivery charge') || lowerTranscript.includes('ডেলিভারি চার্জ') || lowerTranscript.includes('charge') || lowerTranscript.includes('চার্জ');
-  const asksCod = lowerTranscript.includes('cod') || lowerTranscript.includes('cash on') || lowerTranscript.includes('ক্যাশ অন') || lowerTranscript.includes('advance') || lowerTranscript.includes('অগ্রিম');
-  const asksDeliveryTime = lowerTranscript.includes('kobe pabo') || lowerTranscript.includes('কবে পাব') || lowerTranscript.includes('time') || lowerTranscript.includes('সময়') || lowerTranscript.includes('din lagbe');
 
-  let answerPrefix = '';
-  if (asksPrice) {
-    answerPrefix += `আমাদের ${product_name || 'পণ্য'} এর মূল্য ৳${product_name?.includes('Panjabi') ? '২৮৫০' : product_name?.includes('Blazer') ? '৬৫০০' : product_name?.includes('Shirt') ? '১৮৫০' : '১৬৫০'}। `;
+  // Scan FAQs for relevant answers
+  let matchedFaqAnswer = '';
+  const faqs = knowledge?.faqs?.filter((f) => f.active !== false) || [];
+  for (const faq of faqs) {
+    const qLower = faq.question.toLowerCase();
+    const words = qLower.split(/\s+/).filter((w) => w.length > 2);
+    const matchingWordsCount = words.filter((w) => lower.includes(w)).length;
+    if (matchingWordsCount >= 2) {
+      matchedFaqAnswer = faq.answer;
+      break;
+    }
   }
-  if (asksDelivery) {
-    answerPrefix += `ডেলিভারি চার্জ: ঢাকার ভেতরে ৳৬০, সাব-ঢাকা ৳১০০, ঢাকার বাইরে ৳১৫০। `;
-  }
-  if (asksCod) {
-    answerPrefix += `জি, সারা বাংলাদেশে ক্যাশ অন ডেলিভারি (COD) সুবিধা আছে, কোনো অগ্রিম পেমেন্ট লাগবে না। `;
-  }
-  if (asksDeliveryTime) {
-    answerPrefix += `ডেলিভারি সময় সাধারণত ৪৮ থেকে ৭২ ঘণ্টার মধ্যে সম্পন্ন হয়। `;
+
+  const insideFee = knowledge?.policies?.insideDhakaDeliveryFee ?? 60;
+  const subFee = knowledge?.policies?.subDhakaDeliveryFee ?? 100;
+  const outFee = knowledge?.policies?.outsideDhakaDeliveryFee ?? 150;
+
+  let answerPrefix = matchedFaqAnswer ? `${matchedFaqAnswer} ` : '';
+
+  if (!matchedFaqAnswer) {
+    const asksPrice = lower.includes('price') || lower.includes('দাম') || lower.includes('koto') || lower.includes('কত');
+    const asksDelivery = lower.includes('delivery charge') || lower.includes('ডেলিভারি চার্জ') || lower.includes('charge') || lower.includes('চার্জ');
+    const asksCod = lower.includes('cod') || lower.includes('cash on') || lower.includes('ক্যাশ অন') || lower.includes('advance') || lower.includes('অগ্রিম');
+    const asksDeliveryTime = lower.includes('kobe pabo') || lower.includes('কবে পাব') || lower.includes('time') || lower.includes('সময়') || lower.includes('din lagbe');
+
+    if (asksPrice) {
+      answerPrefix += `আমাদের ${product_name} এর মূল্য ৳${unitPrice}। `;
+    }
+    if (asksDelivery) {
+      answerPrefix += `ডেলিভারি চার্জ: ঢাকার ভেতরে ৳${insideFee}, সাব-ঢাকা ৳${subFee}, ঢাকার বাইরে ৳${outFee}। `;
+    }
+    if (asksCod) {
+      answerPrefix += `জি, সারা বাংলাদেশে ক্যাশ অন ডেলিভারি (COD) সুবিধা আছে, কোনো অগ্রিম পেমেন্ট লাগবে না। `;
+    }
+    if (asksDeliveryTime) {
+      answerPrefix += `ডেলিভারি সময় সাধারণত ঢাকার ভেতরে ${knowledge?.policies?.deliveryTimeInsideDhaka || '৪৮ ঘণ্টা'} এবং বাইরে ${knowledge?.policies?.deliveryTimeOutsideDhaka || '৭২ ঘণ্টার'} মধ্যে সম্পন্ন হয়। `;
+    }
   }
 
   if (isComplete) {
     suggested_reply = `${answerPrefix ? answerPrefix + '\n\n' : ''}ধন্যবাদ ${customer_name || 'স্যার'}! আপনার ${product_name} (${size || 'M'} সাইজ) অর্ডারটি সফলভাবে রিসিভ করা হয়েছে ✅। আমাদের টিম খুব শীঘ্রই ডেলিভারির জন্য কল করে কনফার্ম করবে।`;
   } else {
     const missingBangla = [];
-    if (!size) missingBangla.push('পছন্দের সাইজ (M, L, XL, XXL)');
+    if (!size) missingBangla.push(`পছন্দের সাইজ (${matchedProduct?.sizes?.join(', ') || 'M, L, XL, XXL'})`);
     if (!phone_number) missingBangla.push('মোবাইল নম্বর');
     if (!address) missingBangla.push('পূর্ণ ডেলিভারি ঠিকানা');
-    
+
     suggested_reply = `${answerPrefix ? answerPrefix + '\n\n' : 'আসসালামু আলাইকুম! '}আপনার অর্ডারটি নিশ্চিত করতে অনুগ্রহ করে আপনার ${missingBangla.join(', ')} জানিয়ে সহায়তা করুন।`;
   }
 

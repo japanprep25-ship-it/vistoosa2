@@ -556,7 +556,7 @@ export const SocialMediaInboxView: React.FC<SocialMediaInboxViewProps> = ({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-1 mb-0.5">
                         <h4 className="text-xs font-bold text-white truncate">
-                          {conv.senderName || `Customer #${conv.psid.slice(-4)}`}
+                          {conv.senderName && !conv.senderName.startsWith('psid_') ? conv.senderName : `Customer ${conv.psid.replace('psid_', '')}`}
                         </h4>
                         <span className="text-[10px] text-zinc-500 font-mono shrink-0">
                           {new Date(conv.lastUpdated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

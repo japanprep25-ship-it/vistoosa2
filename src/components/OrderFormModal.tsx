@@ -224,8 +224,16 @@ export const OrderFormModal: React.FC<OrderFormModalProps> = ({
       setNotes(initialOrder.notes || '');
 
       // Populate Items
-      if (initialOrder.items && initialOrder.items.length > 0) {
-        const loadedItems: ItemFormState[] = initialOrder.items.map((it, idx) => {
+      const rawItems = Array.isArray(initialOrder.items)
+        ? initialOrder.items
+        : typeof initialOrder.items === 'string'
+        ? [{ productName: initialOrder.items, quantity: 1, unitPrice: initialOrder.totalAmount || 1650, size: 'M' }]
+        : initialOrder.items
+        ? [initialOrder.items]
+        : [];
+
+      if (rawItems.length > 0) {
+        const loadedItems: ItemFormState[] = rawItems.map((it: any, idx: number) => {
           const matchedInfo = lookupEanCode(it.sku || '', products);
           const productByName = !matchedInfo.matched && it.productName
             ? products.find((p) => p.name.toLowerCase() === it.productName.toLowerCase())
@@ -564,8 +572,8 @@ export const OrderFormModal: React.FC<OrderFormModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200">
-      <div className="bg-zinc-950 border border-zinc-800 rounded-3xl max-w-3xl w-full p-4 sm:p-6 shadow-2xl relative my-auto max-h-[94vh] flex flex-col">
+    <div className="fixed inset-0 z-50 bg-zinc-950/95 backdrop-blur-xl flex flex-col p-0 sm:p-4 md:p-6 animate-in fade-in duration-200 overflow-hidden">
+      <div className="bg-zinc-950 border border-zinc-800/80 w-full h-full sm:rounded-3xl p-4 sm:p-6 shadow-2xl relative flex flex-col overflow-hidden">
         {/* Modal Header */}
         <div className="flex items-center justify-between pb-4 border-b border-zinc-800 shrink-0">
           <div className="flex items-center gap-3">

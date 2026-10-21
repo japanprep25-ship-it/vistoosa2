@@ -41,6 +41,7 @@ export const SocialMediaInboxView: React.FC<SocialMediaInboxViewProps> = ({
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [selectedConversation, setSelectedConversation] = useState<ConversationItem | null>(null);
   const [isSortingModalOpen, setIsSortingModalOpen] = useState<boolean>(false);
+  const [isTrainModalOpen, setIsTrainModalOpen] = useState<boolean>(false);
   const [successMsg, setSuccessMsg] = useState<string>('');
 
   // Extracted Sorting Form State
@@ -291,6 +292,13 @@ export const SocialMediaInboxView: React.FC<SocialMediaInboxViewProps> = ({
                   {conv.messageCount} messages in thread
                 </span>
                 <button
+                  onClick={() => { setSelectedConversation(conv); setIsTrainModalOpen(true); }}
+                  className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs font-bold transition active:scale-95 cursor-pointer"
+                >
+                  <Bot className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Train AI</span>
+                </button>
+                <button
                   onClick={() => handleOpenConvertModal(conv)}
                   className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold shadow-lg shadow-purple-600/25 active:scale-95 transition cursor-pointer"
                 >
@@ -411,6 +419,16 @@ export const SocialMediaInboxView: React.FC<SocialMediaInboxViewProps> = ({
                     <ShoppingBag className="w-4 h-4 text-purple-400" />
                     <span>Extracted Product Items</span>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExtractedItems([...extractedItems, { productName: '', size: 'M', quantity: 1, unitPrice: 0, color: 'Default' }]);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-bold transition cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" />
+                    Add Item
+                  </button>
                 </div>
 
                 <div className="space-y-3">
@@ -533,6 +551,88 @@ export const SocialMediaInboxView: React.FC<SocialMediaInboxViewProps> = ({
                   <span>Confirm & Send to Pending Orders</span>
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Train AI Modal */}
+      {isTrainModalOpen && selectedConversation && (
+        <div className="fixed inset-0 z-50 bg-zinc-950/95 backdrop-blur-xl flex flex-col p-4 sm:p-6 animate-in fade-in duration-200 overflow-hidden">
+          <div className="bg-zinc-950 border border-zinc-800/80 w-full max-w-2xl mx-auto h-full rounded-3xl p-6 shadow-2xl relative flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-zinc-800 shrink-0">
+              <h3 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
+                <Bot className="w-5 h-5 text-blue-400" />
+                Train AI Agent
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsTrainModalOpen(false)}
+                className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-900 transition cursor-pointer text-sm font-bold"
+              >
+                ✕ Close
+              </button>
+            </div>
+            {/* Chat Content */}
+            <div className="flex-1 overflow-y-auto py-4 space-y-4">
+              {(() => {
+                const [chatMessages, setChatMessages] = useState<Array<{ role: 'user' | 'assistant', text: string }>>([
+                  { role: 'assistant', text: 'আমি আপনার অর্ডার প্রসেসিং সহকারী। আমি কি ভুল করেছি দয়া করে জানাবেন?' }
+                ]);
+                const [input, setInput] = useState('');
+                const [isSending, setIsSending] = useState(false);
+
+                const handleSendMessage = async () => {
+                  if (!input.trim()) return;
+                  const newMessages = [...chatMessages, { role: 'user', text: input }];
+                  setChatMessages(newMessages as any);
+                  setInput('');
+                  setIsSending(true);
+
+                  try {
+                    const res = await fetch('/api/ai/chat', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ 
+                        messages: newMessages, 
+                        context: `Customer: ${selectedConversation.senderName}, Message: ${selectedConversation.lastMessage}`
+                      }),
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                      setChatMessages([...newMessages, { role: 'assistant', text: data.response }] as any);
+                    }
+                  } catch (e) {
+                    console.error(e);
+                  } finally {
+                    setIsSending(false);
+                  }
+                };
+
+                return (
+                  <>
+                    {chatMessages.map((msg, i) => (
+                      <div key={i} className={`p-3 rounded-2xl text-xs max-w-[80%] ${msg.role === 'user' ? 'bg-purple-600 ml-auto' : 'bg-zinc-800'}`}>
+                        {msg.text}
+                      </div>
+                    ))}
+                    <div className="pt-4 border-t border-zinc-800">
+                      <input
+                        type="text"
+                        placeholder="AI-কে ভুল ধরিয়ে দিন..."
+                        className="w-full rounded-xl bg-zinc-900 border border-zinc-700 px-4 py-3 text-white text-xs focus:outline-none"
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleSendMessage();
+                        }}
+                        disabled={isSending}
+                      />
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           </div>
         </div>

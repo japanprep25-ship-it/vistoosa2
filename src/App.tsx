@@ -33,7 +33,6 @@ import { InventoryView } from './components/InventoryView';
 import { ReconciliationView } from './components/ReconciliationView';
 import { CRMView } from './components/CRMView';
 import { CashRegisterView } from './components/CashRegisterView';
-import { AIAssistantWidget } from './components/AIAssistantWidget';
 import { GoogleSheetsIntegrationModal } from './components/GoogleSheetsIntegrationModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { SettingsView } from './components/SettingsView';
@@ -294,7 +293,7 @@ export default function App() {
     if (currentUser.role === 'Owner' || currentUser.role === 'Admin') return;
     const perms = currentUser.permissions || {};
     if (!perms[activeTab]) {
-      const allTabs: ActiveTab[] = ['dashboard', 'orders', 'social', 'cogs', 'integrations', 'dispatch', 'inventory', 'reconciliation', 'crm', 'ai', 'gas', 'settings'];
+      const allTabs: ActiveTab[] = ['dashboard', 'orders', 'social', 'cogs', 'integrations', 'dispatch', 'inventory', 'reconciliation', 'crm', 'gas', 'settings'];
       const firstAllowed = allTabs.find((t) => t !== 'integrations' && perms[t]) || 'dashboard';
       if (firstAllowed !== activeTab) {
         navigateTo(firstAllowed);
@@ -1030,14 +1029,7 @@ export default function App() {
               />
             )}
 
-            {activeTab === 'ai' && (
-              <AIAssistantWidget
-                knowledgeBase={knowledgeBase}
-                onAddKnowledgeItem={handleAddKnowledgeItem}
-                onDeleteKnowledgeItem={handleDeleteKnowledgeItem}
-                onOrderParsed={handleCreateOrder}
-              />
-            )}
+
 
             {activeTab === 'gas' && (
               <div className="space-y-4">

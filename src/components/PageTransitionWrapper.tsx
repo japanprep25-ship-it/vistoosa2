@@ -47,7 +47,7 @@ const TAB_METADATA: Record<string, { title: string; badge: string; color: string
     color: 'from-emerald-400/20 via-teal-500/10 to-transparent border-emerald-400/40 text-emerald-300',
   },
   ai: {
-    title: 'Veer AI Fashion Agent & Order Parser',
+    title: 'Fashion AI Agent & Order Parser',
     badge: 'NEURAL AGENT READY',
     color: 'from-purple-400/20 via-amber-500/10 to-transparent border-purple-400/40 text-purple-300',
   },

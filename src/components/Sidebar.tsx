@@ -30,7 +30,6 @@ export type ActiveTab =
   | 'cogs'
   | 'integrations'
   | 'crm'
-  | 'ai'
   | 'gas'
   | 'settings';
 
@@ -160,12 +159,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       description: 'VIP vs Inactive Churn',
       icon: Users,
     },
-    {
-      id: 'ai' as ActiveTab,
-      label: t('nav.ai'),
-      description: 'Bengali Typo & Parser',
-      icon: Bot,
-    },
+
     {
       id: 'gas' as ActiveTab,
       label: t('nav.gas'),

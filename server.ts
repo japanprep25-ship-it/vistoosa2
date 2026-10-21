@@ -87,6 +87,39 @@ app.get('/privacy', (req, res) => {
   `));
 });
 
+// AI Chat Endpoint
+app.post('/api/ai/chat', async (req, res) => {
+  const { messages, context } = req.body;
+  try {
+    const aiClient = new GoogleGenAI({
+      apiKey: process.env.GEMINI_API_KEY,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    });
+
+    const chat = aiClient.chats.create({
+      model: "gemini-3.8-flash",
+      config: {
+        systemInstruction: `You are a helpful AI assistant for a clothing brand's order management system. 
+        You help the merchant identify errors in AI-extracted orders from customer messages. 
+        Context: ${context}
+        Current messages: ${JSON.stringify(messages)}`,
+      },
+    });
+
+    const lastMessage = messages[messages.length - 1].text;
+    const response = await chat.sendMessage({ message: lastMessage });
+    
+    res.json({ success: true, response: response.text });
+  } catch (error) {
+    console.error('AI Chat Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to chat with AI' });
+  }
+});
+
 app.get('/data-deletion', (req, res) => {
   res.send(htmlWrapper('Data Deletion Request - Vistoosa', `
     <h1>Data Deletion Request</h1>

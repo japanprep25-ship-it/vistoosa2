@@ -200,7 +200,7 @@ export const translations: Record<LanguageCode, Translations> = {
     'nav.inventory': 'Dual Inventory',
     'nav.reconciliation': 'Courier Reconciliation',
     'nav.crm': 'Conversational CRM',
-    'nav.ai': 'Veer AI Fashion Agent',
+    'nav.ai': 'Fashion AI Agent',
     'nav.gas': 'Google Sheets DB',
     'nav.settings': 'Settings',
     'nav.workspaceNav': 'Workspace Navigation',

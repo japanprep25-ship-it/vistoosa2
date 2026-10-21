@@ -48,7 +48,6 @@ export const ALL_PAGES = [
   { key: 'inventory', label: 'Dual Inventory' },
   { key: 'reconciliation', label: 'Pathao Courier' },
   { key: 'crm', label: 'CRM & WhatsApp' },
-  { key: 'ai', label: 'Veer (AI)' },
   { key: 'gas', label: 'GAS & DB Schema' },
   { key: 'settings', label: 'Settings' },
 ];
@@ -63,7 +62,6 @@ const DEFAULT_PERMISSIONS: Record<string, boolean> = {
   inventory: true,
   reconciliation: true,
   crm: true,
-  ai: true,
   gas: true,
   settings: true,
 };

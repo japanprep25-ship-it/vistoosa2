@@ -1480,9 +1480,9 @@ export const OrderEngineView: React.FC<OrderEngineViewProps> = ({
             ))}
 
             {/* District Chips */}
-            {filters.districts.map((dist) => (
+            {filters.districts.map((dist, index) => (
               <span
-                key={dist}
+                key={`${dist}-${index}`}
                 className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-xl text-[11px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
               >
                 District: {dist}

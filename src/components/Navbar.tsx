@@ -90,16 +90,6 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* PWA Install Button */}
           <PWAInstallButton />
 
-          {/* Quick AI Assistant Trigger */}
-          <button
-            id="navbar-ai-assistant-btn"
-            onClick={onOpenAiDrawer}
-            className="flex items-center gap-1.5 px-3 py-2 min-h-[44px] rounded-xl bg-gradient-to-r from-purple-500/20 to-amber-500/20 hover:from-purple-500/30 hover:to-amber-500/30 border border-amber-500/30 text-amber-300 text-xs font-medium active:scale-95 transition-all cursor-pointer"
-            title="Open Veer (Vistoosa AI Fashion Agent)"
-          >
-            <Sparkles className="w-4 h-4 text-amber-400 animate-spin" style={{ animationDuration: '6s' }} />
-            <span className="hidden sm:inline">{t('header.aiAssistant')}</span>
-          </button>
 
 
 

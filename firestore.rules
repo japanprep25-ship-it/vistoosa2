@@ -2,37 +2,19 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helpers
-    function isSignedIn() { return request.auth != null; }
-    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
-    
-    function isValidOrder(data) {
-      return data.customerName is string && data.customerName.size() >= 1 && data.customerName.size() <= 100
-          && data.phone is string && data.phone.size() >= 11 && data.phone.size() <= 15
-          && data.status in ['Pending', 'Approved', 'Dispatched', 'Delivered', 'Cancelled', 'Return', 'Paid Return']
-          && data.totalAmount is number && data.totalAmount >= 0;
+    // Public branding metadata
+    match /settings/branding {
+      allow read, write: if true;
+    }
+
+    // Orders Collection
+    match /orders/{orderId} {
+      allow read, write: if true;
     }
 
     // Default deny catch-all
     match /{document=**} {
       allow read, write: if false;
-    }
-
-    // Public branding metadata
-    match /settings/branding {
-      allow read: if true;
-      allow write: if isSignedIn();
-    }
-
-    // Orders Collection
-    match /orders/{orderId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() 
-                    && isValidId(orderId)
-                    && isValidOrder(request.resource.data);
-      allow update: if isSignedIn()
-                    && isValidOrder(request.resource.data);
-      allow delete: if false;
     }
   }
 }

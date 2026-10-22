@@ -11,12 +11,31 @@
         "appIconUrl": { "type": "string" },
         "updatedAt": { "type": "string", "format": "date-time" }
       }
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer order details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "customerName": { "type": "string" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "status": { "type": "string", "enum": ["Pending", "Approved", "Dispatched", "Delivered", "Cancelled", "Return", "Paid Return"] },
+        "totalAmount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "customerName", "phone", "status", "totalAmount"]
     }
   },
   "firestore": {
     "/settings/branding": {
       "schema": { "$ref": "BrandingSettings" },
       "description": "Branding assets storage"
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "Order" },
+      "description": "Customer orders collection"
     }
   }
 }

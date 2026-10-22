@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { collection, onSnapshot, query } from 'firebase/firestore';
+import { db } from './firebase';
 import {
   INITIAL_AUTHORIZED_USERS,
   INITIAL_PRODUCTS,
@@ -62,15 +64,21 @@ export default function App() {
   const [authorizedUsers, setAuthorizedUsers] = useState<AuthUser[]>(INITIAL_AUTHORIZED_USERS);
 
   // Application Data State
-  const [orders, setOrders] = useState<Order[]>(() => {
-    try {
-      const saved = localStorage.getItem('vistoosa_orders');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      // fallback
-    }
-    return INITIAL_ORDERS;
-  });
+  const [orders, setOrders] = useState<Order[]>(INITIAL_ORDERS);
+
+  // Sync orders with Firestore in real-time
+  useEffect(() => {
+    const q = query(collection(db, 'orders'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const ordersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
+      setOrders(ordersData);
+      localStorage.setItem('vistoosa_orders', JSON.stringify(ordersData));
+    }, (error) => {
+      console.error('Error fetching orders in real-time:', error);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   // Check stored auth token on mount
   React.useEffect(() => {

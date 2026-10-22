@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, onSnapshot, query } from 'firebase/firestore';
+import { collection, doc, onSnapshot, query, updateDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import {
   INITIAL_AUTHORIZED_USERS,
@@ -66,6 +66,7 @@ export default function App() {
   // Application Data State
   const [orders, setOrders] = useState<Order[]>(INITIAL_ORDERS);
 
+
   // Sync orders with Firestore in real-time
   useEffect(() => {
     const q = query(collection(db, 'orders'));
@@ -78,9 +79,7 @@ export default function App() {
     });
 
     return () => unsubscribe();
-  }, []);
-
-  // Check stored auth token on mount
+  }, []);  // Check stored auth token on mount
   React.useEffect(() => {
     const verifySession = async () => {
       const token = localStorage.getItem('vistoosa_auth_token');
@@ -131,15 +130,6 @@ export default function App() {
     setAuthToken(null);
     setCurrentUser(null);
   };
-
-  // Save orders to localStorage on changes
-  React.useEffect(() => {
-    try {
-      localStorage.setItem('vistoosa_orders', JSON.stringify(orders));
-    } catch (e) {
-      console.warn('Could not save orders to localStorage', e);
-    }
-  }, [orders]);
 
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
   const [knowledgeBase, setKnowledgeBase] = useState<KnowledgeItem[]>(INITIAL_KNOWLEDGE_BASE);
@@ -453,21 +443,19 @@ export default function App() {
       })
     );
 
-    // Sync status update to backend server
-    const token = localStorage.getItem('vistoosa_auth_token') || '';
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    fetch('/api/orders/status', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        orderId: targetOrder.id,
+    // Sync status update to Firestore
+    try {
+      await updateDoc(doc(db, 'orders', orderId), {
         status: 'Approved',
-        trackingId,
-        consignmentId,
-      }),
-    }).catch(() => {});
+        approvedAt: new Date().toISOString(),
+        pathaoTrackingId: trackingId,
+        pathaoConsignmentId: consignmentId,
+        pathaoStatus: isPickupDisabled ? undefined : 'Pickup Requested',
+      });
+    } catch (e) {
+      console.error('Failed to update order status in Firestore:', e);
+    }
 
     // Increase reserved stock for the item
     setProducts((prev) =>
@@ -493,7 +481,7 @@ export default function App() {
     );
   };
 
-  const handleCancelOrder = (orderId: string) => {
+  const handleCancelOrder = async (orderId: string) => {
     const targetOrder = orders.find((o) => o.id === orderId);
     if (!targetOrder) return;
 
@@ -501,19 +489,14 @@ export default function App() {
       prev.map((o) => (o.id === orderId ? { ...o, status: 'Cancelled' } : o))
     );
 
-    // Sync status update to backend server
-    const cancelToken = localStorage.getItem('vistoosa_auth_token') || '';
-    const cancelHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (cancelToken) cancelHeaders['Authorization'] = `Bearer ${cancelToken}`;
-
-    fetch('/api/orders/status', {
-      method: 'POST',
-      headers: cancelHeaders,
-      body: JSON.stringify({
-        orderId,
+    // Sync status update to Firestore
+    try {
+      await updateDoc(doc(db, 'orders', orderId), {
         status: 'Cancelled',
-      }),
-    }).catch(() => {});
+      });
+    } catch (e) {
+      console.error('Failed to update order status in Firestore:', e);
+    }
 
     // If it was approved, release reserved stock
     if (targetOrder.status === 'Approved') {
@@ -620,23 +603,17 @@ export default function App() {
   };
 
   // Handler to Update Order details (Customer name, phone, address, city, product, size, qty, notes, etc.)
-  const handleUpdateOrder = (updatedOrder: Order) => {
+  const handleUpdateOrder = async (updatedOrder: Order) => {
     setOrders((prev) =>
       prev.map((order) => (order.id === updatedOrder.id ? updatedOrder : order))
     );
 
-    // Persist full updated order to backend server
-    const updateToken = localStorage.getItem('vistoosa_auth_token') || '';
-    const updateHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (updateToken) updateHeaders['Authorization'] = `Bearer ${updateToken}`;
-
-    fetch('/api/orders/update', {
-      method: 'POST',
-      headers: updateHeaders,
-      body: JSON.stringify(updatedOrder),
-    }).catch((err) => {
-      console.warn('Failed to sync updated order to server:', err);
-    });
+    // Persist full updated order to Firestore
+    try {
+      await updateDoc(doc(db, 'orders', updatedOrder.id), updatedOrder);
+    } catch (err) {
+      console.error('Failed to sync updated order to Firestore:', err);
+    }
   };
 
   // Handlers for Soft Delete, Restore, and Permanent Delete

@@ -26,6 +26,7 @@ import {
 import { Order, Product, OrderChannel } from '../types';
 import { detectDistrict } from '../utils/districtDetector';
 import { AITrainingModal } from './AITrainingModal';
+import { ConnectChannelsPanel } from '../connect/ConnectChannelsPanel';
 
 interface SocialMediaInboxViewProps {
   products: Product[];
@@ -462,6 +463,9 @@ export const SocialMediaInboxView: React.FC<SocialMediaInboxViewProps> = ({
           <span>{toastMessage.text}</span>
         </div>
       )}
+
+      {/* Connect Your Channels Panel */}
+      <ConnectChannelsPanel />
 
       {/* Top Banner / Controls Bar */}
       <div className="glass-panel rounded-3xl p-4 sm:p-5 border border-zinc-800/80 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-lg">

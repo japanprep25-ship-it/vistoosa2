@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, doc, onSnapshot, query, updateDoc } from 'firebase/firestore';
-import { db } from './firebase';
+import { signInAnonymously } from 'firebase/auth';
+import { db, auth } from './firebase';
 import {
   INITIAL_AUTHORIZED_USERS,
   INITIAL_PRODUCTS,
@@ -69,25 +70,57 @@ export default function App() {
 
   // Sync orders with Firestore in real-time
   useEffect(() => {
-    const q = query(collection(db, 'orders'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const ordersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
-      snapshot.docChanges().forEach((change) => {
-        if (change.type === 'added') {
-          const order = change.doc.data() as Order;
-          if (order.status === 'Pending') {
-             if (Notification.permission === 'granted') {
-               new Notification('New Order', { body: `New order from ${order.customerName}: ৳${order.totalAmount}` });
-             }
+    let unsubscribe: (() => void) | null = null;
+
+    const initOrdersSync = async () => {
+      try {
+        if (auth && !auth.currentUser) {
+          try {
+            await signInAnonymously(auth);
+          } catch {
+            // Anonymous auth may not be enabled on remote Firebase project
           }
         }
-      });
-      setOrders(ordersData);
-    }, (error) => {
-      console.error('Error fetching orders in real-time:', error);
-    });
 
-    return () => unsubscribe();
+        const q = query(collection(db, 'orders'));
+        unsubscribe = onSnapshot(
+          q,
+          (snapshot) => {
+            const ordersData = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Order));
+            snapshot.docChanges().forEach((change) => {
+              if (change.type === 'added') {
+                const order = change.doc.data() as Order;
+                if (order.status === 'Pending') {
+                  if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+                    new Notification('New Order', {
+                      body: `New order from ${order.customerName}: ৳${order.totalAmount}`,
+                    });
+                  }
+                }
+              }
+            });
+            if (ordersData.length > 0) {
+              setOrders(ordersData);
+            }
+          },
+          (error) => {
+            // Gracefully handle permission denied without throwing fatal console error
+            console.warn(
+              '[Firestore Real-time Sync]: Client permission denied or offline; continuing with server-side inbound sync.',
+              error?.message
+            );
+          }
+        );
+      } catch (err: any) {
+        console.warn('[Firestore Real-time Sync]: Skipped client listener, using server sync.', err?.message);
+      }
+    };
+
+    initOrdersSync();
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, []);  // Check stored auth token on mount
   React.useEffect(() => {
     const verifySession = async () => {
@@ -339,6 +372,13 @@ export default function App() {
                   status: inboundOrder.status || 'Pending',
                 });
                 updated = true;
+                if (inboundOrder.status === 'Pending') {
+                  if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+                    new Notification('New Order', {
+                      body: `New order from ${inboundOrder.customerName}: ৳${inboundOrder.totalAmount}`,
+                    });
+                  }
+                }
               } else {
                 // If existing order status in frontend is Approved/Dispatched/etc., DO NOT overwrite back to Pending!
                 const currentStatus = newOrdersList[existingIndex].status;
@@ -1023,8 +1063,6 @@ export default function App() {
                 onCloseEntryModalExternal={() => setIsCashModalOpenFromDashboard(false)}
               />
             )}
-
-
 
             {activeTab === 'gas' && (
               <div className="space-y-4">

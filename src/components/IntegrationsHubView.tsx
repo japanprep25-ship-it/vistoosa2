@@ -151,6 +151,9 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
       whatsappPhoneNumberId: '',
       whatsappBusinessAccountId: '',
       whatsappAccessToken: '',
+      whatsappEmbeddedConfigId: '',
+      whatsappVerifiedName: '',
+      whatsappDisplayNumber: '',
     };
   });
 
@@ -263,6 +266,17 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
   const websiteWebhookFullUrl = `${originUrl}/api/webhooks/website/orders`;
   const pathaoWebhookFullUrl = `${originUrl}/api/webhooks/pathao`;
   const metaWebhookFullUrl = `${originUrl}/webhook/meta`;
+  const metaOAuthRedirectUri = `${originUrl}/api/auth/facebook/callback`;
+  const metaPrivacyPolicyUrl = `${originUrl}/privacy`;
+
+  const handleGenerateRandomToken = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_';
+    let rand = 'vt_';
+    for (let i = 0; i < 32; i++) {
+      rand += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setMetaConfig((prev: any) => ({ ...prev, metaVerifyToken: rand }));
+  };
 
   const getAuthHeaders = () => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('vistoosa_auth_token') || '' : '';
@@ -554,7 +568,7 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
     });
 
     try {
-      await Promise.all([
+      const [res1, res2] = await Promise.all([
         fetch('/api/settings/meta-order', {
           method: 'POST',
           headers: getAuthHeaders(),
@@ -566,8 +580,36 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
           body: JSON.stringify({ meta: updatedMeta }),
         }),
       ]);
-    } catch (err) {
+
+      if (!res1.ok && res1.status !== 404) {
+        const text = await res1.text().catch(() => '');
+        let errMsg = `Failed to save Meta settings (HTTP ${res1.status})`;
+        try {
+          const json = JSON.parse(text);
+          if (json.message) errMsg = json.message;
+        } catch {}
+        setTestResult({ success: false, message: errMsg });
+        setTimeout(() => setTestResult(null), 5000);
+        return;
+      }
+
+      const data1 = await res1.json().catch(() => ({}));
+      if (data1 && data1.persisted === false) {
+        setTestResult({
+          success: false,
+          message: '⚠️ Warning: Saved in local cache, but writing to Firestore database failed (Quota limit reached).',
+        });
+        setTimeout(() => setTestResult(null), 6000);
+        return;
+      }
+    } catch (err: any) {
       console.warn('Could not save meta config to server', err);
+      setTestResult({
+        success: false,
+        message: err?.message || 'Network error saving Meta settings.',
+      });
+      setTimeout(() => setTestResult(null), 5000);
+      return;
     }
 
     setTestResult({
@@ -1450,6 +1492,15 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
                       />
                       <button
                         type="button"
+                        onClick={handleGenerateRandomToken}
+                        className="px-3 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-semibold flex items-center gap-1.5 transition shrink-0"
+                        title="Generate a secure random verification token"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Generate</span>
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => handleCopy(metaConfig.metaVerifyToken || 'vistoosa_meta_secret_token_2026', 'meta-token')}
                         className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold flex items-center gap-1.5 transition shrink-0"
                       >
@@ -1462,6 +1513,66 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
                           <>
                             <Copy className="w-3.5 h-3.5" />
                             <span>Copy Token</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* OAuth Redirect URI */}
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-zinc-400 font-medium">OAuth Redirect URI (Facebook Login Settings &gt; Valid OAuth Redirect URIs):</span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={metaOAuthRedirectUri}
+                        className="flex-1 bg-zinc-950 border border-zinc-700/80 rounded-xl px-3 py-2 text-xs font-mono text-blue-300 select-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(metaOAuthRedirectUri, 'meta-oauth')}
+                        className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold flex items-center gap-1.5 transition shrink-0"
+                      >
+                        {copiedKey === 'meta-oauth' ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Copied!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>Copy URI</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Privacy Policy URL */}
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-zinc-400 font-medium">Privacy Policy URL (Meta App Settings &gt; Basic &gt; Privacy Policy URL):</span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={metaPrivacyPolicyUrl}
+                        className="flex-1 bg-zinc-950 border border-zinc-700/80 rounded-xl px-3 py-2 text-xs font-mono text-purple-300 select-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(metaPrivacyPolicyUrl, 'meta-privacy')}
+                        className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold flex items-center gap-1.5 transition shrink-0"
+                      >
+                        {copiedKey === 'meta-privacy' ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Copied!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>Copy URL</span>
                           </>
                         )}
                       </button>
@@ -1524,6 +1635,9 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
                         onChange={(val) => setMetaConfig({ ...metaConfig, pageAccessToken: val })}
                         placeholder="EAAB... (Never expires token)"
                       />
+                      <p className="text-[10px] text-amber-400/90">
+                        Hint: Use a never-expiring Page token (generated via Meta Business Manager or Facebook OAuth login).
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -1546,6 +1660,50 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
                         placeholder="17841400000000000"
                         className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-amber-500 font-mono"
                       />
+                    </div>
+
+                    {/* WhatsApp Status Line */}
+                    <div className="sm:col-span-2 flex items-center justify-between p-3 rounded-2xl bg-zinc-950/80 border border-zinc-800">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className={`w-2.5 h-2.5 rounded-full ${
+                            metaConfig.whatsappPhoneNumberId && (metaConfig.whatsappAccessToken || metaConfig.whatsappVerifiedName)
+                              ? 'bg-emerald-400 animate-pulse'
+                              : 'bg-zinc-600'
+                          }`}
+                        />
+                        <span className="text-xs font-semibold text-zinc-200">
+                          {metaConfig.whatsappPhoneNumberId && (metaConfig.whatsappAccessToken || metaConfig.whatsappVerifiedName) ? (
+                            <span>
+                              Connected:{' '}
+                              <strong className="text-emerald-400">
+                                {metaConfig.whatsappVerifiedName || 'WhatsApp Business'}
+                              </strong>{' '}
+                              ({metaConfig.whatsappDisplayNumber || metaConfig.whatsappPhoneNumberId})
+                            </span>
+                          ) : (
+                            <span className="text-zinc-400 font-normal">Not connected</span>
+                          )}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-zinc-500 font-mono">WhatsApp Cloud API</span>
+                    </div>
+
+                    {/* WhatsApp Embedded Signup Configuration ID */}
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <label className="text-xs font-medium text-zinc-300">WhatsApp Embedded Signup Configuration ID</label>
+                      <input
+                        type="text"
+                        value={metaConfig.whatsappEmbeddedConfigId || ''}
+                        onChange={(e) =>
+                          setMetaConfig({ ...metaConfig, whatsappEmbeddedConfigId: e.target.value })
+                        }
+                        placeholder="e.g. 108492019482019 (From Meta Facebook Login for Business > Configurations)"
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500 font-mono"
+                      />
+                      <p className="text-[10px] text-zinc-400">
+                        Help text: Meta Developers &gt; Facebook Login for Business &gt; Configurations
+                      </p>
                     </div>
 
                     <div className="space-y-1.5">
@@ -1581,6 +1739,69 @@ export const IntegrationsHubView: React.FC<IntegrationsHubViewProps> = ({
                         onChange={(val) => setMetaConfig({ ...metaConfig, whatsappAccessToken: val })}
                         placeholder="EAAB... (Permanent System User Token with whatsapp_business_messaging)"
                       />
+                    </div>
+
+                    {/* Webhook Configuration for WhatsApp */}
+                    <div className="sm:col-span-2 p-3.5 rounded-2xl bg-zinc-950/80 border border-zinc-800 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-zinc-200 flex items-center gap-1.5">
+                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                          WhatsApp Webhook Configuration
+                        </span>
+                        <span className="text-[10px] text-amber-400 font-mono">GET / POST</span>
+                      </div>
+
+                      <div className="space-y-1">
+                        <span className="text-[10px] text-zinc-400">Webhook Callback URL:</span>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            readOnly
+                            value={metaWebhookFullUrl}
+                            className="flex-1 bg-zinc-900 border border-zinc-700/80 rounded-xl px-3 py-1.5 text-xs font-mono text-amber-300 select-all"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleCopy(metaWebhookFullUrl, 'wa-webhook')}
+                            className="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold flex items-center gap-1 transition shrink-0"
+                          >
+                            {copiedKey === 'wa-webhook' ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                            <span>Copy</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <span className="text-[10px] text-zinc-400">Verify Token:</span>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            readOnly
+                            value={metaConfig.metaVerifyToken || 'vistoosa_meta_secret_token_2026'}
+                            className="flex-1 bg-zinc-900 border border-zinc-700/80 rounded-xl px-3 py-1.5 text-xs font-mono text-emerald-400 select-all"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleCopy(metaConfig.metaVerifyToken || 'vistoosa_meta_secret_token_2026', 'wa-token')}
+                            className="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold flex items-center gap-1 transition shrink-0"
+                          >
+                            {copiedKey === 'wa-token' ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                            <span>Copy</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <p className="text-[11px] text-amber-300/95 bg-amber-500/10 p-2.5 rounded-xl border border-amber-500/20 leading-relaxed">
+                        Meta Developers &gt; WhatsApp &gt; Configuration এ এই URL দিতে হবে আর &apos;messages&apos; ফিল্ড সাবস্ক্রাইব করতে হবে।
+                      </p>
                     </div>
                   </div>
                 </div>

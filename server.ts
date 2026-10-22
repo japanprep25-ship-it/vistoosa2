@@ -12,7 +12,7 @@ import { mountBrandRoutes } from './brandStore';
 import { mountAIKnowledgeRoutes } from './aiKnowledgeStore';
 import { mountGlobalSettingsRoutes, getMotherGmail, setMotherGmail } from './globalSettingsStore';
 import { testFirestoreConnection } from './firebaseAdmin';
-import { handleIncomingMessage } from './src/chatEngine';
+import { mountConnectRoutes } from './server/connect/oauthRoutes';
 import {
   createUser,
   authenticateUserCredentials,
@@ -51,6 +51,7 @@ app.use(express.text({ limit: '15mb', type: ['text/plain', 'text/json', 'applica
 
 // Mount Meta Integration Routes FIRST to ensure it is not swallowed by other routes or middleware
 mountMetaIntegrationRoutes(app);
+mountConnectRoutes(app);
 mountAIKnowledgeRoutes(app);
 
 // Public Routes (Privacy & Data Deletion)
@@ -166,6 +167,7 @@ app.post('/api/webhooks/pathao', async (req: Request, res: Response) => {
     }
   });
 });
+
 
 // WooCommerce & Generic Webhook Handshake Interceptor
 app.use((req, res, next) => {
@@ -760,16 +762,6 @@ Respond directly, concisely, and accurately to the user's specific prompt or que
     });
   }
 };
-app.post('/api/chat', async (req, res) => {
-  const { senderId, messageText, senderName } = req.body;
-  try {
-    const reply = await handleIncomingMessage(senderId, messageText, senderName);
-    res.json({ reply });
-  } catch (error) {
-    console.error('Chat Error:', error);
-    res.status(500).json({ error: 'Failed to process chat' });
-  }
-});
 
 // 3. Social Media Chat & Screenshot Parser (aliases: /api/ai/parse-order and /api/gemini/parse-order)
 const handleParseOrder = async (req: express.Request, res: express.Response) => {

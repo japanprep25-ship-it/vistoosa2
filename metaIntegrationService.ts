@@ -32,6 +32,13 @@ export interface MetaConfig {
   whatsappBusinessAccountId: string;
   whatsappAccessToken: string;
   autoReplyEnabled?: boolean;
+  whatsappEmbeddedConfigId?: string;
+  whatsappRegistrationPin?: string;
+  whatsappVerifiedName?: string;
+  whatsappDisplayNumber?: string;
+  whatsappConnectedAt?: string;
+  whatsappTokenExpiresAt?: string | number | null;
+  persisted?: boolean;
 }
 
 export interface ConversationMessage {
@@ -112,6 +119,13 @@ export async function loadMetaConfig(docId: string = 'global'): Promise<MetaConf
     whatsappBusinessAccountId: dbConfig.whatsappBusinessAccountId || process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || '',
     whatsappAccessToken: dbConfig.whatsappAccessToken || process.env.WHATSAPP_ACCESS_TOKEN || '',
     autoReplyEnabled: dbConfig.autoReplyEnabled !== undefined ? dbConfig.autoReplyEnabled : true,
+    whatsappEmbeddedConfigId: dbConfig.whatsappEmbeddedConfigId || process.env.WHATSAPP_EMBEDDED_CONFIG_ID || '',
+    whatsappRegistrationPin: dbConfig.whatsappRegistrationPin || '',
+    whatsappVerifiedName: dbConfig.whatsappVerifiedName || '',
+    whatsappDisplayNumber: dbConfig.whatsappDisplayNumber || '',
+    whatsappConnectedAt: dbConfig.whatsappConnectedAt || '',
+    whatsappTokenExpiresAt: dbConfig.whatsappTokenExpiresAt !== undefined ? dbConfig.whatsappTokenExpiresAt : null,
+    persisted: dbConfig.persisted !== undefined ? dbConfig.persisted : true,
   };
 }
 
@@ -130,19 +144,32 @@ export async function saveMetaConfig(config: Partial<MetaConfig>, docId: string 
     whatsappBusinessAccountId: config.whatsappBusinessAccountId !== undefined ? String(config.whatsappBusinessAccountId).trim() : current.whatsappBusinessAccountId,
     whatsappAccessToken: config.whatsappAccessToken !== undefined ? String(config.whatsappAccessToken).trim() : current.whatsappAccessToken,
     autoReplyEnabled: config.autoReplyEnabled !== undefined ? config.autoReplyEnabled : current.autoReplyEnabled,
+    whatsappEmbeddedConfigId: config.whatsappEmbeddedConfigId !== undefined ? String(config.whatsappEmbeddedConfigId).trim() : (current.whatsappEmbeddedConfigId || ''),
+    whatsappRegistrationPin: config.whatsappRegistrationPin !== undefined ? String(config.whatsappRegistrationPin).trim() : (current.whatsappRegistrationPin || ''),
+    whatsappVerifiedName: config.whatsappVerifiedName !== undefined ? String(config.whatsappVerifiedName).trim() : (current.whatsappVerifiedName || ''),
+    whatsappDisplayNumber: config.whatsappDisplayNumber !== undefined ? String(config.whatsappDisplayNumber).trim() : (current.whatsappDisplayNumber || ''),
+    whatsappConnectedAt: config.whatsappConnectedAt !== undefined ? String(config.whatsappConnectedAt).trim() : (current.whatsappConnectedAt || ''),
+    whatsappTokenExpiresAt: config.whatsappTokenExpiresAt !== undefined ? config.whatsappTokenExpiresAt : (current.whatsappTokenExpiresAt !== undefined ? current.whatsappTokenExpiresAt : null),
   };
 
-  inMemoryMetaConfig.set(docId, merged);
+  let wasPersisted = false;
 
   if (!isFirestoreQuotaExceeded()) {
     try {
-      await db.collection(META_COLLECTION).doc(docId).set({ ...merged, updatedAt: new Date().toISOString() }, { merge: true });
+      // Don't save transient property into DB
+      const { persisted: _p, ...dataToSave } = merged;
+      await db.collection(META_COLLECTION).doc(docId).set({ ...dataToSave, updatedAt: new Date().toISOString() }, { merge: true });
+      wasPersisted = true;
     } catch (err: any) {
+      console.warn('[MetaConfig] Firestore save warning:', err?.message || err);
       if (isQuotaExceededError(err)) {
         markFirestoreQuotaExceeded();
       }
     }
   }
+
+  merged.persisted = wasPersisted;
+  inMemoryMetaConfig.set(docId, merged);
 
   return merged;
 }
@@ -1337,7 +1364,12 @@ export function mountMetaIntegrationRoutes(app: Express) {
         instagramBusinessAccountId: config.instagramBusinessAccountId,
         whatsappPhoneNumberId: config.whatsappPhoneNumberId,
         whatsappBusinessAccountId: config.whatsappBusinessAccountId,
-        whatsappAccessToken: config.whatsappAccessToken || '',
+        whatsappAccessToken: config.whatsappAccessToken ? '••••••••' : '',
+        whatsappEmbeddedConfigId: config.whatsappEmbeddedConfigId || '',
+        whatsappVerifiedName: config.whatsappVerifiedName || '',
+        whatsappDisplayNumber: config.whatsappDisplayNumber || '',
+        whatsappConnectedAt: config.whatsappConnectedAt || '',
+        whatsappTokenExpiresAt: config.whatsappTokenExpiresAt || null,
         autoReplyEnabled: config.autoReplyEnabled !== false,
       },
       webhookCallbackUrl: `${appUrl}/webhook/meta`,
@@ -1380,12 +1412,16 @@ export function mountMetaIntegrationRoutes(app: Express) {
 
     return res.json({
       success: true,
-      message: 'Meta Unified Order Integration settings saved permanently.',
+      persisted: updated.persisted !== false,
+      message: updated.persisted === false
+        ? 'Settings saved in local cache, but database persistence warning (Quota exceeded or offline).'
+        : 'Meta Unified Order Integration settings saved permanently.',
       config: {
         ...updated,
         metaAppSecret: updated.metaAppSecret ? '••••••••' : '',
         pageAccessToken: updated.pageAccessToken ? '••••••••' : '',
         whatsappAccessToken: updated.whatsappAccessToken ? '••••••••' : '',
+        whatsappRegistrationPin: undefined,
       },
     });
   });

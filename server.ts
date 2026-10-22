@@ -12,6 +12,7 @@ import { mountBrandRoutes } from './brandStore';
 import { mountAIKnowledgeRoutes } from './aiKnowledgeStore';
 import { mountGlobalSettingsRoutes, getMotherGmail, setMotherGmail } from './globalSettingsStore';
 import { testFirestoreConnection } from './firebaseAdmin';
+import { handleIncomingMessage } from './src/chatEngine';
 import {
   createUser,
   authenticateUserCredentials,
@@ -759,8 +760,16 @@ Respond directly, concisely, and accurately to the user's specific prompt or que
     });
   }
 };
-app.post('/api/ai/assistant', handleAIAssistant);
-app.post('/api/gemini/assistant', handleAIAssistant);
+app.post('/api/chat', async (req, res) => {
+  const { senderId, messageText, senderName } = req.body;
+  try {
+    const reply = await handleIncomingMessage(senderId, messageText, senderName);
+    res.json({ reply });
+  } catch (error) {
+    console.error('Chat Error:', error);
+    res.status(500).json({ error: 'Failed to process chat' });
+  }
+});
 
 // 3. Social Media Chat & Screenshot Parser (aliases: /api/ai/parse-order and /api/gemini/parse-order)
 const handleParseOrder = async (req: express.Request, res: express.Response) => {

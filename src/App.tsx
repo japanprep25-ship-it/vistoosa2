@@ -72,8 +72,17 @@ export default function App() {
     const q = query(collection(db, 'orders'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const ordersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added') {
+          const order = change.doc.data() as Order;
+          if (order.status === 'Pending') {
+             if (Notification.permission === 'granted') {
+               new Notification('New Order', { body: `New order from ${order.customerName}: ৳${order.totalAmount}` });
+             }
+          }
+        }
+      });
       setOrders(ordersData);
-      localStorage.setItem('vistoosa_orders', JSON.stringify(ordersData));
     }, (error) => {
       console.error('Error fetching orders in real-time:', error);
     });

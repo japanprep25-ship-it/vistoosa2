@@ -66,8 +66,28 @@ export default function App() {
   const [isVerifyingAuth, setIsVerifyingAuth] = useState<boolean>(true);
   const [authorizedUsers, setAuthorizedUsers] = useState<AuthUser[]>(INITIAL_AUTHORIZED_USERS);
 
-  // Application Data State
-  const [orders, setOrders] = useState<Order[]>(INITIAL_ORDERS);
+  // Application Data State with Session LocalStorage Cache to prevent redundant Firestore reads
+  const [orders, setOrders] = useState<Order[]>(() => {
+    try {
+      const cached = localStorage.getItem('vistoosa_session_orders');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch {}
+    return INITIAL_ORDERS;
+  });
+
+  // Save orders to session localStorage cache whenever orders update
+  useEffect(() => {
+    if (orders && orders.length > 0) {
+      try {
+        localStorage.setItem('vistoosa_session_orders', JSON.stringify(orders));
+      } catch {}
+    }
+  }, [orders]);
 
 
   // Sync orders with Firestore in real-time

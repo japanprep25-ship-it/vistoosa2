@@ -65,9 +65,31 @@ export const SocialMediaInboxView: React.FC<SocialMediaInboxViewProps> = ({
   products,
   onCreateOrder,
 }) => {
-  // Conversation list & active chat state
-  const [conversations, setConversations] = useState<ConversationItem[]>([]);
-  const [selectedPsid, setSelectedPsid] = useState<string | null>(null);
+  // Conversation list & active chat state with Session LocalStorage Cache
+  const [conversations, setConversations] = useState<ConversationItem[]>(() => {
+    try {
+      const cached = localStorage.getItem('vistoosa_session_conversations');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch {}
+    return [];
+  });
+  const [selectedPsid, setSelectedPsid] = useState<string | null>(() => {
+    try {
+      const cached = localStorage.getItem('vistoosa_session_conversations');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed[0].psid;
+        }
+      }
+    } catch {}
+    return null;
+  });
   const [activeMessages, setActiveMessages] = useState<ChatMessage[]>([]);
   const [activeCustomerName, setActiveCustomerName] = useState<string>('');
   const [activeProfilePic, setActiveProfilePic] = useState<string | null>(null);
@@ -178,14 +200,34 @@ export const SocialMediaInboxView: React.FC<SocialMediaInboxViewProps> = ({
     scrollToBottom();
   }, [activeMessages]);
 
-  // 1. Fetch conversations from GET /api/conversations
-  const fetchConversations = async (silent = false) => {
+  // 1. Fetch conversations from GET /api/conversations with Session LocalStorage Cache
+  const fetchConversations = async (silent = false, forceRefresh = false) => {
+    if (!forceRefresh) {
+      try {
+        const cached = localStorage.getItem('vistoosa_session_conversations');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setConversations(parsed);
+            if (!selectedPsid && parsed.length > 0) {
+              setSelectedPsid(parsed[0].psid);
+            }
+            if (!silent) setIsLoadingConversations(false);
+            return;
+          }
+        }
+      } catch {}
+    }
+
     if (!silent) setIsLoadingConversations(true);
     try {
       const res = await fetch('/api/conversations');
       const data = await res.json();
       if (data && data.success && Array.isArray(data.conversations)) {
         setConversations(data.conversations);
+        try {
+          localStorage.setItem('vistoosa_session_conversations', JSON.stringify(data.conversations));
+        } catch {}
         // If nothing is selected yet, automatically select the first conversation
         if (!selectedPsid && data.conversations.length > 0) {
           setSelectedPsid(data.conversations[0].psid);
@@ -198,8 +240,26 @@ export const SocialMediaInboxView: React.FC<SocialMediaInboxViewProps> = ({
     }
   };
 
-  // 2. Fetch specific customer chat history from GET /api/messages/:psid
-  const fetchChatMessages = async (psid: string, silent = false) => {
+  // 2. Fetch specific customer chat history from GET /api/messages/:psid with Session LocalStorage Cache
+  const fetchChatMessages = async (psid: string, silent = false, forceRefresh = false) => {
+    const cacheKey = `vistoosa_session_messages_${psid}`;
+    if (!forceRefresh) {
+      try {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && Array.isArray(parsed.messages)) {
+            setActiveMessages(parsed.messages);
+            setActiveCustomerName(parsed.senderName || `Customer #${psid.slice(-4)}`);
+            setActiveProfilePic(parsed.profilePic || null);
+            setActiveChannel(parsed.channel || 'messenger');
+            if (!silent) setIsLoadingMessages(false);
+            return;
+          }
+        }
+      } catch {}
+    }
+
     if (!silent) setIsLoadingMessages(true);
     try {
       const res = await fetch(`/api/messages/${encodeURIComponent(psid)}`);
@@ -209,6 +269,14 @@ export const SocialMediaInboxView: React.FC<SocialMediaInboxViewProps> = ({
         setActiveCustomerName(data.senderName || `Customer #${psid.slice(-4)}`);
         setActiveProfilePic(data.profilePic || null);
         setActiveChannel(data.channel || 'messenger');
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify({
+            messages: data.messages,
+            senderName: data.senderName,
+            profilePic: data.profilePic,
+            channel: data.channel
+          }));
+        } catch {}
       }
     } catch (err) {
       console.warn(`[Social Inbox]: Could not fetch messages for ${psid}:`, err);

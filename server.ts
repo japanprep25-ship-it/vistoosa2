@@ -1,5 +1,6 @@
 import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
+import fs from 'fs';
 import { GoogleGenAI } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
 import { createPathaoOrder, getPathaoCities, getPathaoZones, getPathaoOrderStatus } from './pathaoOrderService';
@@ -89,6 +90,17 @@ app.get('/privacy', (req, res) => {
       <p>ভিস্টুসা (ঢাকা, বাংলাদেশ) আপনার গোপনীয়তাকে গুরুত্ব দেয়। আমরা আমাদের ওয়েবসাইট, ফেসবুক মেসেঞ্জার, ইনস্টাগ্রাম এবং হোয়াটসঅ্যাপের মাধ্যমে আপনার নাম, ফোন নম্বর, ঠিকানা এবং অর্ডারের তথ্য সংগ্রহ করি। আমরা এই তথ্যগুলো শুধুমাত্র অর্ডার প্রসেস করা এবং ডেলিভারি দেওয়ার জন্য ব্যবহার করি। আমরা কোনো তৃতীয় পক্ষের কাছে আপনার তথ্য বিক্রি করি না। আপনার তথ্য নিরাপদ। আপনার তথ্যের অধিকার বা তা মুছে ফেলার জন্য আমাদের সাথে যোগাযোগ করুন।</p>
     </div>
   `));
+});
+
+// Explicit Manifest routes for PWA compliance
+app.get(['/manifest.json', '/manifest.webmanifest'], (_req, res) => {
+  const manifestPath = path.resolve(process.cwd(), 'public/manifest.json');
+  res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  if (fs.existsSync(manifestPath)) {
+    return res.sendFile(manifestPath);
+  }
+  return res.status(404).send('Manifest not found');
 });
 
 // AI Chat Endpoint

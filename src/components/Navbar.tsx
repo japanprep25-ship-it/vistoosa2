@@ -40,7 +40,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     <header className="sticky top-0 z-40 w-full border-b border-zinc-800/80 bg-zinc-950/90 backdrop-blur-xl px-3 sm:px-4 py-2.5 transition-colors shadow-lg shadow-black/20">
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 sm:gap-3">
         {/* Left: Hamburger Menu (☰) & Brand Identity */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
           {/* Clean Hamburger Icon Button (☰) */}
           <button
             id="navbar-hamburger-btn"
@@ -58,13 +58,13 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <div
             onClick={onGoHome}
-            className="flex flex-col cursor-pointer group px-2"
+            className="flex flex-col cursor-pointer group px-1 sm:px-2 min-w-0"
             title="Go to Business Dashboard"
           >
-            <span className="font-brand text-sm font-bold tracking-[0.2em] text-zinc-100 uppercase group-hover:text-amber-400 transition-colors">
+            <span className="font-brand text-xs sm:text-sm font-bold tracking-[0.15em] sm:tracking-[0.2em] text-zinc-100 uppercase group-hover:text-amber-400 transition-colors truncate">
               Vistoosa
             </span>
-            <span className="text-[10px] text-amber-400 font-semibold tracking-wider uppercase">
+            <span className="text-[9px] sm:text-[10px] text-amber-400 font-semibold tracking-wider uppercase truncate">
               Management System
             </span>
           </div>
@@ -86,34 +86,31 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Right: Actions, PWA Button, AI Assistant, User Profile */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
           {/* PWA Install Button */}
           <PWAInstallButton />
-
-
-
 
           {/* Dark / Light Mode Toggle */}
           <button
             onClick={onToggleDarkMode}
-            className="p-2.5 min-h-[44px] min-w-[44px] rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 active:scale-95 transition-all flex items-center justify-center cursor-pointer"
+            className="p-2 sm:p-2.5 min-h-[38px] min-w-[38px] sm:min-h-[44px] sm:min-w-[44px] rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 active:scale-95 transition-all flex items-center justify-center cursor-pointer"
             title="Toggle theme"
           >
             {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-zinc-300" />}
           </button>
 
           {/* User Profile & Sign Out */}
-          <div className="flex items-center gap-2 pl-2 border-l border-zinc-800">
+          <div className="flex items-center gap-1.5 sm:gap-2 pl-1.5 sm:pl-2 border-l border-zinc-800">
             <div className="text-right hidden md:block">
               <p className="text-xs font-semibold text-zinc-200 leading-tight">{user.name}</p>
               <p className="text-[10px] text-amber-400 font-mono">{user.role}</p>
             </div>
-            <div className="w-9 h-9 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-bold text-amber-400">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-bold text-amber-400 shrink-0">
               {user.name.charAt(0)}
             </div>
             <button
               onClick={onLogout}
-              className="p-2.5 min-h-[44px] min-w-[44px] rounded-xl text-zinc-400 hover:text-red-400 hover:bg-red-500/10 active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer"
+              className="p-2 sm:p-2.5 min-h-[38px] min-w-[38px] sm:min-h-[44px] sm:min-w-[44px] rounded-xl text-zinc-400 hover:text-red-400 hover:bg-red-500/10 active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer shrink-0"
               title={t('header.signOut')}
             >
               <LogOut className="w-4 h-4" />

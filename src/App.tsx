@@ -43,6 +43,8 @@ import { SettingsView } from './components/SettingsView';
 import { SocialMediaInboxView } from './components/SocialMediaInboxView';
 import { LoginWelcomeModal } from './components/LoginWelcomeModal';
 import { PageTransitionWrapper } from './components/PageTransitionWrapper';
+import { MobileBottomNav } from './components/MobileBottomNav';
+import { MobilePWABanner } from './components/MobilePWABanner';
 import { useSettings } from './contexts/SettingsContext';
 import { useLanguage } from './contexts/LanguageContext';
 import { Lock } from 'lucide-react';
@@ -916,8 +918,11 @@ export default function App() {
         isSidebarOpen={isMobileSidebarOpen}
       />
 
+      {/* Mobile PWA Install Banner */}
+      <MobilePWABanner />
+
       {/* Main Workspace Layout */}
-      <div className="flex-1 flex max-w-7xl w-full mx-auto pb-8">
+      <div className="flex-1 flex max-w-7xl w-full mx-auto pb-24 md:pb-8">
         {/* Slide-in Navigation Drawer */}
         <Sidebar
           activeTab={activeTab}
@@ -1101,6 +1106,15 @@ export default function App() {
           </PageTransitionWrapper>
         </main>
       </div>
+
+      {/* Mobile Bottom Navigation Bar (Visible on mobile/PWA) */}
+      <MobileBottomNav
+        activeTab={activeTab}
+        onSelectTab={handleSelectTab}
+        onToggleMenu={() => setIsMobileSidebarOpen((prev) => !prev)}
+        pendingOrdersCount={pendingOrdersCount}
+        isMenuOpen={isMobileSidebarOpen}
+      />
 
       {/* Google Sheets GAS & Database Schema Modal */}
       <GoogleSheetsIntegrationModal

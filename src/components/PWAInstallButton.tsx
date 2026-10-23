@@ -16,7 +16,7 @@ export const PWAInstallButton: React.FC = () => {
         <button
           id="pwa-install-button"
           onClick={install}
-          className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 px-3.5 py-1.5 text-xs font-semibold text-zinc-950 shadow-sm shadow-amber-500/20 hover:from-amber-400 hover:to-amber-500 active:scale-95 transition-all"
+          className="hidden sm:flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 px-3.5 py-1.5 text-xs font-semibold text-zinc-950 shadow-sm shadow-amber-500/20 hover:from-amber-400 hover:to-amber-500 active:scale-95 transition-all"
           title="Install Vistoosa PWA"
         >
           <Download className="w-3.5 h-3.5" />
@@ -28,7 +28,7 @@ export const PWAInstallButton: React.FC = () => {
         <button
           id="pwa-ios-install-button"
           onClick={() => setShowIOSGuide(true)}
-          className="flex items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-300 hover:bg-amber-500/20 active:scale-95 transition-all"
+          className="hidden sm:flex items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-300 hover:bg-amber-500/20 active:scale-95 transition-all"
         >
           <Smartphone className="w-3.5 h-3.5" />
           <span>Add to iOS</span>

@@ -1164,15 +1164,27 @@ export async function testMetaConnection(overrideConfig?: Partial<MetaConfig>): 
 // -----------------------------------------------------------------------
 
 export function verifyMetaSignature(req: Request, appSecret: string): boolean {
-  if (!appSecret) return true; // If secret is not set in dev, allow
+  if (!appSecret) return true; // If secret is not set, allow
   const signature = req.headers['x-hub-signature-256'] as string;
   if (!signature) return false;
 
   try {
-    const rawBody = (req as any).rawBody || JSON.stringify(req.body);
-    const expected = 'sha256=' + crypto.createHmac('sha256', appSecret).update(rawBody).digest('hex');
-    return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
-  } catch {
+    const rawBody = (req as any).rawBody || (req.body ? JSON.stringify(req.body) : '');
+    const computedHmac = crypto
+      .createHmac('sha256', appSecret)
+      .update(rawBody)
+      .digest('hex');
+    const expected = `sha256=${computedHmac}`;
+
+    const sigBuffer = Buffer.from(signature, 'utf8');
+    const expBuffer = Buffer.from(expected, 'utf8');
+
+    if (sigBuffer.length !== expBuffer.length) {
+      return false;
+    }
+    return crypto.timingSafeEqual(sigBuffer, expBuffer);
+  } catch (err) {
+    console.error('[Meta Signature Verification Error]:', err);
     return false;
   }
 }

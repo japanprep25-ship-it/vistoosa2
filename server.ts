@@ -46,8 +46,19 @@ import {
 const app = express();
 const PORT = 3000;
 
-app.use(express.json({ limit: '15mb' }));
-app.use(express.urlencoded({ extended: true, limit: '15mb' }));
+app.use(express.json({
+  limit: '15mb',
+  verify: (req: Request, _res: Response, buf: Buffer) => {
+    (req as any).rawBody = buf;
+  }
+}));
+app.use(express.urlencoded({
+  extended: true,
+  limit: '15mb',
+  verify: (req: Request, _res: Response, buf: Buffer) => {
+    (req as any).rawBody = buf;
+  }
+}));
 app.use(express.text({ limit: '15mb', type: ['text/plain', 'text/json', 'application/json-patch+json'] }));
 
 // Mount Meta Integration Routes FIRST to ensure it is not swallowed by other routes or middleware

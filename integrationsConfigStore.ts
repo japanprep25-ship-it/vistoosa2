@@ -5,12 +5,27 @@ import {
   isFirestoreQuotaExceeded,
   markFirestoreQuotaExceeded,
   isQuotaExceededError,
+  incrementFirestoreReads,
 } from './firebaseAdmin';
 
 const INTEGRATIONS_COLLECTION = 'integrationsConfig';
-
-// In-memory cache for high resilience during cloud quota limits
 const inMemoryIntegrations = new Map<string, FullIntegrationsConfig>();
+
+// Pending queue for background retries of failed writes (Section B)
+const pendingIntegrationSaves: Array<{ userId: string; config: any; timestamp: number }> = [];
+
+setInterval(async () => {
+  if (pendingIntegrationSaves.length === 0 || isFirestoreQuotaExceeded()) return;
+  const item = pendingIntegrationSaves.shift();
+  if (!item) return;
+  try {
+    const docRef = db.collection(INTEGRATIONS_COLLECTION).doc(item.userId);
+    await docRef.set({ ...item.config, updatedAt: new Date().toISOString() }, { merge: true });
+    console.info(`[IntegrationsConfig Background Sync]: Successfully flushed pending save for user ${item.userId}`);
+  } catch (err) {
+    pendingIntegrationSaves.push(item); // re-queue
+  }
+}, 2 * 60 * 1000);
 
 export interface FullIntegrationsConfig {
   website?: {
@@ -55,8 +70,8 @@ export interface FullIntegrationsConfig {
   };
 }
 
-export async function loadIntegrationsConfig(userId: string = 'usr_admin_default'): Promise<FullIntegrationsConfig> {
-  const uid = userId || 'usr_admin_default';
+export async function loadIntegrationsConfig(userId: string = 'usr_vistoosa_mother'): Promise<FullIntegrationsConfig> {
+  const uid = userId || 'usr_vistoosa_mother';
 
   const local = inMemoryIntegrations.get(uid);
   if (local) return local;
@@ -68,6 +83,7 @@ export async function loadIntegrationsConfig(userId: string = 'usr_admin_default
   try {
     const docRef = db.collection(INTEGRATIONS_COLLECTION).doc(uid);
     const doc = await docRef.get();
+    incrementFirestoreReads('settings');
 
     if (!doc.exists) return local || {};
     const data = doc.data() as FullIntegrationsConfig;
@@ -82,10 +98,10 @@ export async function loadIntegrationsConfig(userId: string = 'usr_admin_default
 }
 
 export async function saveIntegrationsConfig(
-  userId: string = 'usr_admin_default',
+  userId: string = 'usr_vistoosa_mother',
   newConfig: Partial<FullIntegrationsConfig>
-): Promise<FullIntegrationsConfig> {
-  const uid = userId || 'usr_admin_default';
+): Promise<{ config: FullIntegrationsConfig; persisted: boolean; error?: string }> {
+  const uid = userId || 'usr_vistoosa_mother';
 
   const current = (await loadIntegrationsConfig(uid)) || inMemoryIntegrations.get(uid) || {};
   const merged: FullIntegrationsConfig = {
@@ -99,26 +115,27 @@ export async function saveIntegrationsConfig(
   inMemoryIntegrations.set(uid, merged);
 
   if (isFirestoreQuotaExceeded()) {
-    return merged;
+    pendingIntegrationSaves.push({ userId: uid, config: merged, timestamp: Date.now() });
+    return { config: merged, persisted: false, error: 'Firestore quota exceeded' };
   }
 
   try {
     const docRef = db.collection(INTEGRATIONS_COLLECTION).doc(uid);
     await docRef.set({ ...merged, updatedAt: new Date().toISOString() }, { merge: true });
-    return merged;
+    return { config: merged, persisted: true };
   } catch (err: any) {
     if (isQuotaExceededError(err)) {
       markFirestoreQuotaExceeded();
     }
-    return merged;
+    pendingIntegrationSaves.push({ userId: uid, config: merged, timestamp: Date.now() });
+    return { config: merged, persisted: false, error: err?.message || 'Database write error' };
   }
 }
 
 export function mountIntegrationsConfigRoutes(app: Express) {
-  // GET /api/settings/integrations - Load all persistent integration settings
   app.get('/api/settings/integrations', extractOptionalAuth, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const userId = req.userId || 'usr_admin_default';
+      const userId = req.userId || 'usr_vistoosa_mother';
       const config = await loadIntegrationsConfig(userId);
       return res.json({
         success: true,
@@ -129,16 +146,18 @@ export function mountIntegrationsConfigRoutes(app: Express) {
     }
   });
 
-  // POST /api/settings/integrations - Save persistent integration settings
   app.post('/api/settings/integrations', extractOptionalAuth, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const userId = req.userId || 'usr_admin_default';
+      const userId = req.userId || 'usr_vistoosa_mother';
       const payload = req.body || {};
-      const updated = await saveIntegrationsConfig(userId, payload);
+      const result = await saveIntegrationsConfig(userId, payload);
       return res.json({
         success: true,
-        message: 'Integration settings saved permanently.',
-        config: updated,
+        persisted: result.persisted,
+        message: result.persisted
+          ? 'Integration settings saved permanently.'
+          : `Saved only temporarily in server memory. Database error: ${result.error || 'Unknown'}`,
+        config: result.config,
       });
     } catch (err: any) {
       return res.status(500).json({ success: false, message: err?.message || 'Failed to save integration settings.' });

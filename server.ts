@@ -5,14 +5,15 @@ import { GoogleGenAI } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
 import { createPathaoOrder, getPathaoCities, getPathaoZones, getPathaoOrderStatus } from './pathaoOrderService';
 import { detectDistrict } from './src/utils/districtDetector';
-import { mountPathaoConfigRoutes } from './pathaoConfigStore';
+import { mountPathaoConfigRoutes, resolveOwnerUserId } from './pathaoConfigStore';
 import { mountWhatsappRoutes, sendTrackingWhatsapp } from './whatsappService';
 import { mountIntegrationsConfigRoutes } from './integrationsConfigStore';
-import { mountMetaIntegrationRoutes, registerOrderCreationHook } from './metaIntegrationService';
+import { mountMetaIntegrationRoutes, registerOrderCreationHook, loadMetaConfig } from './metaIntegrationService';
 import { mountBrandRoutes } from './brandStore';
 import { mountAIKnowledgeRoutes } from './aiKnowledgeStore';
 import { mountGlobalSettingsRoutes, getMotherGmail, setMotherGmail } from './globalSettingsStore';
-import { testFirestoreConnection } from './firebaseAdmin';
+import { mountInboxChannelsRoutes } from './inboxChannelsService';
+import { testFirestoreConnection, getFirestoreReadStats, isFirestoreQuotaExceeded } from './firebaseAdmin';
 import { mountConnectRoutes } from './server/connect/oauthRoutes';
 import {
   createUser,
@@ -228,6 +229,11 @@ mountWhatsappRoutes(app);
 mountIntegrationsConfigRoutes(app);
 mountBrandRoutes(app);
 mountGlobalSettingsRoutes(app);
+mountInboxChannelsRoutes(app, (newOrder) => {
+  addOrUpdateUserOrder('usr_admin_default', newOrder).catch((err) => {
+    console.error('[Inbox Order Creation Hook Firestore Error]:', err);
+  });
+});
 
 registerOrderCreationHook((newOrder) => {
   addOrUpdateUserOrder('usr_admin_default', newOrder).catch((err) => {
@@ -615,9 +621,40 @@ const DEFAULT_AUTHORIZED_USERS = [
 // In-memory / dynamic whitelist cache
 let authorizedUsersCache = [...DEFAULT_AUTHORIZED_USERS];
 
-// Health endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', brand: 'Vistoosa Haute Couture', timestamp: new Date().toISOString() });
+// Startup summary logging
+loadMetaConfig().then((cfg) => {
+  const source = cfg.pageAccessToken ? (process.env.META_PAGE_ACCESS_TOKEN ? 'env' : 'firestore') : 'none';
+  const hasSecret = Boolean(cfg.metaAppSecret || process.env.META_APP_SECRET);
+  console.log(`[Startup Summary]: Meta token source: ${source}`);
+  console.log(`[Startup Summary]: Meta app secret configured: ${hasSecret}`);
+});
+
+// Health endpoints
+app.get('/api/health', async (_req, res) => {
+  const cfg = await loadMetaConfig();
+  const source = cfg.pageAccessToken ? (process.env.META_PAGE_ACCESS_TOKEN ? 'env' : 'firestore') : 'none';
+  const hasSecret = Boolean(cfg.metaAppSecret || process.env.META_APP_SECRET);
+  res.json({
+    ok: true,
+    uptime: process.uptime(),
+    firestore: {
+      ok: !isFirestoreQuotaExceeded(),
+      quotaExceeded: isFirestoreQuotaExceeded(),
+      reads: getFirestoreReadStats(),
+    },
+    metaTokenSource: source,
+    metaAppSecretConfigured: hasSecret,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.get('/api/health/firestore', (_req, res) => {
+  res.json({
+    ok: !isFirestoreQuotaExceeded(),
+    projectId: process.env.FIREBASE_PROJECT_ID || 'ai-studio-vistoosa2',
+    databaseId: process.env.FIRESTORE_DATABASE_ID || '(default)',
+    quotaExceeded: isFirestoreQuotaExceeded(),
+  });
 });
 
 // 1. Auth & Whitelist Endpoint
@@ -878,7 +915,7 @@ app.post('/api/gemini/parse-order', handleParseOrder);
 
 // 4. Pathao Courier Real Order Creation & Dispatch Relay
 const handlePathaoPickup = async (req: express.Request, res: express.Response) => {
-  const userId = (req as AuthenticatedRequest).userId || 'usr_admin_default';
+  const userId = resolveOwnerUserId(req);
   const {
     orderId,
     customerName,
@@ -901,8 +938,8 @@ const handlePathaoPickup = async (req: express.Request, res: express.Response) =
   } = req.body || {};
 
   const clientName = recipientName || customerName || 'Valued Customer';
-  const clientPhone = recipientPhone || phone || '01700000000';
-  const clientAddress = recipientAddress || address || 'House 12, Road 5, Banani, Dhaka';
+  const clientPhone = recipientPhone || phone || '';
+  const clientAddress = recipientAddress || address || '';
   const clientCity = recipientCity || city || '';
 
   const parsedCityId = Number(recipientCityId || cityId || 0);

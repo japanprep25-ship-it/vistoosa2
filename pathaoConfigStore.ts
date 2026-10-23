@@ -1,8 +1,3 @@
-// pathaoConfigStore.ts
-// -----------------------------------------------------------------------
-// Stores Pathao credentials per-user in Firestore collection `pathaoConfig`.
-// Each user (userId) has an isolated configuration record.
-
 import type { Express, Response } from 'express';
 import { extractOptionalAuth, AuthenticatedRequest } from './authMiddleware';
 import {
@@ -10,12 +5,26 @@ import {
   isFirestoreQuotaExceeded,
   markFirestoreQuotaExceeded,
   isQuotaExceededError,
+  incrementFirestoreReads,
 } from './firebaseAdmin';
 
 const PATHAO_COLLECTION = 'pathaoConfig';
-
-// In-memory cache for high resilience during cloud quota limits
 const inMemoryPathao = new Map<string, PathaoConfig>();
+
+const pendingPathaoSaves: Array<{ userId: string; config: any; timestamp: number }> = [];
+
+setInterval(async () => {
+  if (pendingPathaoSaves.length === 0 || isFirestoreQuotaExceeded()) return;
+  const item = pendingPathaoSaves.shift();
+  if (!item) return;
+  try {
+    const docRef = db.collection(PATHAO_COLLECTION).doc(item.userId);
+    await docRef.set({ ...item.config, updatedAt: new Date().toISOString() }, { merge: true });
+    console.info(`[PathaoConfig Background Sync]: Successfully flushed pending save for user ${item.userId}`);
+  } catch (err) {
+    pendingPathaoSaves.push(item);
+  }
+}, 2 * 60 * 1000);
 
 export interface PathaoConfig {
   baseUrl: string;
@@ -26,8 +35,8 @@ export interface PathaoConfig {
   storeId: string;
 }
 
-export async function loadPathaoConfig(userId: string = 'usr_admin_default'): Promise<PathaoConfig | null> {
-  const uid = userId || 'usr_admin_default';
+export async function loadPathaoConfig(userId: string = 'usr_vistoosa_mother'): Promise<PathaoConfig | null> {
+  const uid = userId || 'usr_vistoosa_mother';
 
   const local = inMemoryPathao.get(uid);
   if (local) return local;
@@ -39,6 +48,7 @@ export async function loadPathaoConfig(userId: string = 'usr_admin_default'): Pr
   try {
     const docRef = db.collection(PATHAO_COLLECTION).doc(uid);
     const doc = await docRef.get();
+    incrementFirestoreReads('settings');
 
     if (!doc.exists) return local || null;
     const data = doc.data() as PathaoConfig;
@@ -52,13 +62,17 @@ export async function loadPathaoConfig(userId: string = 'usr_admin_default'): Pr
   }
 }
 
-export async function savePathaoConfig(userId: string = 'usr_admin_default', config: PathaoConfig): Promise<void> {
-  const uid = userId || 'usr_admin_default';
+export async function savePathaoConfig(
+  userId: string = 'usr_vistoosa_mother',
+  config: PathaoConfig
+): Promise<{ persisted: boolean; error?: string }> {
+  const uid = userId || 'usr_vistoosa_mother';
 
   inMemoryPathao.set(uid, config);
 
   if (isFirestoreQuotaExceeded()) {
-    return;
+    pendingPathaoSaves.push({ userId: uid, config, timestamp: Date.now() });
+    return { persisted: false, error: 'Firestore quota exceeded' };
   }
 
   try {
@@ -70,18 +84,27 @@ export async function savePathaoConfig(userId: string = 'usr_admin_default', con
       },
       { merge: true }
     );
+    return { persisted: true };
   } catch (err: any) {
     if (isQuotaExceededError(err)) {
       markFirestoreQuotaExceeded();
     }
+    pendingPathaoSaves.push({ userId: uid, config, timestamp: Date.now() });
+    return { persisted: false, error: err?.message || 'Database write error' };
   }
 }
 
+export function resolveOwnerUserId(req: any): string {
+  if (req && req.userId && req.userId !== 'usr_admin_default') {
+    return req.userId;
+  }
+  return 'usr_vistoosa_mother';
+}
+
 export function mountPathaoConfigRoutes(app: Express) {
-  // Save Pathao credentials for user
   app.post('/api/settings/pathao', extractOptionalAuth, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const userId = req.userId || 'usr_admin_default';
+      const userId = resolveOwnerUserId(req);
       const payload = req.body || {};
       const existing = (await loadPathaoConfig(userId)) || {
         baseUrl: 'https://api-hermes.pathao.com',
@@ -113,18 +136,23 @@ export function mountPathaoConfigRoutes(app: Express) {
         storeId: payload.storeId !== undefined && String(payload.storeId).trim() !== '' ? String(payload.storeId).trim() : existing.storeId,
       };
 
-      await savePathaoConfig(userId, conf);
+      const result = await savePathaoConfig(userId, conf);
 
-      return res.json({ success: true, message: 'Your Pathao credentials saved successfully.' });
+      return res.json({
+        success: true,
+        persisted: result.persisted,
+        message: result.persisted
+          ? 'Pathao credentials saved successfully.'
+          : `Saved only temporarily in server memory. Database error: ${result.error || 'Unknown'}`,
+      });
     } catch (err: any) {
       return res.status(500).json({ success: false, message: err?.message || 'Failed to save Pathao configuration.' });
     }
   });
 
-  // Prefill Settings page for user
   app.get('/api/settings/pathao', extractOptionalAuth, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const userId = req.userId || 'usr_admin_default';
+      const userId = resolveOwnerUserId(req);
       const config = await loadPathaoConfig(userId);
 
       if (!config) return res.json({ configured: false });
@@ -135,8 +163,8 @@ export function mountPathaoConfigRoutes(app: Express) {
         clientId: config.clientId,
         storeId: config.storeId,
         username: config.username,
-        clientSecret: config.clientSecret,
-        password: config.password,
+        clientSecret: config.clientSecret ? '••••••••' : '',
+        password: config.password ? '••••••••' : '',
       });
     } catch (err: any) {
       return res.status(500).json({ success: false, message: err?.message || 'Failed to retrieve Pathao settings.' });

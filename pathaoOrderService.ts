@@ -1,46 +1,40 @@
-// pathaoOrderService.ts
-// -----------------------------------------------------------------------
-// REAL Pathao Courier API integration (Per-User Configuration in Firestore).
-// Reads credentials from `await loadPathaoConfig(userId)` saved via Settings UI in Firestore.
-
-import { loadPathaoConfig } from './pathaoConfigStore';
+import { loadPathaoConfig, resolveOwnerUserId } from './pathaoConfigStore';
 import { detectDistrict } from './src/utils/districtDetector';
 
 function cleanPhoneNumber(rawPhone: string): string {
-  let cleaned = String(rawPhone || '').replace(/\D/g, ''); // keep digits only
+  let cleaned = String(rawPhone || '').replace(/\D/g, '');
   if (cleaned.startsWith('880')) {
     cleaned = cleaned.substring(2);
   }
   if (cleaned.length === 10 && cleaned.startsWith('1')) {
     cleaned = '0' + cleaned;
   }
-  if (!cleaned || cleaned.length !== 11) {
-    cleaned = '01700000000'; // fallback valid 11-digit Bangladesh mobile
-  }
   return cleaned;
 }
 
 async function getCredentials(userId: string) {
-  const fileConfig = await loadPathaoConfig(userId);
-  const defaultConfig = userId !== 'usr_admin_default' ? await loadPathaoConfig('usr_admin_default') : null;
+  const conf = await loadPathaoConfig(userId);
+  const fallbackConf = userId !== 'usr_vistoosa_mother' ? await loadPathaoConfig('usr_vistoosa_mother') : null;
 
-  const baseUrl = fileConfig?.baseUrl || defaultConfig?.baseUrl || process.env.PATHAO_BASE_URL || 'https://api-hermes.pathao.com';
-  const clientId = fileConfig?.clientId || defaultConfig?.clientId || process.env.PATHAO_CLIENT_ID;
-  const clientSecret = fileConfig?.clientSecret || defaultConfig?.clientSecret || process.env.PATHAO_CLIENT_SECRET;
-  const username = fileConfig?.username || defaultConfig?.username || process.env.PATHAO_USERNAME;
-  const password = fileConfig?.password || defaultConfig?.password || process.env.PATHAO_PASSWORD;
-  const storeId = fileConfig?.storeId || defaultConfig?.storeId || process.env.PATHAO_STORE_ID;
+  const baseUrl = conf?.baseUrl || fallbackConf?.baseUrl || process.env.PATHAO_BASE_URL || 'https://api-hermes.pathao.com';
+  const clientId = conf?.clientId || fallbackConf?.clientId || process.env.PATHAO_CLIENT_ID;
+  const clientSecret = conf?.clientSecret || fallbackConf?.clientSecret || process.env.PATHAO_CLIENT_SECRET;
+  const username = conf?.username || fallbackConf?.username || process.env.PATHAO_USERNAME;
+  const password = conf?.password || fallbackConf?.password || process.env.PATHAO_PASSWORD;
+  const storeId = conf?.storeId || fallbackConf?.storeId || process.env.PATHAO_STORE_ID;
 
-  return { baseUrl, clientId, clientSecret, username, password, storeId };
+  const hasCredentials = Boolean(clientId && clientSecret && username && password);
+  console.log(`[Pathao Credentials Check]: UserId="${userId}", foundCredentials=${hasCredentials}`);
+
+  return { baseUrl, clientId, clientSecret, username, password, storeId, hasCredentials };
 }
 
-// Cached token per user ID
 const tokenCacheMap = new Map<string, { accessToken: string; refreshToken: string; expiresAt: number }>();
 
 async function fetchNewToken(userId: string) {
   const creds = await getCredentials(userId);
-  if (!creds.clientId || !creds.clientSecret || !creds.username || !creds.password) {
-    throw new Error('Pathao credentials missing for your account. Please set them in Settings > Connect Channels > Pathao Courier.');
+  if (!creds.hasCredentials) {
+    throw new Error('Pathao credentials missing: set them in Settings > Connect Channels > Pathao Courier.');
   }
 
   const res = await fetch(`${creds.baseUrl}/aladdin/api/v1/issue-token`, {
@@ -62,7 +56,7 @@ async function fetchNewToken(userId: string) {
   const tokenObj = {
     accessToken: data.access_token,
     refreshToken: data.refresh_token,
-    expiresAt: Date.now() + (data.expires_in - 60) * 1000, // refresh 60s early
+    expiresAt: Date.now() + (data.expires_in - 60) * 1000,
   };
   tokenCacheMap.set(userId, tokenObj);
   return tokenObj.accessToken;
@@ -79,156 +73,121 @@ export interface PathaoOrderInput {
   recipientName: string;
   recipientPhone: string;
   recipientAddress: string;
-  recipientCityId?: number;   // from "Get List of Cities" API
-  recipientZoneId?: number;   // from "Get zones inside a particular city" API
+  recipientCityId?: number;
+  recipientZoneId?: number;
   recipientCity?: string;
   amountToCollect: number;
   itemDescription: string;
   itemQuantity?: number;
-  itemWeight?: number;       // kg, e.g. 0.5
+  itemWeight?: number;
   specialInstruction?: string;
 }
 
 export async function createPathaoOrder(userId: string, order: PathaoOrderInput) {
-  const creds = await getCredentials(userId);
-  const cleanPhone = cleanPhoneNumber(order.recipientPhone);
+  const resolvedUserId = userId || 'usr_vistoosa_mother';
+  console.log(`[Pathao Dispatch]: Using userId="${resolvedUserId}" for order "${order.merchantOrderId}"`);
 
-  let token = '';
-  try {
-    token = await getAccessToken(userId);
-  } catch (tokenErr: any) {
-    console.warn('[Pathao Auth Warning]: Could not issue live token, generating fallback consignment:', tokenErr?.message || tokenErr);
+  const phone = cleanPhoneNumber(order.recipientPhone);
+  if (!phone || phone.length !== 11 || !phone.startsWith('01')) {
+    throw new Error('Dispatch rejected: Order has no valid 11-digit Bangladeshi phone number (01XXXXXXXXX).');
+  }
+  if (!order.recipientAddress || order.recipientAddress.trim().length < 5) {
+    throw new Error('Dispatch rejected: Order has no valid delivery address.');
   }
 
-  // 1. Auto-discover Store ID if missing
+  const creds = await getCredentials(resolvedUserId);
+  if (!creds.hasCredentials) {
+    throw new Error('Pathao credentials missing: set them in Settings > Connect Channels > Pathao Courier.');
+  }
+
+  const token = await getAccessToken(resolvedUserId);
+
   let storeIdNum = Number(creds.storeId || 0);
-  if (token && (!storeIdNum || isNaN(storeIdNum))) {
-    try {
-      const storesRes = await fetch(`${creds.baseUrl}/aladdin/api/v1/stores`, {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (storesRes.ok) {
-        const storesData = await storesRes.json();
-        const storeList = storesData?.data?.data || storesData?.data || [];
-        if (storeList.length > 0) {
-          storeIdNum = Number(storeList[0].store_id || storeList[0].id || 1);
-        }
+  if (!storeIdNum || isNaN(storeIdNum)) {
+    const storesRes = await fetch(`${creds.baseUrl}/aladdin/api/v1/stores`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (storesRes.ok) {
+      const storesData = await storesRes.json();
+      const storeList = storesData?.data?.data || storesData?.data || [];
+      if (storeList.length > 0) {
+        storeIdNum = Number(storeList[0].store_id || storeList[0].id || 1);
       }
-    } catch (sErr) {
-      console.warn('[Pathao Store Auto-Fetch Warning]:', sErr);
     }
   }
   if (!storeIdNum || isNaN(storeIdNum)) {
-    storeIdNum = 1; // Default store ID 1
+    storeIdNum = 1;
   }
 
-  // 2. Auto-discover City ID & Zone ID
   let cityIdNum = Number(order.recipientCityId || 0);
   if (!cityIdNum || isNaN(cityIdNum)) {
-    const detected = detectDistrict(order.recipientAddress || '', order.recipientCity || '');
-    cityIdNum = detected.pathaoCityId || 1; // Default to 1 (Dhaka)
+    const detected = detectDistrict(order.recipientAddress, order.recipientCity || '');
+    cityIdNum = detected.pathaoCityId || 1;
   }
 
   let zoneIdNum = Number(order.recipientZoneId || 0);
-  if (token && (!zoneIdNum || isNaN(zoneIdNum))) {
-    try {
-      const zones = await getPathaoZones(userId, cityIdNum);
-      if (zones && zones.length > 0) {
-        zoneIdNum = Number(zones[0].zone_id || zones[0].id || 1);
-      }
-    } catch (zErr) {
-      console.warn('[Pathao Zone Fetch Warning]:', zErr);
+  if (!zoneIdNum || isNaN(zoneIdNum)) {
+    const zones = await getPathaoZones(resolvedUserId, cityIdNum);
+    if (zones && zones.length > 0) {
+      zoneIdNum = Number(zones[0].zone_id || zones[0].id || 1);
     }
   }
   if (!zoneIdNum || isNaN(zoneIdNum)) {
-    zoneIdNum = 1; // Default zone 1
+    zoneIdNum = 1;
   }
 
-  // If live token is available, attempt real Pathao API call
-  if (token) {
-    try {
-      const payload = {
-        store_id: storeIdNum,
-        merchant_order_id: order.merchantOrderId,
-        recipient_name: order.recipientName || 'Valued Customer',
-        recipient_phone: cleanPhone,
-        recipient_address: order.recipientAddress || 'Dhaka',
-        recipient_city: cityIdNum,
-        recipient_zone: zoneIdNum,
-        delivery_type: 48, // 48 = Normal Delivery
-        item_type: 2,      // 2 = Parcel
-        special_instruction: order.specialInstruction || '',
-        item_quantity: Number(order.itemQuantity || 1),
-        item_weight: Number(order.itemWeight || 0.5),
-        item_description: order.itemDescription || 'Vistoosa Luxury Apparel',
-        amount_to_collect: Number(order.amountToCollect || 0),
-      };
-
-      const res = await fetch(`${creds.baseUrl}/aladdin/api/v1/orders`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-      if (res.ok && data?.data) {
-        return data.data;
-      }
-
-      console.warn('[Pathao Live API Returned Error]:', res.status, data);
-      if (data?.message || data?.errors) {
-        throw new Error(data.message || JSON.stringify(data.errors));
-      }
-    } catch (apiErr: any) {
-      console.error('[Pathao Order Dispatch Exception]:', apiErr?.message || apiErr);
-      // If error is about credentials, throw to show user in toast
-      if (apiErr?.message?.includes('credentials') || apiErr?.message?.includes('Store ID')) {
-        throw apiErr;
-      }
-    }
-  }
-
-    // Fallback: Return simulated consignment if live API is unavailable or rejected
-  const simConsignment = `PTH-${Math.floor(7820000 + Math.random() * 90000)}`;
-  return {
-    consignment_id: simConsignment,
+  const payload = {
+    store_id: storeIdNum,
     merchant_order_id: order.merchantOrderId,
-    order_status: 'Pickup Requested',
-    delivery_fee: cityIdNum === 1 ? 60 : 120,
-    is_simulated: true,
+    recipient_name: order.recipientName,
+    recipient_phone: phone,
+    recipient_address: order.recipientAddress,
+    recipient_city: cityIdNum,
+    recipient_zone: zoneIdNum,
+    delivery_type: 48,
+    item_type: 2,
+    special_instruction: order.specialInstruction || '',
+    item_quantity: Number(order.itemQuantity || 1),
+    item_weight: Number(order.itemWeight || 0.5),
+    item_description: order.itemDescription || 'Vistoosa Luxury Apparel',
+    amount_to_collect: Number(order.amountToCollect || 0),
   };
+
+  const res = await fetch(`${creds.baseUrl}/aladdin/api/v1/orders`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await res.json();
+  if (res.ok && data?.data) {
+    return data.data;
+  }
+
+  const errDetail = data?.message || JSON.stringify(data?.errors || data) || 'Unknown Pathao API error';
+  throw new Error(`Pathao API Dispatch Error: ${errDetail}`);
 }
 
 export async function getPathaoOrderStatus(userId: string, consignmentId: string) {
   const creds = await getCredentials(userId);
   const token = await getAccessToken(userId);
 
-  try {
-    const res = await fetch(`${creds.baseUrl}/aladdin/api/v1/orders/${consignmentId}`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+  const res = await fetch(`${creds.baseUrl}/aladdin/api/v1/orders/${consignmentId}`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  });
 
-    const data = await res.json();
-    if (res.ok && data?.data) {
-      return data.data;
-    }
-    console.warn('[Pathao Status API Returned Error]:', res.status, data);
-    return null;
-  } catch (apiErr: any) {
-    console.error('[Pathao Status Exception]:', apiErr?.message || apiErr);
-    return null;
+  const data = await res.json();
+  if (res.ok && data?.data) {
+    return data.data;
   }
+  throw new Error(data?.message || 'Failed to fetch Pathao order status');
 }
 
-
-// Fallback Cities Dataset for Pathao Integration
 const DEFAULT_PATHAO_CITIES = [
   { city_id: 1, city_name: 'Dhaka' },
   { city_id: 2, city_name: 'Gazipur' },
@@ -262,9 +221,7 @@ const DEFAULT_PATHAO_CITIES = [
 export async function getPathaoCities(userId: string) {
   try {
     const creds = await getCredentials(userId);
-    if (!creds.clientId || !creds.clientSecret) {
-      return DEFAULT_PATHAO_CITIES;
-    }
+    if (!creds.hasCredentials) return DEFAULT_PATHAO_CITIES;
     const token = await getAccessToken(userId);
     const res = await fetch(`${creds.baseUrl}/aladdin/api/v1/countries/1/city-list`, {
       method: 'GET',
@@ -274,7 +231,6 @@ export async function getPathaoCities(userId: string) {
     const json = await res.json();
     return json?.data?.data || json?.data || DEFAULT_PATHAO_CITIES;
   } catch (err) {
-    console.warn('[Pathao Cities Fetch Fallback]:', err);
     return DEFAULT_PATHAO_CITIES;
   }
 }
@@ -282,9 +238,7 @@ export async function getPathaoCities(userId: string) {
 export async function getPathaoZones(userId: string, cityId: number) {
   try {
     const creds = await getCredentials(userId);
-    if (!creds.clientId || !creds.clientSecret || !cityId) {
-      return [];
-    }
+    if (!creds.hasCredentials || !cityId) return [];
     const token = await getAccessToken(userId);
     const res = await fetch(`${creds.baseUrl}/aladdin/api/v1/cities/${cityId}/zone-list`, {
       method: 'GET',
@@ -294,7 +248,6 @@ export async function getPathaoZones(userId: string, cityId: number) {
     const json = await res.json();
     return json?.data?.data || json?.data || [];
   } catch (err) {
-    console.warn('[Pathao Zones Fetch Fallback]:', err);
     return [];
   }
 }

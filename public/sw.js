@@ -1,34 +1,8 @@
-// Vistoosa Service Worker for PWA Caching & Full Offline Operations
-const CACHE_NAME = 'vistoosa-cache-v9';
-
-const ASSETS_TO_CACHE = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/manifest.webmanifest',
-  '/logo_white.png',
-  '/logo_transparent.png',
-  '/vistoosa-logo.png',
-  '/icon.svg',
-  '/apple-touch-icon.png',
-  '/favicon.ico',
-  '/favicon-16x16.png',
-  '/favicon-32x32.png',
-  '/favicon-48x48.png',
-  '/android-chrome-192x192.png',
-  '/android-chrome-512x512.png',
-  '/maskable-icon-512x512.png',
-  '/pwa-192x192.png',
-  '/pwa-512x512.png',
-  '/pwa-maskable-512x512.png'
-];
+// Vistoosa Robust Service Worker for Mobile PWA & Offline Stability
+const CACHE_NAME = 'vistoosa-mobile-v10';
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
-    }).then(() => self.skipWaiting())
-  );
+  event.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener('activate', (event) => {
@@ -46,32 +20,55 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Only handle GET requests for same origin or static assets, skip API requests
-  if (event.request.method !== 'GET' || event.request.url.includes('/api/')) {
+  const url = new URL(event.request.url);
+
+  // Skip API requests and non-GET requests entirely
+  if (event.request.method !== 'GET' || url.pathname.startsWith('/api/')) {
     return;
   }
 
+  // For HTML navigation, JS, or CSS bundles, use Network-First with cache fallback
+  // This prevents mobile browsers from getting stuck in an infinite reload loop due to stale chunk hashes after deployments
+  if (event.request.mode === 'navigate' || url.pathname.match(/\.(js|css|html)$/)) {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseClone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseClone);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(async () => {
+          const cached = await caches.match(event.request);
+          if (cached) return cached;
+          if (event.request.mode === 'navigate') {
+            return caches.match('/index.html') || caches.match('/');
+          }
+        })
+    );
+    return;
+  }
+
+  // For images and static static assets, use Cache-First with network fallback
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
-        // Fetch background update
-        fetch(event.request).then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse));
-          }
-        }).catch(() => {});
         return cachedResponse;
       }
-      
-      return fetch(event.request).catch(async () => {
-        // Offline Fallback for Images and Logo
-        if (event.request.destination === 'image' || event.request.url.match(/\.(png|jpg|jpeg|svg|webp|ico)$/i)) {
-          const logoFallback = await caches.match('/vistoosa-logo.png') || await caches.match('/icon.svg') || await caches.match('/apple-touch-icon.png');
-          if (logoFallback) return logoFallback;
+      return fetch(event.request).then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const responseClone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseClone);
+          });
         }
-        // Offline Fallback for HTML documents
-        if (event.request.mode === 'navigate') {
-          return caches.match('/index.html');
+        return networkResponse;
+      }).catch(async () => {
+        if (event.request.destination === 'image' || url.pathname.match(/\.(png|jpg|jpeg|svg|webp|ico)$/i)) {
+          return caches.match('/vistoosa-logo.png') || caches.match('/icon.svg');
         }
       });
     })
